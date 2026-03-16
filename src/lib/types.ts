@@ -69,6 +69,37 @@ export type ShotWithDetails = {
   relevance?: number;
 };
 
+export type ExportShotRecord = {
+  shotId: string;
+  filmTitle: string;
+  director: string;
+  year: number | null;
+  sourceFile: string | null;
+  startTc: number | null;
+  endTc: number | null;
+  duration: number;
+  videoUrl: string | null;
+  thumbnailUrl: string | null;
+  movementType: MovementTypeSlug;
+  direction: DirectionSlug;
+  speed: SpeedSlug;
+  shotSize: ShotSizeSlug;
+  angleVertical: VerticalAngleSlug;
+  angleHorizontal: HorizontalAngleSlug;
+  angleSpecial: string | null;
+  durationCategory: DurationCategorySlug;
+  isCompound: boolean;
+  compoundParts: string | null;
+  compoundNotation: string | null;
+  classificationSource: string | null;
+  description: string | null;
+  subjects: string;
+  mood: string | null;
+  lighting: string | null;
+  techniqueNotes: string | null;
+  createdAt: string | null;
+};
+
 export type VerificationRecord = {
   id: string;
   shotId: string;

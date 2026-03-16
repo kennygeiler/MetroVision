@@ -2,6 +2,7 @@ import { and, desc, eq, ilike, or, type SQL } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import type {
+  ExportShotRecord,
   ShotReviewQueueItem,
   ShotWithDetails,
   VerificationCorrectionsMap,
@@ -68,6 +69,13 @@ type ShotRow = Awaited<
   ReturnType<ReturnType<typeof selectJoinedShots>["execute"]>
 >[number];
 
+export type ExportQueryFilters = {
+  movementType?: string;
+  director?: string;
+  filmTitle?: string;
+  shotSize?: string;
+};
+
 function selectJoinedShots() {
   return db
     .select(shotSelection)
@@ -87,6 +95,40 @@ function toRoundedAverage(values: number[]) {
   }
 
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
+function stringifyCompoundParts(
+  compoundParts:
+    | Array<{
+        type: string;
+        direction: string;
+      }>
+    | null
+    | undefined,
+) {
+  if (!compoundParts || compoundParts.length === 0) {
+    return null;
+  }
+
+  return JSON.stringify(compoundParts);
+}
+
+function toCompoundNotation(
+  compoundParts:
+    | Array<{
+        type: string;
+        direction: string;
+      }>
+    | null
+    | undefined,
+) {
+  if (!compoundParts || compoundParts.length === 0) {
+    return null;
+  }
+
+  return compoundParts
+    .map((part) => `${part.type}:${part.direction}`)
+    .join(" + ");
 }
 
 function mapShotRow(row: ShotRow): ShotWithDetails {
@@ -132,6 +174,39 @@ function mapShotRow(row: ShotRow): ShotWithDetails {
     endTc: row.shotEndTc ?? null,
     videoUrl: row.shotVideoUrl ?? null,
     thumbnailUrl: row.shotThumbnailUrl ?? null,
+    createdAt: toIsoString(row.shotCreatedAt ?? null),
+  };
+}
+
+function mapExportShotRow(row: ShotRow): ExportShotRecord {
+  return {
+    shotId: row.shotId,
+    filmTitle: row.filmTitle,
+    director: row.filmDirector,
+    year: row.filmYear ?? null,
+    sourceFile: row.shotSourceFile ?? null,
+    startTc: row.shotStartTc ?? null,
+    endTc: row.shotEndTc ?? null,
+    duration: row.shotDuration ?? 0,
+    videoUrl: row.shotVideoUrl ?? null,
+    thumbnailUrl: row.shotThumbnailUrl ?? null,
+    movementType: (row.metadataMovementType ?? "static") as MovementTypeSlug,
+    direction: (row.metadataDirection ?? "none") as DirectionSlug,
+    speed: (row.metadataSpeed ?? "moderate") as SpeedSlug,
+    shotSize: (row.metadataShotSize ?? "medium") as ShotSizeSlug,
+    angleVertical: (row.metadataAngleVertical ?? "eye_level") as VerticalAngleSlug,
+    angleHorizontal: (row.metadataAngleHorizontal ?? "frontal") as HorizontalAngleSlug,
+    angleSpecial: row.metadataAngleSpecial ?? null,
+    durationCategory: (row.metadataDurationCat ?? "standard") as DurationCategorySlug,
+    isCompound: row.metadataIsCompound ?? false,
+    compoundParts: stringifyCompoundParts(row.metadataCompoundParts),
+    compoundNotation: toCompoundNotation(row.metadataCompoundParts),
+    classificationSource: row.metadataClassificationSource ?? null,
+    description: row.semanticDescription ?? null,
+    subjects: (row.semanticSubjects ?? []).join(" | "),
+    mood: row.semanticMood ?? null,
+    lighting: row.semanticLighting ?? null,
+    techniqueNotes: row.semanticTechniqueNotes ?? null,
     createdAt: toIsoString(row.shotCreatedAt ?? null),
   };
 }
@@ -294,6 +369,48 @@ export async function getShotById(id: string) {
     .limit(1);
 
   return row ? mapShotRow(row) : null;
+}
+
+export async function getShotsForExport(filters?: {
+  movementType?: string;
+  director?: string;
+  filmTitle?: string;
+  shotSize?: string;
+}) {
+  const conditions: SQL[] = [];
+
+  if (filters?.movementType) {
+    conditions.push(
+      eq(
+        schema.shotMetadata.movementType,
+        filters.movementType as MovementTypeSlug,
+      ),
+    );
+  }
+
+  if (filters?.director) {
+    conditions.push(eq(schema.films.director, filters.director));
+  }
+
+  if (filters?.filmTitle) {
+    conditions.push(ilike(schema.films.title, `%${filters.filmTitle}%`));
+  }
+
+  if (filters?.shotSize) {
+    conditions.push(
+      eq(schema.shotMetadata.shotSize, filters.shotSize as ShotSizeSlug),
+    );
+  }
+
+  const rows = await selectJoinedShots()
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(
+      schema.films.title,
+      schema.films.director,
+      desc(schema.shots.createdAt),
+    );
+
+  return rows.map(mapExportShotRow);
 }
 
 export async function searchShots(query: string) {

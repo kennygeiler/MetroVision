@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Search, Sparkles, SlidersHorizontal } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { ExportButton } from "@/components/export/export-button";
 import { ShotCard } from "@/components/shots/shot-card";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -243,15 +244,25 @@ export function ShotBrowser({
             </div>
           </div>
 
-          {hasActiveFilters ? (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-full px-3")}
-            >
-              Clear all
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <ExportButton
+              filters={{
+                movementType: movementType !== "all" ? movementType : undefined,
+                director: director !== "all" ? director : undefined,
+                shotSize: shotSize !== "all" ? shotSize : undefined,
+              }}
+            />
+
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-full px-3")}
+              >
+                Clear all
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
