@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       ? detection.cuts
           .map((cut) => ({
             time: roundTime(payload.startTime + Number(cut.time)),
-            confidence: Number(cut.confidence) || 1,
+            confidence: Number(cut.confidence),
           }))
           .filter(
             (cut) =>

@@ -51,8 +51,10 @@
 
   /* ─── Semantic: Overlay (video metadata) ─── */
   --color-overlay-arrow:      var(--color-accent-base);
+  --color-overlay-motion:     var(--color-accent-base);
   --color-overlay-trajectory: var(--color-signal-violet);
   --color-overlay-badge:      var(--color-signal-amber);
+  --color-overlay-info:       var(--color-signal-green);
   --color-overlay-speed:      var(--color-accent-light);
 
   /* ─── Semantic: Status ─── */

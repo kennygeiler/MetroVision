@@ -31,10 +31,14 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+type SplitSource = "auto" | "detected" | "manual";
+
 type ReviewSplit = {
   start: number;
   end: number;
   thumbnail_time: number;
+  split_source?: SplitSource;
+  confidence?: number | null;
 };
 
 type ReviewPayload = {
@@ -52,6 +56,8 @@ type ShotSegment = {
   thumbnailTime: number;
   thumbnail: string | null;
   thumbnailDirty: boolean;
+  splitSource: SplitSource;
+  confidence: number | null;
 };
 
 type ExportSummary = {
@@ -83,7 +89,8 @@ type TimelineSelection = {
 type CutPreview = {
   id: string;
   time: number;
-  confidence: number;
+  confidence: number | null;
+  source: SplitSource;
   beforeFrame: string;
   afterFrame: string;
 };
@@ -93,9 +100,18 @@ type SplitInsertResult = {
   insertedBoundaryId: string | null;
 };
 
+type SplitBoundary = {
+  id: string;
+  label: number;
+  time: number;
+  source: SplitSource;
+  confidence: number | null;
+};
+
 const SPLIT_EPSILON = 0.15;
 const SEEK_STEP = 1;
 const SEEK_BIG_STEP = 5;
+const DEFAULT_FPS = 24;
 const DRAG_SELECTION_MIN_RATIO = 0.005;
 const DRAG_SELECTION_MIN_SECONDS = 0.15;
 const TIMELINE_SEGMENT_BACKGROUNDS = [
@@ -104,6 +120,8 @@ const TIMELINE_SEGMENT_BACKGROUNDS = [
   "linear-gradient(135deg, color-mix(in oklch, var(--color-overlay-badge) 20%, transparent), color-mix(in oklch, var(--color-surface-tertiary) 88%, transparent))",
 ] as const;
 const SHORTCUT_HINTS = [
+  "Arrows Nudge/Seek",
+  "Shift+Arrows x5",
   "Space Play/Pause",
   "S Split",
   "J/L Prev/Next Cut",
@@ -111,12 +129,14 @@ const SHORTCUT_HINTS = [
   "Enter Approve",
 ] as const;
 const HELP_ITEMS = [
-  "Drag on the timeline to auto-detect cuts",
+  "\u2190 / \u2192 - nudge selected split \u00b11 frame",
+  "Shift+\u2190 / Shift+\u2192 - nudge selected split \u00b15 frames",
   "S - manual split at playback position",
   "Delete - remove selected split",
   "Space - play/pause",
   "J/L - prev/next cut",
   "Enter - approve and export",
+  "Drag on timeline - auto-detect cut in region",
 ] as const;
 
 function createClientId() {
@@ -131,6 +151,8 @@ function createSegment(
   thumbnailTime?: number,
   thumbnail: string | null = null,
   thumbnailDirty = true,
+  splitSource: SplitSource = "auto",
+  confidence: number | null = 1,
 ): ShotSegment {
   return {
     id: createClientId(),
@@ -139,6 +161,8 @@ function createSegment(
     thumbnailTime: thumbnailTime ?? start + Math.max(end - start, 0) / 2,
     thumbnail,
     thumbnailDirty,
+    splitSource,
+    confidence,
   };
 }
 
@@ -148,6 +172,15 @@ function clampTime(value: number, max: number) {
 
 function roundTime(value: number) {
   return Number(value.toFixed(3));
+}
+
+function normalizeConfidence(value: unknown) {
+  const confidence = Number(value);
+  if (!Number.isFinite(confidence)) {
+    return null;
+  }
+
+  return Math.min(Math.max(confidence, 0), 1);
 }
 
 function formatTimecode(value: number) {
@@ -162,6 +195,44 @@ function formatTimecode(value: number) {
 
 function formatDuration(value: number) {
   return `${value.toFixed(value >= 10 ? 1 : 2)}s`;
+}
+
+function formatConfidence(confidence: number | null) {
+  if (confidence === null) {
+    return "Manual";
+  }
+
+  return `${Math.round(confidence * 100)}%`;
+}
+
+function formatNudgeFrames(frames: number) {
+  if (frames === 0) {
+    return "0 frames";
+  }
+
+  return `${frames > 0 ? "+" : ""}${frames} frame${Math.abs(frames) === 1 ? "" : "s"}`;
+}
+
+function getSplitSourceLabel(source: SplitSource) {
+  switch (source) {
+    case "auto":
+      return "AI detected";
+    case "detected":
+      return "AI found via drag";
+    case "manual":
+      return "Human placed";
+  }
+}
+
+function getSplitSourceColor(source: SplitSource) {
+  switch (source) {
+    case "auto":
+      return "var(--color-overlay-motion)";
+    case "detected":
+      return "var(--color-overlay-badge)";
+    case "manual":
+      return "var(--color-overlay-info)";
+  }
 }
 
 function boundaryKey(value: number) {
@@ -179,7 +250,11 @@ function findSegmentIndexForSplit(segments: ShotSegment[], splitTime: number) {
 function insertSplitAtTime(
   currentSegments: ShotSegment[],
   splitTime: number,
-  snapshot: string | null = null,
+  options?: {
+    snapshot?: string | null;
+    source?: SplitSource;
+    confidence?: number | null;
+  },
 ): SplitInsertResult {
   const segmentIndex = findSegmentIndexForSplit(currentSegments, splitTime);
   if (segmentIndex === -1) {
@@ -190,12 +265,19 @@ function insertSplitAtTime(
   }
 
   const segment = currentSegments[segmentIndex];
+  const snapshot = options?.snapshot ?? null;
+  const splitSource = options?.source ?? "manual";
+  const confidence = splitSource === "manual"
+    ? null
+    : normalizeConfidence(options?.confidence) ?? 1;
   const left = createSegment(
     segment.start,
     splitTime,
     segment.start + (splitTime - segment.start) / 2,
     segment.thumbnail,
     true,
+    segment.splitSource,
+    segment.confidence,
   );
   const right = createSegment(
     splitTime,
@@ -203,6 +285,8 @@ function insertSplitAtTime(
     splitTime + (segment.end - splitTime) / 2,
     snapshot,
     snapshot ? false : true,
+    splitSource,
+    confidence,
   );
 
   const nextSegments = [...currentSegments];
@@ -247,19 +331,36 @@ function parseReviewPayload(raw: unknown): ReviewPayload {
     const start = Number(item.start);
     const end = Number(item.end);
     const thumbnailTime = Number(item.thumbnail_time);
+    const resolvedThumbnailTime = Number.isFinite(thumbnailTime)
+      ? thumbnailTime
+      : start + Math.max(end - start, 0) / 2;
+    const splitSource = item.split_source ?? "auto";
 
     if (
       Number.isNaN(start) ||
       Number.isNaN(end) ||
-      Number.isNaN(thumbnailTime)
+      Number.isNaN(resolvedThumbnailTime)
     ) {
       throw new Error(`Split ${index + 1} is missing numeric time values.`);
+    }
+
+    if (
+      splitSource !== "auto" &&
+      splitSource !== "detected" &&
+      splitSource !== "manual"
+    ) {
+      throw new Error(`Split ${index + 1} has an invalid split_source.`);
     }
 
     return {
       start,
       end,
-      thumbnail_time: thumbnailTime,
+      thumbnail_time: resolvedThumbnailTime,
+      split_source: splitSource,
+      confidence:
+        splitSource === "manual"
+          ? null
+          : normalizeConfidence(item.confidence) ?? 1,
     };
   });
 
@@ -282,6 +383,12 @@ function buildSegments(splits: ReviewSplit[], totalDuration: number) {
         clampTime(split.start, duration),
         clampTime(split.end, duration),
         clampTime(split.thumbnail_time, duration),
+        null,
+        true,
+        split.split_source ?? "auto",
+        split.split_source === "manual"
+          ? null
+          : normalizeConfidence(split.confidence) ?? 1,
       ),
     )
     .filter((segment) => segment.end > segment.start);
@@ -337,11 +444,22 @@ function downloadReviewJson(
     filename,
     total_duration: roundTime(duration),
     fps: payload.fps,
-    splits: segments.map((segment) => ({
-      start: roundTime(segment.start),
-      end: roundTime(segment.end),
-      thumbnail_time: roundTime(segment.thumbnailTime),
-    })),
+    splits: segments.map((segment, index) => {
+      const rightBoundary = segments[index + 1];
+      const splitSource = rightBoundary?.splitSource ?? segment.splitSource;
+      const confidence =
+        splitSource === "manual"
+          ? null
+          : rightBoundary?.confidence ?? segment.confidence ?? 1;
+
+      return {
+        start: roundTime(segment.start),
+        end: roundTime(segment.end),
+        thumbnail_time: roundTime(segment.thumbnailTime),
+        split_source: splitSource,
+        confidence,
+      };
+    }),
   };
 
   const blob = new Blob([`${JSON.stringify(reviewExport, null, 2)}\n`], {
@@ -378,6 +496,11 @@ export function ReviewSplitsWorkspace({
   const thumbnailPendingRef = useRef(new Set<string>());
   const thumbnailLoopActiveRef = useRef(false);
   const segmentsRef = useRef<ShotSegment[]>([]);
+  const nudgeTimeoutRef = useRef<number | null>(null);
+  const selectedBoundaryAnchorRef = useRef<{
+    id: string;
+    time: number;
+  } | null>(null);
   const timelinePointerRef = useRef<{
     pointerId: number;
     selectionId: string;
@@ -393,10 +516,15 @@ export function ReviewSplitsWorkspace({
   const [pasteValue, setPasteValue] = useState("");
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
+  const [videoFps, setVideoFps] = useState(DEFAULT_FPS);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedBoundaryId, setSelectedBoundaryId] = useState<string | null>(
     null,
   );
+  const [nudgeFrameOffset, setNudgeFrameOffset] = useState<{
+    id: string;
+    frames: number;
+  } | null>(null);
   const [lastAddedSegmentId, setLastAddedSegmentId] = useState<string | null>(
     null,
   );
@@ -436,12 +564,42 @@ export function ReviewSplitsWorkspace({
         id: segment.id,
         label: index + 1,
         time: segment.start,
+        source: segment.splitSource,
+        confidence: segment.confidence,
       })),
     [segments],
   );
+  const selectedBoundary = boundaries.find(
+    (boundary) => boundary.id === selectedBoundaryId,
+  );
+  const frameDuration = 1 / Math.max(videoFps, 1);
 
   const workspaceReady = Boolean(videoUrl && reviewPayload && effectiveDuration >= 0);
   const summary = computeExportSummary(initialSegments, segments);
+
+  useEffect(() => {
+    if (!selectedBoundary) {
+      selectedBoundaryAnchorRef.current = null;
+      setNudgeFrameOffset(null);
+      return;
+    }
+
+    if (selectedBoundaryAnchorRef.current?.id !== selectedBoundary.id) {
+      selectedBoundaryAnchorRef.current = {
+        id: selectedBoundary.id,
+        time: selectedBoundary.time,
+      };
+      setNudgeFrameOffset(null);
+    }
+  }, [selectedBoundary]);
+
+  useEffect(() => {
+    return () => {
+      if (nudgeTimeoutRef.current !== null) {
+        window.clearTimeout(nudgeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!videoFile) {
@@ -491,6 +649,8 @@ export function ReviewSplitsWorkspace({
           const builtSegments = buildSegments(data.splits, data.total_duration);
           setInitialSegments(builtSegments);
           setSegments(builtSegments);
+          selectBoundary(null);
+          setVideoFps(data.fps > 0 ? data.fps : DEFAULT_FPS);
           setErrorMessage(null);
         });
       })
@@ -550,6 +710,7 @@ export function ReviewSplitsWorkspace({
 
     const handleLoadedMetadata = () => {
       setVideoDuration(video.duration || 0);
+      setVideoFps(reviewPayload?.fps && reviewPayload.fps > 0 ? reviewPayload.fps : DEFAULT_FPS);
       syncTime();
     };
 
@@ -571,7 +732,7 @@ export function ReviewSplitsWorkspace({
       video.removeEventListener("timeupdate", syncTime);
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
     };
-  }, [workspaceReady]);
+  }, [reviewPayload?.fps, workspaceReady]);
 
   useEffect(() => {
     if (!lastAddedSegmentId) {
@@ -672,12 +833,22 @@ export function ReviewSplitsWorkspace({
 
       if (event.key === "ArrowLeft") {
         event.preventDefault();
+        if (selectedBoundaryId) {
+          nudgeSelectedBoundary(event.shiftKey ? -5 : -1);
+          return;
+        }
+
         seekBy(event.shiftKey ? -SEEK_BIG_STEP : -SEEK_STEP);
         return;
       }
 
       if (event.key === "ArrowRight") {
         event.preventDefault();
+        if (selectedBoundaryId) {
+          nudgeSelectedBoundary(event.shiftKey ? 5 : 1);
+          return;
+        }
+
         seekBy(event.shiftKey ? SEEK_BIG_STEP : SEEK_STEP);
         return;
       }
@@ -972,10 +1143,13 @@ export function ReviewSplitsWorkspace({
     }
   }
 
-  async function showDetectedCutPreview(cut: DetectedCut) {
-    const frameStep = reviewPayload?.fps ? 1 / reviewPayload.fps : 1 / 24;
-    const beforeTime = clampTime(cut.time - frameStep, effectiveDuration);
-    const afterTime = clampTime(cut.time + frameStep, effectiveDuration);
+  async function showCutPreviewAtTime(boundary: {
+    time: number;
+    confidence: number | null;
+    source: SplitSource;
+  }) {
+    const beforeTime = clampTime(boundary.time - frameDuration, effectiveDuration);
+    const afterTime = clampTime(boundary.time + frameDuration, effectiveDuration);
 
     const [beforeFrame, afterFrame] = await Promise.all([
       captureFrameAtTime(beforeTime),
@@ -988,8 +1162,9 @@ export function ReviewSplitsWorkspace({
 
     setCutPreview({
       id: createClientId(),
-      time: cut.time,
-      confidence: cut.confidence,
+      time: boundary.time,
+      confidence: boundary.confidence,
+      source: boundary.source,
       beforeFrame,
       afterFrame,
     });
@@ -1037,6 +1212,14 @@ export function ReviewSplitsWorkspace({
 
   function seekBy(delta: number) {
     seekTo(currentTime + delta);
+  }
+
+  function selectBoundary(boundary: Pick<SplitBoundary, "id" | "time"> | null) {
+    setSelectedBoundaryId(boundary?.id ?? null);
+    selectedBoundaryAnchorRef.current = boundary
+      ? { id: boundary.id, time: boundary.time }
+      : null;
+    setNudgeFrameOffset(null);
   }
 
   async function togglePlayback() {
@@ -1112,13 +1295,115 @@ export function ReviewSplitsWorkspace({
     const snapshot = captureCurrentFrame();
 
     setSegments((currentSegments) => {
-      const result = insertSplitAtTime(currentSegments, splitTime, snapshot);
+      const result = insertSplitAtTime(currentSegments, splitTime, {
+        snapshot,
+        source: "manual",
+        confidence: null,
+      });
       if (result.insertedBoundaryId) {
-        setSelectedBoundaryId(result.insertedBoundaryId);
+        selectBoundary({ id: result.insertedBoundaryId, time: splitTime });
         setLastAddedSegmentId(result.insertedBoundaryId);
       }
       return result.nextSegments;
     });
+  }
+
+  function queueNudgeIndicator(boundaryId: string, frameOffset: number) {
+    setNudgeFrameOffset({ id: boundaryId, frames: frameOffset });
+
+    if (nudgeTimeoutRef.current !== null) {
+      window.clearTimeout(nudgeTimeoutRef.current);
+    }
+
+    nudgeTimeoutRef.current = window.setTimeout(() => {
+      setNudgeFrameOffset((current) =>
+        current?.id === boundaryId ? null : current,
+      );
+    }, 1000);
+  }
+
+  function nudgeSelectedBoundary(frameOffset: number) {
+    if (!selectedBoundaryId) {
+      return;
+    }
+
+    let nextBoundary: SplitBoundary | null = null;
+
+    setSegments((currentSegments) => {
+      const index = currentSegments.findIndex(
+        (segment) => segment.id === selectedBoundaryId,
+      );
+      if (index <= 0) {
+        return currentSegments;
+      }
+
+      const previous = currentSegments[index - 1];
+      const current = currentSegments[index];
+      const minBoundaryTime =
+        previous.start + Math.max(SPLIT_EPSILON, frameDuration);
+      const maxBoundaryTime =
+        current.end - Math.max(SPLIT_EPSILON, frameDuration);
+      if (maxBoundaryTime <= minBoundaryTime) {
+        return currentSegments;
+      }
+
+      const nextTime = roundTime(
+        Math.min(
+          Math.max(current.start + frameOffset * frameDuration, minBoundaryTime),
+          maxBoundaryTime,
+        ),
+      );
+      if (Math.abs(nextTime - current.start) < 0.0005) {
+        return currentSegments;
+      }
+
+      const updatedPrevious: ShotSegment = {
+        ...previous,
+        end: nextTime,
+        thumbnailTime: previous.start + (nextTime - previous.start) / 2,
+        thumbnailDirty: true,
+      };
+      const updatedCurrent: ShotSegment = {
+        ...current,
+        start: nextTime,
+        thumbnailTime: nextTime + (current.end - nextTime) / 2,
+        thumbnailDirty: true,
+      };
+
+      nextBoundary = {
+        id: updatedCurrent.id,
+        label: index,
+        time: nextTime,
+        source: updatedCurrent.splitSource,
+        confidence: updatedCurrent.confidence,
+      };
+
+      const nextSegments = [...currentSegments];
+      nextSegments.splice(index - 1, 2, updatedPrevious, updatedCurrent);
+      return nextSegments;
+    });
+
+    const resolvedBoundary = nextBoundary as SplitBoundary | null;
+    if (!resolvedBoundary) {
+      return;
+    }
+
+    const anchorTime =
+      selectedBoundaryAnchorRef.current?.id === resolvedBoundary.id
+        ? selectedBoundaryAnchorRef.current.time
+        : resolvedBoundary.time;
+    const frameDelta = Math.round((resolvedBoundary.time - anchorTime) / frameDuration);
+    selectBoundary(resolvedBoundary);
+    selectedBoundaryAnchorRef.current = {
+      id: resolvedBoundary.id,
+      time: anchorTime,
+    };
+    seekTo(resolvedBoundary.time);
+    queueNudgeIndicator(resolvedBoundary.id, frameDelta);
+
+    if (cutPreview) {
+      void showCutPreviewAtTime(resolvedBoundary);
+    }
   }
 
   async function detectCutsInRegion(startTime: number, endTime: number) {
@@ -1140,7 +1425,7 @@ export function ReviewSplitsWorkspace({
       const detectedCuts = (await requestRegionDetection(startTime, endTime))
         .map((cut) => ({
           time: roundTime(clampTime(cut.time, effectiveDuration)),
-          confidence: Number(cut.confidence) || 1,
+          confidence: normalizeConfidence(cut.confidence) ?? 0,
         }))
         .sort((left, right) => left.time - right.time);
 
@@ -1160,7 +1445,10 @@ export function ReviewSplitsWorkspace({
         let nextSegments = currentSegments;
 
         for (const cut of detectedCuts) {
-          const result = insertSplitAtTime(nextSegments, cut.time);
+          const result = insertSplitAtTime(nextSegments, cut.time, {
+            source: "detected",
+            confidence: cut.confidence,
+          });
           if (!result.insertedBoundaryId) {
             continue;
           }
@@ -1182,23 +1470,28 @@ export function ReviewSplitsWorkspace({
         return;
       }
 
-      setSelectedBoundaryId(insertedBoundaryIds[0] ?? null);
+      const strongestCut = insertedCuts[0] ?? null;
+      if (insertedBoundaryIds[0] && strongestCut) {
+        selectBoundary({
+          id: insertedBoundaryIds[0],
+          time: strongestCut.time,
+        });
+      }
       setLastAddedSegmentId(insertedBoundaryIds[0] ?? null);
       setDetectedBoundaryIds(insertedBoundaryIds);
       setTimelineSelection({
         ...baseSelection,
         status: "success",
-        message:
-          insertedCuts.length === 1
-            ? "1 cut snapped into place"
-            : `${insertedCuts.length} cuts snapped into place`,
+        message: "Strongest cut snapped into place",
       });
 
-      void showDetectedCutPreview(
-        insertedCuts.reduce((best, current) =>
-          current.confidence > best.confidence ? current : best,
-        ),
-      );
+      if (strongestCut) {
+        void showCutPreviewAtTime({
+          time: strongestCut.time,
+          confidence: strongestCut.confidence,
+          source: "detected",
+        });
+      }
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Split detection failed.";
@@ -1227,6 +1520,8 @@ export function ReviewSplitsWorkspace({
         previous.start + (current.end - previous.start) / 2,
         previous.thumbnail ?? current.thumbnail,
         true,
+        previous.splitSource,
+        previous.confidence,
       );
 
       const nextSegments = [...currentSegments];
@@ -1234,7 +1529,15 @@ export function ReviewSplitsWorkspace({
 
       const nextSelected =
         nextSegments[index]?.id ?? nextSegments[index - 1]?.id ?? null;
-      setSelectedBoundaryId(nextSelected);
+      selectBoundary(
+        nextSelected
+          ? {
+              id: nextSelected,
+              time:
+                nextSegments.find((segment) => segment.id === nextSelected)?.start ?? 0,
+            }
+          : null,
+      );
       return nextSegments;
     });
   }
@@ -1257,8 +1560,9 @@ export function ReviewSplitsWorkspace({
       setReviewPayload(parsedPayload);
       setInitialSegments(builtSegments);
       setSegments(builtSegments);
-      setSelectedBoundaryId(null);
+      selectBoundary(null);
       setCurrentTime(0);
+      setVideoFps(parsedPayload.fps > 0 ? parsedPayload.fps : DEFAULT_FPS);
       setExportSummary(null);
       setErrorMessage(null);
       setTimelineSelection(null);
@@ -1274,6 +1578,7 @@ export function ReviewSplitsWorkspace({
 
     setVideoFile(file);
     setVideoDuration(0);
+    setVideoFps(reviewPayload?.fps && reviewPayload.fps > 0 ? reviewPayload.fps : DEFAULT_FPS);
     setCurrentTime(0);
     setIsPlaying(false);
     setExportSummary(null);
@@ -1344,6 +1649,7 @@ export function ReviewSplitsWorkspace({
     }
 
     event.preventDefault();
+    selectBoundary(null);
     const ratio = getTimelineRatio(event.clientX);
     const selectionId = createClientId();
     timelinePointerRef.current = {
@@ -1926,6 +2232,8 @@ export function ReviewSplitsWorkspace({
                     const left = `${(boundary.time / Math.max(effectiveDuration, 0.001)) * 100}%`;
                     const isSelected = selectedBoundaryId === boundary.id;
                     const isDetected = detectedBoundaryIds.includes(boundary.id);
+                    const isNudging = nudgeFrameOffset?.id === boundary.id;
+                    const sourceColor = getSplitSourceColor(boundary.source);
 
                     return (
                       <motion.button
@@ -1933,37 +2241,68 @@ export function ReviewSplitsWorkspace({
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          setSelectedBoundaryId(boundary.id);
+                          selectBoundary(boundary);
                           seekTo(boundary.time);
                         }}
                         onPointerDown={(event) => {
                           event.stopPropagation();
                         }}
-                        className="absolute inset-y-0 w-4 -translate-x-1/2"
+                        className="absolute inset-y-0 z-20 w-12 -translate-x-1/2"
                         style={{ left }}
                         initial={false}
                         animate={
                           isDetected
                             ? { y: [-12, 0], scale: [0.84, 1.16, 1] }
-                            : { y: 0, scale: 1 }
+                            : isNudging
+                              ? { y: [0, -4, 0], scale: [1, 1.08, 1] }
+                              : { y: 0, scale: 1 }
                         }
                         transition={{
-                          duration: isDetected ? 0.42 : 0.2,
+                          duration: isDetected || isNudging ? 0.42 : 0.2,
                           ease: [0.22, 1, 0.36, 1],
                         }}
                         aria-label={`Select split ${boundary.label} at ${formatTimecode(boundary.time)}`}
                       >
+                        <div className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5">
+                          <motion.div
+                            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            className="rounded-full border px-2.5 py-1 font-mono text-[11px] leading-none backdrop-blur-xl"
+                            style={{
+                              color: sourceColor,
+                              backgroundColor: `color-mix(in oklch, ${sourceColor} 18%, transparent)`,
+                              borderColor: `color-mix(in oklch, ${sourceColor} 42%, transparent)`,
+                              boxShadow: `0 0 18px color-mix(in oklch, ${sourceColor} 18%, transparent)`,
+                            }}
+                            title={getSplitSourceLabel(boundary.source)}
+                          >
+                            {formatConfidence(boundary.confidence)}
+                          </motion.div>
+
+                          <AnimatePresence>
+                            {isNudging ? (
+                              <motion.div
+                                initial={{ opacity: 0, y: 8, scale: 0.94 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                                className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_82%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_78%,transparent)] px-2 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] shadow-[var(--shadow-md)] backdrop-blur-xl"
+                              >
+                                {formatNudgeFrames(nudgeFrameOffset.frames)}
+                              </motion.div>
+                            ) : null}
+                          </AnimatePresence>
+                        </div>
+
                         <span
                           className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 rounded-full transition-all"
                           style={{
-                            backgroundColor: isSelected
-                              ? "var(--color-overlay-badge)"
-                              : "var(--color-overlay-arrow)",
+                            backgroundColor: sourceColor,
                             boxShadow: isSelected
-                              ? "0 0 0 1px color-mix(in oklch, var(--color-overlay-badge) 32%, transparent), 0 0 18px color-mix(in oklch, var(--color-overlay-badge) 42%, transparent)"
+                              ? `0 0 0 1px color-mix(in oklch, ${sourceColor} 36%, transparent), 0 0 22px color-mix(in oklch, ${sourceColor} 42%, transparent)`
                               : isDetected
-                                ? "0 0 0 1px color-mix(in oklch, var(--color-status-verified) 36%, transparent), 0 0 22px color-mix(in oklch, var(--color-status-verified) 28%, transparent)"
-                              : "0 0 14px color-mix(in oklch, var(--color-overlay-arrow) 34%, transparent)",
+                                ? `0 0 0 1px color-mix(in oklch, ${sourceColor} 36%, transparent), 0 0 22px color-mix(in oklch, ${sourceColor} 28%, transparent)`
+                                : `0 0 14px color-mix(in oklch, ${sourceColor} 34%, transparent)`,
                           }}
                         />
                       </motion.button>
@@ -1985,14 +2324,21 @@ export function ReviewSplitsWorkspace({
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-accent)]">
-                              Detected Cut
+                              {getSplitSourceLabel(cutPreview.source)}
                             </p>
                             <p className="mt-1 text-sm text-[var(--color-text-primary)]">
                               {formatTimecode(cutPreview.time)}
                             </p>
                           </div>
-                          <div className="rounded-full border border-[color:color-mix(in_oklch,var(--color-status-verified)_38%,transparent)] bg-[color:color-mix(in_oklch,var(--color-status-verified)_12%,transparent)] px-3 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-status-verified)]">
-                            {Math.round(cutPreview.confidence * 100)}%
+                          <div
+                            className="rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)]"
+                            style={{
+                              color: getSplitSourceColor(cutPreview.source),
+                              borderColor: `color-mix(in oklch, ${getSplitSourceColor(cutPreview.source)} 38%, transparent)`,
+                              backgroundColor: `color-mix(in oklch, ${getSplitSourceColor(cutPreview.source)} 12%, transparent)`,
+                            }}
+                          >
+                            {formatConfidence(cutPreview.confidence)}
                           </div>
                         </div>
 
@@ -2061,6 +2407,22 @@ export function ReviewSplitsWorkspace({
                         const isActive = index === activeShotIndex;
                         const removeBoundaryId =
                           index === 0 ? segments[1]?.id ?? null : segment.id;
+                        const leftBoundaryMeta =
+                          index === 0
+                            ? { source: segment.splitSource, confidence: segment.confidence }
+                            : {
+                                source: segment.splitSource,
+                                confidence: segment.confidence,
+                              };
+                        const rightBoundaryMeta = segments[index + 1]
+                          ? {
+                              source: segments[index + 1].splitSource,
+                              confidence: segments[index + 1].confidence,
+                            }
+                          : {
+                              source: segment.splitSource,
+                              confidence: segment.confidence,
+                            };
 
                         return (
                           <motion.div
@@ -2100,8 +2462,18 @@ export function ReviewSplitsWorkspace({
                               type="button"
                               onClick={() => {
                                 seekTo(segment.start);
-                                setSelectedBoundaryId(
-                                  index === 0 ? segments[1]?.id ?? null : segment.id,
+                                selectBoundary(
+                                  index === 0
+                                    ? segments[1]
+                                      ? {
+                                          id: segments[1].id,
+                                          time: segments[1].start,
+                                        }
+                                      : null
+                                    : {
+                                        id: segment.id,
+                                        time: segment.start,
+                                      },
                                 );
                               }}
                               onKeyDown={(event) => handleCardKeyDown(event, segment)}
@@ -2163,6 +2535,38 @@ export function ReviewSplitsWorkspace({
                                   Duration {formatDuration(segment.end - segment.start)}
                                 </p>
                               </div>
+                              <div className="flex items-center justify-between rounded-[16px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="size-2.5 rounded-full"
+                                    style={{
+                                      backgroundColor: getSplitSourceColor(
+                                        leftBoundaryMeta.source,
+                                      ),
+                                      boxShadow: `0 0 10px color-mix(in oklch, ${getSplitSourceColor(leftBoundaryMeta.source)} 34%, transparent)`,
+                                    }}
+                                    title={`Shot start: ${getSplitSourceLabel(leftBoundaryMeta.source)}`}
+                                  />
+                                  <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                                    In
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                                    Out
+                                  </span>
+                                  <span
+                                    className="size-2.5 rounded-full"
+                                    style={{
+                                      backgroundColor: getSplitSourceColor(
+                                        rightBoundaryMeta.source,
+                                      ),
+                                      boxShadow: `0 0 10px color-mix(in oklch, ${getSplitSourceColor(rightBoundaryMeta.source)} 34%, transparent)`,
+                                    }}
+                                    title={`Shot end: ${getSplitSourceLabel(rightBoundaryMeta.source)}`}
+                                  />
+                                </div>
+                              </div>
                               <div className="mt-auto rounded-[16px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-3 py-2 font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
                                 {index === 0
                                   ? "Remove merges forward"
@@ -2217,11 +2621,39 @@ export function ReviewSplitsWorkspace({
                         Selected cut
                       </p>
                       <p className="mt-2 font-mono text-sm text-[var(--color-text-primary)]">
-                        {selectedBoundaryId
-                          ? formatTimecode(
-                              boundaries.find((boundary) => boundary.id === selectedBoundaryId)?.time ?? 0,
-                            )
+                        {selectedBoundary
+                          ? formatTimecode(selectedBoundary.time)
                           : "None"}
+                      </p>
+                      {selectedBoundary ? (
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="size-2.5 rounded-full"
+                              style={{
+                                backgroundColor: getSplitSourceColor(
+                                  selectedBoundary.source,
+                                ),
+                                boxShadow: `0 0 10px color-mix(in oklch, ${getSplitSourceColor(selectedBoundary.source)} 34%, transparent)`,
+                              }}
+                            />
+                            <span className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                              {getSplitSourceLabel(selectedBoundary.source)}
+                            </span>
+                          </div>
+                          <span className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)]">
+                            {formatConfidence(selectedBoundary.confidence)}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-[18px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_72%,transparent)] p-4">
+                      <p className="text-sm text-[var(--color-text-secondary)]">
+                        Frame nudge
+                      </p>
+                      <p className="mt-2 font-mono text-sm text-[var(--color-text-primary)]">
+                        {videoFps.toFixed(3)} fps · {frameDuration.toFixed(5)}s/frame
                       </p>
                     </div>
 
