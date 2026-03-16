@@ -112,8 +112,7 @@ const SPLIT_EPSILON = 0.15;
 const SEEK_STEP = 1;
 const SEEK_BIG_STEP = 5;
 const DEFAULT_FPS = 24;
-const DRAG_SELECTION_MIN_RATIO = 0.005;
-const DRAG_SELECTION_MIN_SECONDS = 0.15;
+const TIMELINE_CLICK_MOVE_THRESHOLD = 5;
 const TIMELINE_SEGMENT_BACKGROUNDS = [
   "linear-gradient(135deg, color-mix(in oklch, var(--color-accent-base) 24%, transparent), color-mix(in oklch, var(--color-surface-tertiary) 92%, transparent))",
   "linear-gradient(135deg, color-mix(in oklch, var(--color-signal-violet) 22%, transparent), color-mix(in oklch, var(--color-surface-tertiary) 88%, transparent))",
@@ -506,6 +505,8 @@ export function ReviewSplitsWorkspace({
     selectionId: string;
     startRatio: number;
     currentRatio: number;
+    startClientX: number;
+    startClientY: number;
   } | null>(null);
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -521,6 +522,7 @@ export function ReviewSplitsWorkspace({
   const [selectedBoundaryId, setSelectedBoundaryId] = useState<string | null>(
     null,
   );
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [nudgeFrameOffset, setNudgeFrameOffset] = useState<{
     id: string;
     frames: number;
@@ -572,6 +574,7 @@ export function ReviewSplitsWorkspace({
   const selectedBoundary = boundaries.find(
     (boundary) => boundary.id === selectedBoundaryId,
   );
+  const selectedCardSegment = segments.find((segment) => segment.id === selectedCardId);
   const frameDuration = 1 / Math.max(videoFps, 1);
 
   const workspaceReady = Boolean(videoUrl && reviewPayload && effectiveDuration >= 0);
@@ -649,7 +652,7 @@ export function ReviewSplitsWorkspace({
           const builtSegments = buildSegments(data.splits, data.total_duration);
           setInitialSegments(builtSegments);
           setSegments(builtSegments);
-          selectBoundary(null);
+          selectBoundary(null, { cardId: null });
           setVideoFps(data.fps > 0 ? data.fps : DEFAULT_FPS);
           setErrorMessage(null);
         });
@@ -813,6 +816,28 @@ export function ReviewSplitsWorkspace({
       block: "nearest",
     });
   }, [activeShotIndex, segments]);
+
+  useEffect(() => {
+    if (!selectedCardId) {
+      return;
+    }
+
+    if (!segments.some((segment) => segment.id === selectedCardId)) {
+      setSelectedCardId(null);
+      return;
+    }
+
+    const element = cardRefs.current.get(selectedCardId);
+    if (!element) {
+      return;
+    }
+
+    element.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [segments, selectedCardId]);
 
   // This listener intentionally tracks the latest editing state without memoizing every editor action.
   useEffect(() => {
@@ -1214,12 +1239,50 @@ export function ReviewSplitsWorkspace({
     seekTo(currentTime + delta);
   }
 
-  function selectBoundary(boundary: Pick<SplitBoundary, "id" | "time"> | null) {
+  function selectBoundary(
+    boundary: Pick<SplitBoundary, "id" | "time"> | null,
+    options?: { cardId?: string | null },
+  ) {
     setSelectedBoundaryId(boundary?.id ?? null);
+    if (options && "cardId" in options) {
+      setSelectedCardId(options.cardId ?? null);
+    }
     selectedBoundaryAnchorRef.current = boundary
       ? { id: boundary.id, time: boundary.time }
       : null;
     setNudgeFrameOffset(null);
+  }
+
+  function getCardSelectionForIndex(index: number) {
+    if (index === 0) {
+      const nextSegment = segments[1];
+      return {
+        boundary: nextSegment
+          ? {
+              id: nextSegment.id,
+              time: nextSegment.start,
+            }
+          : null,
+        cardId: segments[0]?.id ?? null,
+      };
+    }
+
+    const segment = segments[index];
+    return segment
+      ? {
+          boundary: {
+            id: segment.id,
+            time: segment.start,
+          },
+          cardId: segment.id,
+        }
+      : { boundary: null, cardId: null };
+  }
+
+  function handleSegmentCardSelect(segment: ShotSegment, index: number) {
+    const selection = getCardSelectionForIndex(index);
+    seekTo(segment.start);
+    selectBoundary(selection.boundary, { cardId: selection.cardId });
   }
 
   async function togglePlayback() {
@@ -1301,7 +1364,10 @@ export function ReviewSplitsWorkspace({
         confidence: null,
       });
       if (result.insertedBoundaryId) {
-        selectBoundary({ id: result.insertedBoundaryId, time: splitTime });
+        selectBoundary(
+          { id: result.insertedBoundaryId, time: splitTime },
+          { cardId: result.insertedBoundaryId },
+        );
         setLastAddedSegmentId(result.insertedBoundaryId);
       }
       return result.nextSegments;
@@ -1475,7 +1541,7 @@ export function ReviewSplitsWorkspace({
         selectBoundary({
           id: insertedBoundaryIds[0],
           time: strongestCut.time,
-        });
+        }, { cardId: insertedBoundaryIds[0] });
       }
       setLastAddedSegmentId(insertedBoundaryIds[0] ?? null);
       setDetectedBoundaryIds(insertedBoundaryIds);
@@ -1537,6 +1603,7 @@ export function ReviewSplitsWorkspace({
                 nextSegments.find((segment) => segment.id === nextSelected)?.start ?? 0,
             }
           : null,
+        { cardId: nextSelected },
       );
       return nextSegments;
     });
@@ -1560,7 +1627,7 @@ export function ReviewSplitsWorkspace({
       setReviewPayload(parsedPayload);
       setInitialSegments(builtSegments);
       setSegments(builtSegments);
-      selectBoundary(null);
+      selectBoundary(null, { cardId: null });
       setCurrentTime(0);
       setVideoFps(parsedPayload.fps > 0 ? parsedPayload.fps : DEFAULT_FPS);
       setExportSummary(null);
@@ -1581,6 +1648,7 @@ export function ReviewSplitsWorkspace({
     setVideoFps(reviewPayload?.fps && reviewPayload.fps > 0 ? reviewPayload.fps : DEFAULT_FPS);
     setCurrentTime(0);
     setIsPlaying(false);
+    selectBoundary(null, { cardId: null });
     setExportSummary(null);
     setErrorMessage(null);
     setTimelineSelection(null);
@@ -1649,7 +1717,7 @@ export function ReviewSplitsWorkspace({
     }
 
     event.preventDefault();
-    selectBoundary(null);
+    selectBoundary(null, { cardId: null });
     const ratio = getTimelineRatio(event.clientX);
     const selectionId = createClientId();
     timelinePointerRef.current = {
@@ -1657,9 +1725,10 @@ export function ReviewSplitsWorkspace({
       selectionId,
       startRatio: ratio,
       currentRatio: ratio,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-    setTimelineSelection(buildTimelineSelection(ratio, ratio, "dragging", undefined, selectionId));
     setCutPreview(null);
   }
 
@@ -1671,6 +1740,14 @@ export function ReviewSplitsWorkspace({
 
     const ratio = getTimelineRatio(event.clientX);
     pointer.currentRatio = ratio;
+    const distance = Math.hypot(
+      event.clientX - pointer.startClientX,
+      event.clientY - pointer.startClientY,
+    );
+    if (distance < TIMELINE_CLICK_MOVE_THRESHOLD) {
+      return;
+    }
+
     setTimelineSelection(
       buildTimelineSelection(
         pointer.startRatio,
@@ -1698,24 +1775,24 @@ export function ReviewSplitsWorkspace({
 
     const endRatio = getTimelineRatio(event.clientX);
     const startRatio = pointer.startRatio;
+    const distance = Math.hypot(
+      event.clientX - pointer.startClientX,
+      event.clientY - pointer.startClientY,
+    );
     clearTimelinePointer(event.pointerId);
 
-    const ratioSpan = Math.abs(endRatio - startRatio);
+    if (distance < TIMELINE_CLICK_MOVE_THRESHOLD) {
+      setTimelineSelection(null);
+      seekTo(endRatio * effectiveDuration);
+      return;
+    }
+
     const startTime = roundTime(
       Math.min(startRatio, endRatio) * Math.max(effectiveDuration, 0),
     );
     const endTime = roundTime(
       Math.max(startRatio, endRatio) * Math.max(effectiveDuration, 0),
     );
-
-    if (
-      ratioSpan < DRAG_SELECTION_MIN_RATIO ||
-      endTime - startTime < DRAG_SELECTION_MIN_SECONDS
-    ) {
-      setTimelineSelection(null);
-      seekTo(((startRatio + endRatio) / 2) * effectiveDuration);
-      return;
-    }
 
     void detectCutsInRegion(startTime, endTime);
   }
@@ -1768,9 +1845,12 @@ export function ReviewSplitsWorkspace({
   const cutPreviewLeft = cutPreview
     ? `${(cutPreview.time / Math.max(effectiveDuration, 0.001)) * 100}%`
     : "0%";
+  const selectedCardIndex = selectedCardSegment
+    ? segments.findIndex((segment) => segment.id === selectedCardSegment.id) + 1
+    : null;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[var(--color-surface-primary)] text-[var(--color-text-primary)]">
+    <div className="relative h-[100dvh] overflow-hidden bg-[var(--color-surface-primary)] text-[var(--color-text-primary)]">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
@@ -1780,9 +1860,17 @@ export function ReviewSplitsWorkspace({
         }}
       />
 
-      {!workspaceReady ? (
-        <div className="relative flex min-h-screen items-center justify-center px-5 py-10 sm:px-8">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <AnimatePresence mode="wait" initial={false}>
+        {!workspaceReady ? (
+          <motion.div
+            key="review-splits-empty"
+            initial={{ opacity: 0, scale: 0.985, y: 18 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.99, y: -10 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            className="relative flex h-full items-center justify-center px-5 py-10 sm:px-8"
+          >
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
             <div className="max-w-3xl">
               <p className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-accent)]">
                 Shot Boundary Review
@@ -1951,70 +2039,93 @@ export function ReviewSplitsWorkspace({
                 {errorMessage}
               </div>
             ) : null}
-          </div>
+            </div>
 
-          <input
-            ref={videoInputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={(event) => void handleVideoInputChange(event)}
-          />
-          <input
-            ref={splitsInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(event) => void handleSplitsInputChange(event)}
-          />
-        </div>
-      ) : (
-        <div className="relative flex min-h-screen flex-col p-3 sm:p-4">
-          <LayoutGroup>
-            <div
-              className="grid min-h-[calc(100vh-24px)] flex-1 gap-3 rounded-[28px] border p-3 shadow-[var(--shadow-xl)] sm:p-4"
-              style={{
-                background:
-                  "linear-gradient(180deg, color-mix(in oklch, var(--color-surface-secondary) 96%, transparent), color-mix(in oklch, var(--color-surface-primary) 100%, transparent))",
-                borderColor:
-                  "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
-                gridTemplateRows: "minmax(280px, 40vh) 84px minmax(280px, 1fr)",
-              }}
-            >
-              <section className="relative overflow-hidden rounded-[22px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_72%,transparent)]">
-                <div className="absolute inset-x-0 top-0 z-20 flex flex-wrap items-center justify-between gap-3 p-4">
-                  <div className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_72%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-4 py-2 shadow-[var(--shadow-md)] backdrop-blur-xl">
-                    <p className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                      {videoFile?.name ?? reviewPayload?.filename}
-                    </p>
-                    <p className="mt-1 text-sm text-[var(--color-text-primary)]">
-                      {segments.length} shots · {formatTimecode(currentTime)} /{" "}
-                      {formatTimecode(effectiveDuration)}
-                    </p>
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={(event) => void handleVideoInputChange(event)}
+            />
+            <input
+              ref={splitsInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(event) => void handleSplitsInputChange(event)}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="review-splits-workspace"
+            initial={{ opacity: 0, scale: 0.985, y: 18 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.99, y: -10 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            className="relative flex h-full flex-col overflow-hidden p-[var(--space-4)]"
+          >
+            <LayoutGroup>
+              <div
+                className="flex min-h-0 flex-1 flex-col gap-[var(--space-4)] rounded-[28px] border p-[var(--space-4)] shadow-[var(--shadow-xl)]"
+                style={{
+                  background:
+                    "linear-gradient(180deg, color-mix(in oklch, var(--color-surface-secondary) 96%, transparent), color-mix(in oklch, var(--color-surface-primary) 100%, transparent))",
+                  borderColor:
+                    "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
+                }}
+              >
+                <section className="flex h-12 flex-none items-center justify-between gap-[var(--space-3)] rounded-[18px] border border-[color:color-mix(in_oklch,var(--color-border-default)_72%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-[var(--space-4)] shadow-[var(--shadow-md)] backdrop-blur-xl">
+                  <div className="flex min-w-0 items-center gap-[var(--space-3)]">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                        {videoFile?.name ?? reviewPayload?.filename}
+                      </p>
+                    </div>
+                    <div className="hidden h-5 w-px bg-[color:color-mix(in_oklch,var(--color-border-default)_64%,transparent)] md:block" />
+                    <div className="hidden items-center gap-[var(--space-2)] md:flex">
+                      <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_70%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                        {segments.length} shots
+                      </span>
+                      <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_70%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                        {formatTimecode(currentTime)} / {formatTimecode(effectiveDuration)}
+                      </span>
+                      <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_70%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                        {videoFps.toFixed(3)} fps
+                      </span>
+                      <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_70%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                        +{summary.added} / -{summary.removed}
+                      </span>
+                      <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_70%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                        {selectedBoundary
+                          ? `${selectedCardIndex ? `Shot ${selectedCardIndex}` : "Cut"} ${formatTimecode(selectedBoundary.time)}`
+                          : "No cut selected"}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-none items-center gap-[var(--space-2)]">
                     <button
                       type="button"
                       onClick={() => videoInputRef.current?.click()}
                       className={cn(
                         buttonVariants({ variant: "outline", size: "sm" }),
-                        "rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] px-4 text-[var(--color-text-secondary)]",
+                        "hidden rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] px-3 text-[var(--color-text-secondary)] lg:inline-flex",
                       )}
                     >
                       <Upload />
-                      Replace Video
+                      Video
                     </button>
                     <button
                       type="button"
                       onClick={() => splitsInputRef.current?.click()}
                       className={cn(
                         buttonVariants({ variant: "outline", size: "sm" }),
-                        "rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] px-4 text-[var(--color-text-secondary)]",
+                        "hidden rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] px-3 text-[var(--color-text-secondary)] lg:inline-flex",
                       )}
                     >
                       <FileJson />
-                      Replace Splits
+                      Splits
                     </button>
                     <div className="relative">
                       <button
@@ -2056,447 +2167,527 @@ export function ReviewSplitsWorkspace({
                         ) : null}
                       </AnimatePresence>
                     </div>
-                  </div>
-                </div>
-
-                <video
-                  ref={videoRef}
-                  src={videoUrl ?? undefined}
-                  controls={false}
-                  preload="metadata"
-                  className="h-full w-full object-contain"
-                />
-
-                <div className="absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 bg-[linear-gradient(180deg,transparent,color-mix(in_oklch,var(--color-surface-primary)_88%,transparent))] p-4">
-                  <div className="flex flex-wrap items-center gap-2">
                     <Button
-                      onClick={() => void togglePlayback()}
-                      className="rounded-full px-4"
+                      onClick={approveSplits}
+                      className="h-9 rounded-full bg-[var(--color-status-verified)] px-4 text-[var(--color-surface-primary)] shadow-[0_0_24px_color-mix(in_oklch,var(--color-status-verified)_28%,transparent)] hover:bg-[var(--color-status-verified)]"
                     >
-                      {isPlaying ? <Pause /> : <Play />}
-                      {isPlaying ? "Pause" : "Play"}
+                      <Check />
+                      Approve
                     </Button>
-                    <button
-                      type="button"
-                      onClick={() => jumpToSplit("previous")}
-                      className={cn(
-                        buttonVariants({ variant: "outline", size: "sm" }),
-                        "rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] px-4 text-[var(--color-text-secondary)]",
-                      )}
-                    >
-                      <SkipBack />
-                      Prev Cut
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => jumpToSplit("next")}
-                      className={cn(
-                        buttonVariants({ variant: "outline", size: "sm" }),
-                        "rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] px-4 text-[var(--color-text-secondary)]",
-                      )}
-                    >
-                      <SkipForward />
-                      Next Cut
-                    </button>
-                    <button
-                      type="button"
-                      onClick={splitAtCurrentTime}
-                      className={cn(
-                        buttonVariants({ size: "sm" }),
-                        "rounded-full px-4 shadow-[var(--shadow-glow)]",
-                      )}
-                    >
-                      <ScissorsLineDashed />
-                      Split Here
-                    </button>
                   </div>
+                </section>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    {SHORTCUT_HINTS.map((hint) => (
-                      <span
-                        key={hint}
-                        className="rounded-full border border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_52%,transparent)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]"
-                      >
-                        {hint}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              <section className="relative overflow-hidden rounded-[20px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_82%,transparent)] px-3 py-3">
-                <div
-                  ref={timelineRef}
-                  onPointerDown={handleTimelinePointerDown}
-                  onPointerMove={handleTimelinePointerMove}
-                  onPointerUp={handleTimelinePointerUp}
-                  onPointerCancel={handleTimelinePointerCancel}
-                  className="relative h-full w-full cursor-pointer rounded-[16px] border border-[color:color-mix(in_oklch,var(--color-border-default)_58%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_80%,transparent)] px-1 transition-colors hover:border-[color:color-mix(in_oklch,var(--color-accent-base)_60%,transparent)]"
-                >
-                  {segments.map((segment, index) => {
-                    const left = `${(segment.start / Math.max(effectiveDuration, 0.001)) * 100}%`;
-                    const width = `${((segment.end - segment.start) / Math.max(effectiveDuration, 0.001)) * 100}%`;
-
-                    return (
-                      <motion.div
-                        key={segment.id}
-                        layout
-                        className="absolute inset-y-1 rounded-[12px]"
+                <section className="flex min-h-0 flex-1 flex-col gap-[var(--space-4)]">
+                  <div className="min-h-0 flex-1 rounded-[24px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_72%,transparent)] p-[var(--space-4)]">
+                    <div className="relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-[20px] border border-[color:color-mix(in_oklch,var(--color-border-default)_62%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_84%,transparent)]">
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0"
                         style={{
-                          left,
-                          width,
-                          background: TIMELINE_SEGMENT_BACKGROUNDS[
-                            index % TIMELINE_SEGMENT_BACKGROUNDS.length
-                          ],
+                          background:
+                            "radial-gradient(circle at 50% 12%, color-mix(in oklch, var(--color-accent-base) 12%, transparent) 0%, transparent 42%), radial-gradient(circle at 0% 100%, color-mix(in oklch, var(--color-signal-violet) 10%, transparent) 0%, transparent 38%)",
                         }}
                       />
-                    );
-                  })}
 
-                  {timelineSelection && timelineSelectionMetrics ? (
-                    <motion.div
-                      key={timelineSelection.id}
-                      initial={{ opacity: 0.35 }}
-                      animate={{
-                        opacity:
-                          timelineSelection.status === "detecting"
-                            ? [0.45, 0.82, 0.45]
-                            : timelineSelection.status === "success"
-                              ? 0.86
-                              : 0.72,
-                        scaleY:
-                          timelineSelection.status === "success"
-                            ? [1, 1.06, 1]
-                            : 1,
-                      }}
-                      transition={{
-                        duration: timelineSelection.status === "detecting" ? 1 : 0.28,
-                        repeat: timelineSelection.status === "detecting" ? Infinity : 0,
-                        ease: [0.22, 1, 0.36, 1],
-                      }}
-                      className="pointer-events-none absolute inset-y-1 z-20 overflow-hidden rounded-[12px] border"
-                      style={{
-                        left: timelineSelectionMetrics.left,
-                        width: timelineSelectionMetrics.width,
-                        background:
-                          timelineSelection.status === "empty" ||
-                          timelineSelection.status === "error"
-                            ? "linear-gradient(135deg, color-mix(in oklch, var(--color-status-error) 28%, transparent), color-mix(in oklch, var(--color-overlay-badge) 18%, transparent))"
-                            : timelineSelection.status === "success"
-                              ? "linear-gradient(135deg, color-mix(in oklch, var(--color-status-verified) 26%, transparent), color-mix(in oklch, var(--color-accent-base) 16%, transparent))"
-                              : "linear-gradient(135deg, color-mix(in oklch, var(--color-overlay-arrow) 28%, transparent), color-mix(in oklch, var(--color-overlay-trajectory) 16%, transparent))",
-                        borderColor:
-                          timelineSelection.status === "empty" ||
-                          timelineSelection.status === "error"
-                            ? "color-mix(in oklch, var(--color-status-error) 58%, transparent)"
-                            : timelineSelection.status === "success"
-                              ? "color-mix(in oklch, var(--color-status-verified) 56%, transparent)"
-                              : "color-mix(in oklch, var(--color-overlay-arrow) 62%, transparent)",
-                        boxShadow:
-                          timelineSelection.status === "detecting"
-                            ? "0 0 0 1px color-mix(in oklch, var(--color-overlay-arrow) 28%, transparent), 0 0 24px color-mix(in oklch, var(--color-overlay-arrow) 22%, transparent)"
-                            : "0 0 18px color-mix(in oklch, var(--color-overlay-arrow) 14%, transparent)",
-                      }}
+                      <video
+                        ref={videoRef}
+                        src={videoUrl ?? undefined}
+                        controls={false}
+                        preload="metadata"
+                        className="h-full w-full object-contain"
+                      />
+
+                      <div className="pointer-events-none absolute left-[var(--space-4)] top-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-2)]">
+                        <div className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_76%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_62%,transparent)] px-3 py-1.5 shadow-[var(--shadow-md)] backdrop-blur-xl">
+                          <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                            Active Shot
+                          </p>
+                          <p className="mt-1 font-mono text-xs text-[var(--color-text-primary)]">
+                            #{activeShotIndex + 1} ·{" "}
+                            {formatDuration(
+                              (segments[activeShotIndex]?.end ?? 0) -
+                                (segments[activeShotIndex]?.start ?? 0),
+                            )}
+                          </p>
+                        </div>
+                        {selectedBoundary ? (
+                          <div className="rounded-full border px-3 py-1.5 shadow-[var(--shadow-md)] backdrop-blur-xl"
+                            style={{
+                              borderColor: `color-mix(in oklch, ${getSplitSourceColor(selectedBoundary.source)} 42%, transparent)`,
+                              backgroundColor: `color-mix(in oklch, ${getSplitSourceColor(selectedBoundary.source)} 16%, transparent)`,
+                            }}
+                          >
+                            <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                              Selected Cut
+                            </p>
+                            <p className="mt-1 font-mono text-xs text-[var(--color-text-primary)]">
+                              {formatTimecode(selectedBoundary.time)} · {formatConfidence(selectedBoundary.confidence)}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="absolute inset-x-[var(--space-4)] bottom-[var(--space-4)] z-20 flex flex-wrap items-center justify-between gap-[var(--space-3)] rounded-[18px] border border-[color:color-mix(in_oklch,var(--color-border-default)_72%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_72%,transparent)] px-[var(--space-4)] py-[var(--space-3)] shadow-[var(--shadow-lg)] backdrop-blur-xl">
+                        <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+                          <Button
+                            onClick={() => void togglePlayback()}
+                            className="rounded-full px-4"
+                          >
+                            {isPlaying ? <Pause /> : <Play />}
+                            {isPlaying ? "Pause" : "Play"}
+                          </Button>
+                          <button
+                            type="button"
+                            onClick={() => jumpToSplit("previous")}
+                            className={cn(
+                              buttonVariants({ variant: "outline", size: "sm" }),
+                              "rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] px-4 text-[var(--color-text-secondary)]",
+                            )}
+                          >
+                            <SkipBack />
+                            Prev Cut
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => jumpToSplit("next")}
+                            className={cn(
+                              buttonVariants({ variant: "outline", size: "sm" }),
+                              "rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] px-4 text-[var(--color-text-secondary)]",
+                            )}
+                          >
+                            <SkipForward />
+                            Next Cut
+                          </button>
+                          <button
+                            type="button"
+                            onClick={splitAtCurrentTime}
+                            className={cn(
+                              buttonVariants({ size: "sm" }),
+                              "rounded-full px-4 shadow-[var(--shadow-glow)]",
+                            )}
+                          >
+                            <ScissorsLineDashed />
+                            Split Here
+                          </button>
+                        </div>
+
+                        <div className="hidden flex-wrap items-center gap-[var(--space-2)] xl:flex">
+                          {SHORTCUT_HINTS.map((hint) => (
+                            <span
+                              key={hint}
+                              className="rounded-full border border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_52%,transparent)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]"
+                            >
+                              {hint}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <section className="flex h-14 flex-none flex-col justify-center rounded-[20px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_82%,transparent)] px-[var(--space-3)] py-[var(--space-2)]">
+                    <div
+                      ref={timelineRef}
+                      onPointerDown={handleTimelinePointerDown}
+                      onPointerMove={handleTimelinePointerMove}
+                      onPointerUp={handleTimelinePointerUp}
+                      onPointerCancel={handleTimelinePointerCancel}
+                      className="relative h-full w-full cursor-pointer rounded-[14px] border border-[color:color-mix(in_oklch,var(--color-border-default)_58%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_80%,transparent)] px-1 transition-colors hover:border-[color:color-mix(in_oklch,var(--color-accent-base)_60%,transparent)]"
                     >
-                      {timelineSelection.status === "detecting" ? (
-                        <motion.div
-                          aria-hidden="true"
-                          className="absolute inset-0"
-                          animate={{ x: ["-30%", "100%"] }}
-                          transition={{
-                            duration: 1.05,
-                            repeat: Infinity,
-                            ease: "linear",
-                          }}
-                          style={{
-                            background:
-                              "linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--color-neutral-50) 16%, transparent) 45%, transparent 100%)",
-                          }}
-                        />
-                      ) : null}
-
-                      {timelineSelection.message ? (
-                        <div className="absolute inset-x-2 top-1.5 flex items-center justify-between gap-2">
-                          <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-surface-primary)_36%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] backdrop-blur">
-                            {timelineSelection.message}
-                          </span>
-                          {timelineSelection.status === "detecting" ? (
-                            <LoaderCircle className="size-3.5 animate-spin text-[var(--color-text-primary)]" />
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </motion.div>
-                  ) : null}
-
-                  {boundaries.map((boundary) => {
-                    const left = `${(boundary.time / Math.max(effectiveDuration, 0.001)) * 100}%`;
-                    const isSelected = selectedBoundaryId === boundary.id;
-                    const isDetected = detectedBoundaryIds.includes(boundary.id);
-                    const isNudging = nudgeFrameOffset?.id === boundary.id;
-                    const sourceColor = getSplitSourceColor(boundary.source);
-
-                    return (
-                      <motion.button
-                        key={boundary.id}
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          selectBoundary(boundary);
-                          seekTo(boundary.time);
-                        }}
-                        onPointerDown={(event) => {
-                          event.stopPropagation();
-                        }}
-                        className="absolute inset-y-0 z-20 w-12 -translate-x-1/2"
-                        style={{ left }}
-                        initial={false}
-                        animate={
-                          isDetected
-                            ? { y: [-12, 0], scale: [0.84, 1.16, 1] }
-                            : isNudging
-                              ? { y: [0, -4, 0], scale: [1, 1.08, 1] }
-                              : { y: 0, scale: 1 }
-                        }
-                        transition={{
-                          duration: isDetected || isNudging ? 0.42 : 0.2,
-                          ease: [0.22, 1, 0.36, 1],
-                        }}
-                        aria-label={`Select split ${boundary.label} at ${formatTimecode(boundary.time)}`}
-                      >
-                        <div className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5">
-                          <motion.div
-                            initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            className="rounded-full border px-2.5 py-1 font-mono text-[11px] leading-none backdrop-blur-xl"
-                            style={{
-                              color: sourceColor,
-                              backgroundColor: `color-mix(in oklch, ${sourceColor} 18%, transparent)`,
-                              borderColor: `color-mix(in oklch, ${sourceColor} 42%, transparent)`,
-                              boxShadow: `0 0 18px color-mix(in oklch, ${sourceColor} 18%, transparent)`,
-                            }}
-                            title={getSplitSourceLabel(boundary.source)}
-                          >
-                            {formatConfidence(boundary.confidence)}
-                          </motion.div>
-
-                          <AnimatePresence>
-                            {isNudging ? (
-                              <motion.div
-                                initial={{ opacity: 0, y: 8, scale: 0.94 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                                className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_82%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_78%,transparent)] px-2 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] shadow-[var(--shadow-md)] backdrop-blur-xl"
-                              >
-                                {formatNudgeFrames(nudgeFrameOffset.frames)}
-                              </motion.div>
-                            ) : null}
-                          </AnimatePresence>
-                        </div>
-
-                        <span
-                          className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 rounded-full transition-all"
-                          style={{
-                            backgroundColor: sourceColor,
-                            boxShadow: isSelected
-                              ? `0 0 0 1px color-mix(in oklch, ${sourceColor} 36%, transparent), 0 0 22px color-mix(in oklch, ${sourceColor} 42%, transparent)`
-                              : isDetected
-                                ? `0 0 0 1px color-mix(in oklch, ${sourceColor} 36%, transparent), 0 0 22px color-mix(in oklch, ${sourceColor} 28%, transparent)`
-                                : `0 0 14px color-mix(in oklch, ${sourceColor} 34%, transparent)`,
-                          }}
-                        />
-                      </motion.button>
-                    );
-                  })}
-
-                  <AnimatePresence>
-                    {cutPreview ? (
-                      <motion.button
-                        type="button"
-                        initial={{ opacity: 0, y: 16, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 12, scale: 0.98 }}
-                        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                        className="absolute bottom-[calc(100%+12px)] z-30 w-[min(296px,calc(100vw-48px))] -translate-x-1/2 overflow-hidden rounded-[18px] border border-[color:color-mix(in_oklch,var(--color-border-default)_82%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_94%,transparent)] p-3 text-left shadow-[var(--shadow-xl)] backdrop-blur-xl"
-                        style={{ left: cutPreviewLeft }}
-                        onClick={() => setCutPreview(null)}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-accent)]">
-                              {getSplitSourceLabel(cutPreview.source)}
-                            </p>
-                            <p className="mt-1 text-sm text-[var(--color-text-primary)]">
-                              {formatTimecode(cutPreview.time)}
-                            </p>
-                          </div>
-                          <div
-                            className="rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)]"
-                            style={{
-                              color: getSplitSourceColor(cutPreview.source),
-                              borderColor: `color-mix(in oklch, ${getSplitSourceColor(cutPreview.source)} 38%, transparent)`,
-                              backgroundColor: `color-mix(in oklch, ${getSplitSourceColor(cutPreview.source)} 12%, transparent)`,
-                            }}
-                          >
-                            {formatConfidence(cutPreview.confidence)}
-                          </div>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <div>
-                            <p className="mb-2 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                              Before
-                            </p>
-                            {/* Data URLs come from local canvas captures and should bypass Next image optimization. */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={cutPreview.beforeFrame}
-                              alt="Frame before detected cut"
-                              className="aspect-video w-full rounded-[12px] border border-[var(--color-border-subtle)] object-cover"
-                            />
-                          </div>
-                          <div>
-                            <p className="mb-2 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                              After
-                            </p>
-                            {/* Data URLs come from local canvas captures and should bypass Next image optimization. */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={cutPreview.afterFrame}
-                              alt="Frame after detected cut"
-                              className="aspect-video w-full rounded-[12px] border border-[var(--color-border-subtle)] object-cover"
-                            />
-                          </div>
-                        </div>
-                      </motion.button>
-                    ) : null}
-                  </AnimatePresence>
-
-                  <div
-                    className="absolute inset-y-0 z-10 w-5 -translate-x-1/2"
-                    style={{
-                      left: `${(currentTime / Math.max(effectiveDuration, 0.001)) * 100}%`,
-                    }}
-                  >
-                    <div className="absolute left-1/2 top-1 size-3 -translate-x-1/2 rounded-full border border-[var(--color-surface-primary)] bg-[var(--color-text-primary)] shadow-[0_0_18px_color-mix(in_oklch,var(--color-text-primary)_35%,transparent)]" />
-                    <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--color-text-primary)]" />
-                  </div>
-                </div>
-              </section>
-
-              <section className="grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
-                <div className="min-h-0 overflow-hidden rounded-[22px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_76%,transparent)]">
-                  <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-4 py-3">
-                    <div>
-                      <p className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                        Filmstrip
-                      </p>
-                      <p className="mt-1 text-sm text-[var(--color-text-primary)]">
-                        Click a shot to jump. Remove with the cut button or
-                        `Delete`.
-                      </p>
-                    </div>
-                    <div className="rounded-full border border-[var(--color-border-default)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                      {summary.shotCount} shots
-                    </div>
-                  </div>
-
-                  <div className="flex h-[calc(100%-68px)] gap-3 overflow-x-auto overflow-y-hidden px-4 py-4">
-                    <AnimatePresence initial={false}>
                       {segments.map((segment, index) => {
-                        const isActive = index === activeShotIndex;
-                        const removeBoundaryId =
-                          index === 0 ? segments[1]?.id ?? null : segment.id;
-                        const leftBoundaryMeta =
-                          index === 0
-                            ? { source: segment.splitSource, confidence: segment.confidence }
-                            : {
-                                source: segment.splitSource,
-                                confidence: segment.confidence,
-                              };
-                        const rightBoundaryMeta = segments[index + 1]
-                          ? {
-                              source: segments[index + 1].splitSource,
-                              confidence: segments[index + 1].confidence,
-                            }
-                          : {
-                              source: segment.splitSource,
-                              confidence: segment.confidence,
-                            };
+                        const left = `${(segment.start / Math.max(effectiveDuration, 0.001)) * 100}%`;
+                        const width = `${((segment.end - segment.start) / Math.max(effectiveDuration, 0.001)) * 100}%`;
 
                         return (
                           <motion.div
                             key={segment.id}
                             layout
-                            initial={{ opacity: 0, y: 28, scale: 0.98 }}
-                            animate={{
-                              opacity: 1,
-                              y: 0,
-                              scale: 1,
-                              borderColor: isActive
-                                ? "color-mix(in oklch, var(--color-accent-light) 86%, transparent)"
-                                : "color-mix(in oklch, var(--color-border-default) 82%, transparent)",
-                              boxShadow:
-                                lastAddedSegmentId === segment.id
-                                  ? "0 0 0 1px color-mix(in oklch, var(--color-status-verified) 42%, transparent), 0 0 34px color-mix(in oklch, var(--color-status-verified) 24%, transparent)"
-                                  : isActive
-                                    ? "0 0 0 1px color-mix(in oklch, var(--color-accent-base) 38%, transparent), 0 10px 30px color-mix(in oklch, var(--color-accent-base) 16%, transparent)"
-                                    : "var(--shadow-md)",
-                            }}
-                            exit={{ opacity: 0, y: -20, scale: 0.98 }}
-                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                            className="group relative flex h-full min-w-[240px] max-w-[240px] flex-col overflow-hidden rounded-[20px] border text-left"
+                            className="absolute inset-y-1 rounded-[10px]"
                             style={{
-                              background:
-                                "linear-gradient(180deg, color-mix(in oklch, var(--color-surface-secondary) 96%, transparent), color-mix(in oklch, var(--color-surface-primary) 100%, transparent))",
+                              left,
+                              width,
+                              background: TIMELINE_SEGMENT_BACKGROUNDS[
+                                index % TIMELINE_SEGMENT_BACKGROUNDS.length
+                              ],
                             }}
-                          >
-                            <button
-                              ref={(node) => {
-                                if (node) {
-                                  cardRefs.current.set(segment.id, node);
-                                } else {
-                                  cardRefs.current.delete(segment.id);
-                                }
-                              }}
-                              type="button"
-                              onClick={() => {
-                                seekTo(segment.start);
-                                selectBoundary(
-                                  index === 0
-                                    ? segments[1]
-                                      ? {
-                                          id: segments[1].id,
-                                          time: segments[1].start,
-                                        }
-                                      : null
-                                    : {
-                                        id: segment.id,
-                                        time: segment.start,
-                                      },
-                                );
-                              }}
-                              onKeyDown={(event) => handleCardKeyDown(event, segment)}
-                              className="absolute inset-0 z-10"
-                              aria-label={`Jump to shot ${index + 1}`}
-                            />
-                            <div className="relative aspect-video overflow-hidden bg-[var(--color-surface-tertiary)]">
-                              {segment.thumbnail ? (
-                                // Data URLs come from local canvas captures and should bypass Next image optimization.
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={segment.thumbnail}
-                                  alt={`Shot ${index + 1} thumbnail`}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <div className="scene-skeleton h-full w-full" />
-                              )}
+                          />
+                        );
+                      })}
 
-                              <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-2 p-3">
-                                <div className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_70%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_64%,transparent)] px-3 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] backdrop-blur">
-                                  #{index + 1}
-                                </div>
+                      {timelineSelection && timelineSelectionMetrics ? (
+                        <motion.div
+                          key={timelineSelection.id}
+                          initial={{ opacity: 0.35 }}
+                          animate={{
+                            opacity:
+                              timelineSelection.status === "detecting"
+                                ? [0.45, 0.82, 0.45]
+                                : timelineSelection.status === "success"
+                                  ? 0.86
+                                  : 0.72,
+                            scaleY:
+                              timelineSelection.status === "success"
+                                ? [1, 1.06, 1]
+                                : 1,
+                          }}
+                          transition={{
+                            duration: timelineSelection.status === "detecting" ? 1 : 0.28,
+                            repeat: timelineSelection.status === "detecting" ? Infinity : 0,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
+                          className="pointer-events-none absolute inset-y-1 z-20 overflow-hidden rounded-[10px] border"
+                          style={{
+                            left: timelineSelectionMetrics.left,
+                            width: timelineSelectionMetrics.width,
+                            background:
+                              timelineSelection.status === "empty" ||
+                              timelineSelection.status === "error"
+                                ? "linear-gradient(135deg, color-mix(in oklch, var(--color-status-error) 28%, transparent), color-mix(in oklch, var(--color-overlay-badge) 18%, transparent))"
+                                : timelineSelection.status === "success"
+                                  ? "linear-gradient(135deg, color-mix(in oklch, var(--color-status-verified) 26%, transparent), color-mix(in oklch, var(--color-accent-base) 16%, transparent))"
+                                  : "linear-gradient(135deg, color-mix(in oklch, var(--color-overlay-arrow) 28%, transparent), color-mix(in oklch, var(--color-overlay-trajectory) 16%, transparent))",
+                            borderColor:
+                              timelineSelection.status === "empty" ||
+                              timelineSelection.status === "error"
+                                ? "color-mix(in oklch, var(--color-status-error) 58%, transparent)"
+                                : timelineSelection.status === "success"
+                                  ? "color-mix(in oklch, var(--color-status-verified) 56%, transparent)"
+                                  : "color-mix(in oklch, var(--color-overlay-arrow) 62%, transparent)",
+                            boxShadow:
+                              timelineSelection.status === "detecting"
+                                ? "0 0 0 1px color-mix(in oklch, var(--color-overlay-arrow) 28%, transparent), 0 0 24px color-mix(in oklch, var(--color-overlay-arrow) 22%, transparent)"
+                                : "0 0 18px color-mix(in oklch, var(--color-overlay-arrow) 14%, transparent)",
+                          }}
+                        >
+                          {timelineSelection.status === "detecting" ? (
+                            <motion.div
+                              aria-hidden="true"
+                              className="absolute inset-0"
+                              animate={{ x: ["-30%", "100%"] }}
+                              transition={{
+                                duration: 1.05,
+                                repeat: Infinity,
+                                ease: "linear",
+                              }}
+                              style={{
+                                background:
+                                  "linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--color-neutral-50) 16%, transparent) 45%, transparent 100%)",
+                              }}
+                            />
+                          ) : null}
+
+                          {timelineSelection.message ? (
+                            <div className="absolute inset-x-2 top-1.5 flex items-center justify-between gap-2">
+                              <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-surface-primary)_36%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] backdrop-blur">
+                                {timelineSelection.message}
+                              </span>
+                              {timelineSelection.status === "detecting" ? (
+                                <LoaderCircle className="size-3.5 animate-spin text-[var(--color-text-primary)]" />
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </motion.div>
+                      ) : null}
+
+                      {boundaries.map((boundary) => {
+                        const left = `${(boundary.time / Math.max(effectiveDuration, 0.001)) * 100}%`;
+                        const isSelected = selectedBoundaryId === boundary.id;
+                        const isDetected = detectedBoundaryIds.includes(boundary.id);
+                        const isNudging = nudgeFrameOffset?.id === boundary.id;
+                        const sourceColor = getSplitSourceColor(boundary.source);
+
+                        return (
+                          <motion.button
+                            key={boundary.id}
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              selectBoundary(boundary, { cardId: boundary.id });
+                              seekTo(boundary.time);
+                            }}
+                            onPointerDown={(event) => {
+                              event.stopPropagation();
+                            }}
+                            className="absolute inset-y-0 z-20 w-12 -translate-x-1/2"
+                            style={{ left }}
+                            initial={false}
+                            animate={
+                              isDetected
+                                ? { y: [-12, 0], scale: [0.84, 1.16, 1] }
+                                : isNudging
+                                  ? { y: [0, -4, 0], scale: [1, 1.08, 1] }
+                                  : { y: 0, scale: 1 }
+                            }
+                            transition={{
+                              duration: isDetected || isNudging ? 0.42 : 0.2,
+                              ease: [0.22, 1, 0.36, 1],
+                            }}
+                            aria-label={`Select split ${boundary.label} at ${formatTimecode(boundary.time)}`}
+                          >
+                            <div className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5">
+                              <motion.div
+                                initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                className="rounded-full border px-2.5 py-1 font-mono text-[11px] leading-none backdrop-blur-xl"
+                                style={{
+                                  color: sourceColor,
+                                  backgroundColor: `color-mix(in oklch, ${sourceColor} 18%, transparent)`,
+                                  borderColor: `color-mix(in oklch, ${sourceColor} 42%, transparent)`,
+                                  boxShadow: `0 0 18px color-mix(in oklch, ${sourceColor} 18%, transparent)`,
+                                }}
+                                title={getSplitSourceLabel(boundary.source)}
+                              >
+                                {formatConfidence(boundary.confidence)}
+                              </motion.div>
+
+                              <AnimatePresence>
+                                {isNudging ? (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: 8, scale: 0.94 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                                    className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_82%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_78%,transparent)] px-2 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] shadow-[var(--shadow-md)] backdrop-blur-xl"
+                                  >
+                                    {formatNudgeFrames(nudgeFrameOffset.frames)}
+                                  </motion.div>
+                                ) : null}
+                              </AnimatePresence>
+                            </div>
+
+                            <span
+                              className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 rounded-full transition-all"
+                              style={{
+                                backgroundColor: sourceColor,
+                                boxShadow: isSelected
+                                  ? `0 0 0 1px color-mix(in oklch, ${sourceColor} 36%, transparent), 0 0 22px color-mix(in oklch, ${sourceColor} 42%, transparent)`
+                                  : isDetected
+                                    ? `0 0 0 1px color-mix(in oklch, ${sourceColor} 36%, transparent), 0 0 22px color-mix(in oklch, ${sourceColor} 28%, transparent)`
+                                    : `0 0 14px color-mix(in oklch, ${sourceColor} 34%, transparent)`,
+                              }}
+                            />
+                          </motion.button>
+                        );
+                      })}
+
+                      <AnimatePresence>
+                        {cutPreview ? (
+                          <motion.button
+                            type="button"
+                            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                            className="absolute bottom-[calc(100%+12px)] z-30 w-[min(296px,calc(100vw-48px))] -translate-x-1/2 overflow-hidden rounded-[18px] border border-[color:color-mix(in_oklch,var(--color-border-default)_82%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_94%,transparent)] p-3 text-left shadow-[var(--shadow-xl)] backdrop-blur-xl"
+                            style={{ left: cutPreviewLeft }}
+                            onClick={() => setCutPreview(null)}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-accent)]">
+                                  {getSplitSourceLabel(cutPreview.source)}
+                                </p>
+                                <p className="mt-1 text-sm text-[var(--color-text-primary)]">
+                                  {formatTimecode(cutPreview.time)}
+                                </p>
+                              </div>
+                              <div
+                                className="rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)]"
+                                style={{
+                                  color: getSplitSourceColor(cutPreview.source),
+                                  borderColor: `color-mix(in oklch, ${getSplitSourceColor(cutPreview.source)} 38%, transparent)`,
+                                  backgroundColor: `color-mix(in oklch, ${getSplitSourceColor(cutPreview.source)} 12%, transparent)`,
+                                }}
+                              >
+                                {formatConfidence(cutPreview.confidence)}
+                              </div>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="mb-2 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                                  Before
+                                </p>
+                                {/* Data URLs come from local canvas captures and should bypass Next image optimization. */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={cutPreview.beforeFrame}
+                                  alt="Frame before detected cut"
+                                  className="aspect-video w-full rounded-[12px] border border-[var(--color-border-subtle)] object-cover"
+                                />
+                              </div>
+                              <div>
+                                <p className="mb-2 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                                  After
+                                </p>
+                                {/* Data URLs come from local canvas captures and should bypass Next image optimization. */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={cutPreview.afterFrame}
+                                  alt="Frame after detected cut"
+                                  className="aspect-video w-full rounded-[12px] border border-[var(--color-border-subtle)] object-cover"
+                                />
+                              </div>
+                            </div>
+                          </motion.button>
+                        ) : null}
+                      </AnimatePresence>
+
+                      <div
+                        className="absolute inset-y-0 z-10 w-5 -translate-x-1/2"
+                        style={{
+                          left: `${(currentTime / Math.max(effectiveDuration, 0.001)) * 100}%`,
+                        }}
+                      >
+                        <div className="absolute left-1/2 top-1 size-3 -translate-x-1/2 rounded-full border border-[var(--color-surface-primary)] bg-[var(--color-text-primary)] shadow-[0_0_18px_color-mix(in_oklch,var(--color-text-primary)_35%,transparent)]" />
+                        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--color-text-primary)]" />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="flex h-[152px] flex-none flex-col overflow-hidden rounded-[22px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_76%,transparent)]">
+                    <div className="flex flex-none items-center justify-between gap-[var(--space-3)] border-b border-[var(--color-border-subtle)] px-[var(--space-4)] py-[var(--space-2)]">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                          Filmstrip
+                        </p>
+                        <p className="truncate text-xs text-[var(--color-text-secondary)]">
+                          Click to seek and select. Delete removes the nearest split.
+                        </p>
+                      </div>
+                      <div className="flex flex-none items-center gap-[var(--space-2)]">
+                        <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_70%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                          Active = playback
+                        </span>
+                        <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-status-verified)_38%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                          Selected = nudge
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-[var(--space-4)] py-[var(--space-3)]">
+                      <div className="flex h-full gap-[var(--space-3)]">
+                        <AnimatePresence initial={false}>
+                          {segments.map((segment, index) => {
+                            const isActive = index === activeShotIndex;
+                            const isSelected = selectedCardId === segment.id;
+                            const removeBoundaryId =
+                              index === 0 ? segments[1]?.id ?? null : segment.id;
+                            const rightBoundaryMeta = segments[index + 1]
+                              ? {
+                                  source: segments[index + 1].splitSource,
+                                  confidence: segments[index + 1].confidence,
+                                }
+                              : {
+                                  source: segment.splitSource,
+                                  confidence: segment.confidence,
+                                };
+
+                            return (
+                              <motion.article
+                                key={segment.id}
+                                layout
+                                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                                animate={{
+                                  opacity: 1,
+                                  y: 0,
+                                  scale: 1,
+                                  borderColor: isSelected
+                                    ? "color-mix(in oklch, var(--color-status-verified) 70%, transparent)"
+                                    : isActive
+                                      ? "color-mix(in oklch, var(--color-accent-light) 82%, transparent)"
+                                      : "color-mix(in oklch, var(--color-border-default) 78%, transparent)",
+                                  boxShadow:
+                                    lastAddedSegmentId === segment.id
+                                      ? "0 0 0 2px color-mix(in oklch, var(--color-status-verified) 46%, transparent), 0 0 28px color-mix(in oklch, var(--color-status-verified) 24%, transparent)"
+                                      : isSelected
+                                        ? "0 0 0 2px color-mix(in oklch, var(--color-status-verified) 42%, transparent), 0 0 28px color-mix(in oklch, var(--color-status-verified) 18%, transparent)"
+                                        : isActive
+                                          ? "0 0 0 1px color-mix(in oklch, var(--color-accent-base) 38%, transparent), 0 0 24px color-mix(in oklch, var(--color-accent-base) 14%, transparent)"
+                                          : "var(--shadow-md)",
+                                }}
+                                exit={{ opacity: 0, y: -16, scale: 0.98 }}
+                                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                                className="relative flex h-full w-[172px] min-w-[172px] overflow-hidden rounded-[18px] border"
+                                style={{
+                                  background:
+                                    "linear-gradient(180deg, color-mix(in oklch, var(--color-surface-secondary) 96%, transparent), color-mix(in oklch, var(--color-surface-primary) 100%, transparent))",
+                                }}
+                              >
+                                <button
+                                  ref={(node) => {
+                                    if (node) {
+                                      cardRefs.current.set(segment.id, node);
+                                    } else {
+                                      cardRefs.current.delete(segment.id);
+                                    }
+                                  }}
+                                  type="button"
+                                  onClick={() => handleSegmentCardSelect(segment, index)}
+                                  onKeyDown={(event) => handleCardKeyDown(event, segment)}
+                                  className="group relative flex h-full w-full flex-col text-left"
+                                  aria-label={`Jump to shot ${index + 1}`}
+                                  aria-pressed={isSelected}
+                                >
+                                  <div className="relative aspect-video overflow-hidden bg-[var(--color-surface-tertiary)]">
+                                    {segment.thumbnail ? (
+                                      // Data URLs come from local canvas captures and should bypass Next image optimization.
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={segment.thumbnail}
+                                        alt={`Shot ${index + 1} thumbnail`}
+                                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                                      />
+                                    ) : (
+                                      <div className="scene-skeleton h-full w-full" />
+                                    )}
+
+                                    <div className="absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--color-surface-primary)_4%,transparent)_0%,transparent_42%,color-mix(in_oklch,var(--color-surface-primary)_72%,transparent)_100%)]" />
+                                    <div className="absolute inset-x-2 top-2 flex items-center justify-between gap-2">
+                                      <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_72%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_64%,transparent)] px-2 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] backdrop-blur">
+                                        #{index + 1}
+                                      </span>
+                                      <span
+                                        className="rounded-full border px-2 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] backdrop-blur"
+                                        style={{
+                                          color: getSplitSourceColor(rightBoundaryMeta.source),
+                                          borderColor: `color-mix(in oklch, ${getSplitSourceColor(rightBoundaryMeta.source)} 38%, transparent)`,
+                                          backgroundColor: `color-mix(in oklch, ${getSplitSourceColor(rightBoundaryMeta.source)} 14%, transparent)`,
+                                        }}
+                                      >
+                                        {formatConfidence(rightBoundaryMeta.confidence)}
+                                      </span>
+                                    </div>
+                                    {isActive ? (
+                                      <motion.div
+                                        layoutId="active-shot-glow"
+                                        className="absolute inset-0"
+                                        style={{
+                                          boxShadow:
+                                            "inset 0 0 0 2px color-mix(in oklch, var(--color-accent-light) 80%, transparent), inset 0 0 72px color-mix(in oklch, var(--color-accent-base) 10%, transparent)",
+                                        }}
+                                      />
+                                    ) : null}
+                                    {isSelected ? (
+                                      <div className="absolute inset-0 shadow-[inset_0_0_0_2px_color-mix(in_oklch,var(--color-status-verified)_72%,transparent),inset_0_0_24px_color-mix(in_oklch,var(--color-status-verified)_12%,transparent)]" />
+                                    ) : null}
+                                  </div>
+
+                                  <div className="flex min-h-0 flex-1 items-center justify-between gap-[var(--space-2)] px-3 py-2">
+                                    <div className="min-w-0">
+                                      <p className="truncate font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                                        {formatTimecode(segment.start)}
+                                      </p>
+                                      <p className="truncate text-xs text-[var(--color-text-primary)]">
+                                        {formatDuration(segment.end - segment.start)}
+                                      </p>
+                                    </div>
+                                    <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-border-default)_70%,transparent)] px-2 py-1 font-mono text-[9px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                                      {index === 0 ? "Lead" : "Cut"}
+                                    </span>
+                                  </div>
+                                </button>
+
                                 <button
                                   type="button"
                                   disabled={!removeBoundaryId}
@@ -2506,263 +2697,112 @@ export function ReviewSplitsWorkspace({
                                       removeBoundary(removeBoundaryId);
                                     }
                                   }}
-                                  className="rounded-full border border-[color:color-mix(in_oklch,var(--color-status-error)_36%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_64%,transparent)] p-2 text-[var(--color-text-secondary)] backdrop-blur transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                                  className="absolute right-2 top-2 z-20 rounded-full border border-[color:color-mix(in_oklch,var(--color-status-error)_36%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_72%,transparent)] p-1.5 text-[var(--color-text-secondary)] backdrop-blur transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
                                   aria-label={`Remove split near shot ${index + 1}`}
                                 >
                                   <Trash2 className="size-3.5" />
                                 </button>
-                              </div>
-
-                              {isActive ? (
-                                <motion.div
-                                  layoutId="active-shot-glow"
-                                  className="absolute inset-0"
-                                  style={{
-                                    boxShadow:
-                                      "inset 0 0 0 1px color-mix(in oklch, var(--color-accent-light) 82%, transparent), inset 0 0 80px color-mix(in oklch, var(--color-accent-base) 10%, transparent)",
-                                  }}
-                                />
-                              ) : null}
-                            </div>
-
-                            <div className="flex flex-1 flex-col gap-3 p-4">
-                              <div>
-                                <p className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                                  {formatTimecode(segment.start)} to{" "}
-                                  {formatTimecode(segment.end)}
-                                </p>
-                                <p className="mt-2 text-sm text-[var(--color-text-primary)]">
-                                  Duration {formatDuration(segment.end - segment.start)}
-                                </p>
-                              </div>
-                              <div className="flex items-center justify-between rounded-[16px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className="size-2.5 rounded-full"
-                                    style={{
-                                      backgroundColor: getSplitSourceColor(
-                                        leftBoundaryMeta.source,
-                                      ),
-                                      boxShadow: `0 0 10px color-mix(in oklch, ${getSplitSourceColor(leftBoundaryMeta.source)} 34%, transparent)`,
-                                    }}
-                                    title={`Shot start: ${getSplitSourceLabel(leftBoundaryMeta.source)}`}
-                                  />
-                                  <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                                    In
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                                    Out
-                                  </span>
-                                  <span
-                                    className="size-2.5 rounded-full"
-                                    style={{
-                                      backgroundColor: getSplitSourceColor(
-                                        rightBoundaryMeta.source,
-                                      ),
-                                      boxShadow: `0 0 10px color-mix(in oklch, ${getSplitSourceColor(rightBoundaryMeta.source)} 34%, transparent)`,
-                                    }}
-                                    title={`Shot end: ${getSplitSourceLabel(rightBoundaryMeta.source)}`}
-                                  />
-                                </div>
-                              </div>
-                              <div className="mt-auto rounded-[16px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-3 py-2 font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                                {index === 0
-                                  ? "Remove merges forward"
-                                  : "Remove merges backward"}
-                              </div>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </AnimatePresence>
-                  </div>
-                </div>
-
-                <div className="flex min-h-0 flex-col justify-between rounded-[22px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_76%,transparent)] p-5">
-                  <div>
-                    <p className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                      Review Status
-                    </p>
-                    <div className="mt-4 grid gap-3">
-                      <div className="rounded-[18px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_72%,transparent)] p-4">
-                        <p className="text-sm text-[var(--color-text-secondary)]">
-                          Current cut count
-                        </p>
-                        <p className="mt-2 text-3xl font-semibold">
-                          {summary.shotCount}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-[18px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_72%,transparent)] p-4">
-                          <p className="text-sm text-[var(--color-text-secondary)]">
-                            Added
-                          </p>
-                          <p className="mt-2 font-mono text-2xl text-[var(--color-status-verified)]">
-                            +{summary.added}
-                          </p>
-                        </div>
-                        <div className="rounded-[18px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_72%,transparent)] p-4">
-                          <p className="text-sm text-[var(--color-text-secondary)]">
-                            Removed
-                          </p>
-                          <p className="mt-2 font-mono text-2xl text-[var(--color-overlay-badge)]">
-                            -{summary.removed}
-                          </p>
-                        </div>
+                              </motion.article>
+                            );
+                          })}
+                        </AnimatePresence>
                       </div>
                     </div>
-                  </div>
+                  </section>
+                </section>
+              </div>
+            </LayoutGroup>
 
-                  <div className="mt-6 space-y-4">
-                    <div className="rounded-[18px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_72%,transparent)] p-4">
-                      <p className="text-sm text-[var(--color-text-secondary)]">
-                        Selected cut
-                      </p>
-                      <p className="mt-2 font-mono text-sm text-[var(--color-text-primary)]">
-                        {selectedBoundary
-                          ? formatTimecode(selectedBoundary.time)
-                          : "None"}
-                      </p>
-                      {selectedBoundary ? (
-                        <div className="mt-3 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="size-2.5 rounded-full"
-                              style={{
-                                backgroundColor: getSplitSourceColor(
-                                  selectedBoundary.source,
-                                ),
-                                boxShadow: `0 0 10px color-mix(in oklch, ${getSplitSourceColor(selectedBoundary.source)} 34%, transparent)`,
-                              }}
-                            />
-                            <span className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                              {getSplitSourceLabel(selectedBoundary.source)}
-                            </span>
-                          </div>
-                          <span className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)]">
-                            {formatConfidence(selectedBoundary.confidence)}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="rounded-[18px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_72%,transparent)] p-4">
-                      <p className="text-sm text-[var(--color-text-secondary)]">
-                        Frame nudge
-                      </p>
-                      <p className="mt-2 font-mono text-sm text-[var(--color-text-primary)]">
-                        {videoFps.toFixed(3)} fps · {frameDuration.toFixed(5)}s/frame
-                      </p>
-                    </div>
-
-                    <Button
-                      onClick={approveSplits}
-                      className="h-12 w-full rounded-[18px] bg-[var(--color-status-verified)] text-[var(--color-surface-primary)] shadow-[0_0_28px_color-mix(in_oklch,var(--color-status-verified)_28%,transparent)] transition-transform hover:-translate-y-0.5 hover:bg-[var(--color-status-verified)]"
-                    >
-                      <Check />
-                      Approve Splits
-                    </Button>
-                    <p className="text-sm text-[var(--color-text-secondary)]">
-                      Downloads corrected JSON immediately so the pipeline can
-                      continue with `--splits`.
-                    </p>
-                  </div>
-                </div>
-              </section>
-            </div>
-          </LayoutGroup>
-
-          <AnimatePresence>
-            {exportSummary ? (
-              <motion.div
-                initial={{ opacity: 0, y: 30, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 24, scale: 0.98 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                className="pointer-events-none absolute bottom-8 right-8 z-50 w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-[22px] border border-[color:color-mix(in_oklch,var(--color-status-verified)_36%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_90%,transparent)] p-5 shadow-[var(--shadow-xl)] backdrop-blur-xl"
-              >
+            <AnimatePresence>
+              {exportSummary ? (
                 <motion.div
-                  aria-hidden="true"
-                  className="absolute inset-0"
-                  initial={{ opacity: 0.2 }}
-                  animate={{ opacity: 1 }}
-                  style={{
-                    background:
-                      "radial-gradient(circle at top left, color-mix(in oklch, var(--color-status-verified) 16%, transparent) 0%, transparent 36%), radial-gradient(circle at 85% 10%, color-mix(in oklch, var(--color-accent-base) 12%, transparent) 0%, transparent 30%)",
-                  }}
-                />
-                <div className="relative">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-full bg-[color:color-mix(in_oklch,var(--color-status-verified)_18%,transparent)] p-3 text-[var(--color-status-verified)]">
-                      <WandSparkles className="size-5" />
+                  initial={{ opacity: 0, y: 30, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 24, scale: 0.98 }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className="pointer-events-none absolute bottom-8 right-8 z-50 w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-[22px] border border-[color:color-mix(in_oklch,var(--color-status-verified)_36%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_90%,transparent)] p-5 shadow-[var(--shadow-xl)] backdrop-blur-xl"
+                >
+                  <motion.div
+                    aria-hidden="true"
+                    className="absolute inset-0"
+                    initial={{ opacity: 0.2 }}
+                    animate={{ opacity: 1 }}
+                    style={{
+                      background:
+                        "radial-gradient(circle at top left, color-mix(in oklch, var(--color-status-verified) 16%, transparent) 0%, transparent 36%), radial-gradient(circle at 85% 10%, color-mix(in oklch, var(--color-accent-base) 12%, transparent) 0%, transparent 30%)",
+                    }}
+                  />
+                  <div className="relative">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-full bg-[color:color-mix(in_oklch,var(--color-status-verified)_18%,transparent)] p-3 text-[var(--color-status-verified)]">
+                        <WandSparkles className="size-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                          Splits approved
+                        </p>
+                        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                          {exportSummary.shotCount} shots confirmed,{" "}
+                          {exportSummary.added} added, {exportSummary.removed} removed.
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                        Splits approved
-                      </p>
-                      <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                        {exportSummary.shotCount} shots confirmed,{" "}
-                        {exportSummary.added} added, {exportSummary.removed} removed.
-                      </p>
+                    <div className="mt-4 flex gap-2">
+                      {Array.from({ length: 10 }).map((_, index) => (
+                        <motion.span
+                          key={index}
+                          className="h-2 flex-1 rounded-full"
+                          initial={{ scaleY: 0.3, opacity: 0.4 }}
+                          animate={{
+                            scaleY: [0.3, 1, 0.45],
+                            opacity: [0.4, 1, 0.6],
+                          }}
+                          transition={{
+                            delay: index * 0.03,
+                            duration: 0.55,
+                            repeat: 1,
+                            repeatType: "reverse",
+                          }}
+                          style={{
+                            background:
+                              index % 2 === 0
+                                ? "var(--color-status-verified)"
+                                : "var(--color-accent-base)",
+                          }}
+                        />
+                      ))}
                     </div>
                   </div>
-                  <div className="mt-4 flex gap-2">
-                    {Array.from({ length: 10 }).map((_, index) => (
-                      <motion.span
-                        key={index}
-                        className="h-2 flex-1 rounded-full"
-                        initial={{ scaleY: 0.3, opacity: 0.4 }}
-                        animate={{
-                          scaleY: [0.3, 1, 0.45],
-                          opacity: [0.4, 1, 0.6],
-                        }}
-                        transition={{
-                          delay: index * 0.03,
-                          duration: 0.55,
-                          repeat: 1,
-                          repeatType: "reverse",
-                        }}
-                        style={{
-                          background:
-                            index % 2 === 0
-                              ? "var(--color-status-verified)"
-                              : "var(--color-accent-base)",
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
 
-          <video
-            ref={captureVideoRef}
-            src={videoUrl ?? undefined}
-            preload="metadata"
-            muted
-            playsInline
-            className="hidden"
-          />
-          <canvas ref={captureCanvasRef} className="hidden" />
-          <input
-            ref={videoInputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={(event) => void handleVideoInputChange(event)}
-          />
-          <input
-            ref={splitsInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(event) => void handleSplitsInputChange(event)}
-          />
-        </div>
-      )}
+            <video
+              ref={captureVideoRef}
+              src={videoUrl ?? undefined}
+              preload="metadata"
+              muted
+              playsInline
+              className="hidden"
+            />
+            <canvas ref={captureCanvasRef} className="hidden" />
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={(event) => void handleVideoInputChange(event)}
+            />
+            <input
+              ref={splitsInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(event) => void handleSplitsInputChange(event)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

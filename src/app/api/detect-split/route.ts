@@ -112,13 +112,7 @@ export async function POST(request: Request) {
       "-sn",
       "-dn",
       "-c:v",
-      "libx264",
-      "-preset",
-      "ultrafast",
-      "-crf",
-      "18",
-      "-pix_fmt",
-      "yuv420p",
+      "copy",
       segmentPath,
     ]);
 

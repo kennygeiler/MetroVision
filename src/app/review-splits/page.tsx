@@ -20,8 +20,10 @@ export default async function ReviewSplitsPage({
   const splitsParam = resolvedSearchParams?.splits;
 
   return (
-    <ReviewSplitsWorkspace
-      initialSplitsUrl={typeof splitsParam === "string" ? splitsParam : null}
-    />
+    <main className="h-[100dvh] overflow-hidden bg-[var(--color-surface-primary)]">
+      <ReviewSplitsWorkspace
+        initialSplitsUrl={typeof splitsParam === "string" ? splitsParam : null}
+      />
+    </main>
   );
 }
