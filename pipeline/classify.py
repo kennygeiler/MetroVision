@@ -6,7 +6,8 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 try:
     from .config import GEMINI_MODEL_NAME, GOOGLE_API_KEY, require_env
@@ -198,21 +199,9 @@ def _normalize_response(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _upload_and_wait(clip_path: str) -> Any:
-    uploaded = genai.upload_file(path=clip_path)
-    while getattr(uploaded.state, "name", "") == "PROCESSING":
-        time.sleep(2)
-        uploaded = genai.get_file(uploaded.name)
-
-    if getattr(uploaded.state, "name", "") == "FAILED":
-        raise RuntimeError(f"Gemini file processing failed for {clip_path}.")
-
-    return uploaded
-
-
 def classify_shot(clip_path: str) -> dict[str, Any]:
     api_key = GOOGLE_API_KEY or require_env("GOOGLE_API_KEY")
-    genai.configure(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
     try:
         clip_duration = _probe_duration_seconds(clip_path)
@@ -235,14 +224,23 @@ def classify_shot(clip_path: str) -> dict[str, Any]:
     for attempt in range(1, 4):
         uploaded = None
         try:
-            uploaded = _upload_and_wait(clip_path)
-            model = genai.GenerativeModel(GEMINI_MODEL_NAME)
-            response = model.generate_content(
-                [prompt, uploaded],
-                generation_config={
-                    "temperature": 0,
-                    "response_mime_type": "application/json",
-                },
+            uploaded = client.files.upload(file=clip_path)
+
+            # Wait for file to be processed
+            while uploaded.state.name == "PROCESSING":
+                time.sleep(2)
+                uploaded = client.files.get(name=uploaded.name)
+
+            if uploaded.state.name == "FAILED":
+                raise RuntimeError(f"Gemini file processing failed for {clip_path}.")
+
+            response = client.models.generate_content(
+                model=GEMINI_MODEL_NAME,
+                contents=[prompt, uploaded],
+                config=types.GenerateContentConfig(
+                    temperature=0,
+                    response_mime_type="application/json",
+                ),
             )
             payload = _extract_json_block(response.text)
             return _normalize_response(payload)
@@ -254,7 +252,7 @@ def classify_shot(clip_path: str) -> dict[str, Any]:
         finally:
             if uploaded is not None:
                 try:
-                    genai.delete_file(uploaded.name)
+                    client.files.delete(name=uploaded.name)
                 except Exception:
                     pass
 
