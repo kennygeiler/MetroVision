@@ -519,7 +519,7 @@ export function ReviewSplitsWorkspace({
   const captureVideoRef = useRef<HTMLVideoElement>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const cardRefs = useRef(new Map<string, HTMLButtonElement>());
+  const cardRefs = useRef(new Map<string, HTMLElement>());
   const thumbnailPendingRef = useRef(new Set<string>());
   const thumbnailLoopActiveRef = useRef(false);
   const tagPendingRef = useRef(new Set<string>());
@@ -2035,7 +2035,7 @@ export function ReviewSplitsWorkspace({
   }
 
   function handleCardKeyDown(
-    event: ReactKeyboardEvent<HTMLButtonElement>,
+    event: ReactKeyboardEvent<HTMLElement>,
     segment: ShotSegment,
   ) {
     if (event.key === "Delete" || event.key === "Backspace") {
@@ -2790,9 +2790,8 @@ export function ReviewSplitsWorkspace({
                           };
 
                       return (
-                        <motion.button
+                        <motion.div
                           key={segment.id}
-                          type="button"
                           ref={(node) => {
                             if (node) {
                               cardRefs.current.set(segment.id, node);
@@ -2800,8 +2799,6 @@ export function ReviewSplitsWorkspace({
                               cardRefs.current.delete(segment.id);
                             }
                           }}
-                          role="button"
-                          tabIndex={0}
                           layout
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
@@ -2888,7 +2885,7 @@ export function ReviewSplitsWorkspace({
                               <X className="size-3" />
                             </button>
                           ) : null}
-                        </motion.button>
+                        </motion.div>
                       );
                     })}
                   </section>
