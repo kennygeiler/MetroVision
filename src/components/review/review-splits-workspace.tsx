@@ -4,7 +4,7 @@ import {
   type ChangeEvent,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   startTransition,
   useEffect,
   useMemo,
@@ -14,8 +14,10 @@ import {
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import {
   Check,
+  CircleHelp,
   FileJson,
   Film,
+  LoaderCircle,
   Pause,
   Play,
   ScissorsLineDashed,
@@ -58,9 +60,44 @@ type ExportSummary = {
   removed: number;
 };
 
+type DetectedCut = {
+  time: number;
+  confidence: number;
+};
+
+type TimelineSelectionStatus =
+  | "dragging"
+  | "detecting"
+  | "success"
+  | "empty"
+  | "error";
+
+type TimelineSelection = {
+  id: string;
+  startTime: number;
+  endTime: number;
+  status: TimelineSelectionStatus;
+  message?: string;
+};
+
+type CutPreview = {
+  id: string;
+  time: number;
+  confidence: number;
+  beforeFrame: string;
+  afterFrame: string;
+};
+
+type SplitInsertResult = {
+  nextSegments: ShotSegment[];
+  insertedBoundaryId: string | null;
+};
+
 const SPLIT_EPSILON = 0.15;
 const SEEK_STEP = 1;
 const SEEK_BIG_STEP = 5;
+const DRAG_SELECTION_MIN_RATIO = 0.005;
+const DRAG_SELECTION_MIN_SECONDS = 0.15;
 const TIMELINE_SEGMENT_BACKGROUNDS = [
   "linear-gradient(135deg, color-mix(in oklch, var(--color-accent-base) 24%, transparent), color-mix(in oklch, var(--color-surface-tertiary) 92%, transparent))",
   "linear-gradient(135deg, color-mix(in oklch, var(--color-signal-violet) 22%, transparent), color-mix(in oklch, var(--color-surface-tertiary) 88%, transparent))",
@@ -73,6 +110,20 @@ const SHORTCUT_HINTS = [
   "Delete Remove",
   "Enter Approve",
 ] as const;
+const HELP_ITEMS = [
+  "Drag on the timeline to auto-detect cuts",
+  "S - manual split at playback position",
+  "Delete - remove selected split",
+  "Space - play/pause",
+  "J/L - prev/next cut",
+  "Enter - approve and export",
+] as const;
+
+function createClientId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 function createSegment(
   start: number,
@@ -82,10 +133,7 @@ function createSegment(
   thumbnailDirty = true,
 ): ShotSegment {
   return {
-    id:
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: createClientId(),
     start,
     end,
     thumbnailTime: thumbnailTime ?? start + Math.max(end - start, 0) / 2,
@@ -118,6 +166,52 @@ function formatDuration(value: number) {
 
 function boundaryKey(value: number) {
   return roundTime(value).toFixed(3);
+}
+
+function findSegmentIndexForSplit(segments: ShotSegment[], splitTime: number) {
+  return segments.findIndex(
+    (segment) =>
+      splitTime > segment.start + SPLIT_EPSILON &&
+      splitTime < segment.end - SPLIT_EPSILON,
+  );
+}
+
+function insertSplitAtTime(
+  currentSegments: ShotSegment[],
+  splitTime: number,
+  snapshot: string | null = null,
+): SplitInsertResult {
+  const segmentIndex = findSegmentIndexForSplit(currentSegments, splitTime);
+  if (segmentIndex === -1) {
+    return {
+      nextSegments: currentSegments,
+      insertedBoundaryId: null,
+    };
+  }
+
+  const segment = currentSegments[segmentIndex];
+  const left = createSegment(
+    segment.start,
+    splitTime,
+    segment.start + (splitTime - segment.start) / 2,
+    segment.thumbnail,
+    true,
+  );
+  const right = createSegment(
+    splitTime,
+    segment.end,
+    splitTime + (segment.end - splitTime) / 2,
+    snapshot,
+    snapshot ? false : true,
+  );
+
+  const nextSegments = [...currentSegments];
+  nextSegments.splice(segmentIndex, 1, left, right);
+
+  return {
+    nextSegments,
+    insertedBoundaryId: right.id,
+  };
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -279,10 +373,17 @@ export function ReviewSplitsWorkspace({
   const videoRef = useRef<HTMLVideoElement>(null);
   const captureVideoRef = useRef<HTMLVideoElement>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
   const thumbnailPendingRef = useRef(new Set<string>());
   const thumbnailLoopActiveRef = useRef(false);
   const segmentsRef = useRef<ShotSegment[]>([]);
+  const timelinePointerRef = useRef<{
+    pointerId: number;
+    selectionId: string;
+    startRatio: number;
+    currentRatio: number;
+  } | null>(null);
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -303,6 +404,11 @@ export function ReviewSplitsWorkspace({
   const [loadingSplitsFromUrl, setLoadingSplitsFromUrl] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [exportSummary, setExportSummary] = useState<ExportSummary | null>(null);
+  const [timelineSelection, setTimelineSelection] =
+    useState<TimelineSelection | null>(null);
+  const [detectedBoundaryIds, setDetectedBoundaryIds] = useState<string[]>([]);
+  const [cutPreview, setCutPreview] = useState<CutPreview | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const effectiveDuration = Math.max(
     videoDuration,
@@ -480,6 +586,54 @@ export function ReviewSplitsWorkspace({
       window.clearTimeout(timeoutId);
     };
   }, [lastAddedSegmentId]);
+
+  useEffect(() => {
+    if (detectedBoundaryIds.length === 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDetectedBoundaryIds([]);
+    }, 1400);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [detectedBoundaryIds]);
+
+  useEffect(() => {
+    if (!timelineSelection || timelineSelection.status === "dragging") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setTimelineSelection((current) =>
+        current?.id === timelineSelection.id && current.status !== "detecting"
+          ? null
+          : current,
+      );
+    }, timelineSelection.status === "success" ? 1600 : 2200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [timelineSelection]);
+
+  useEffect(() => {
+    if (!cutPreview) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCutPreview((current) =>
+        current?.id === cutPreview.id ? null : current,
+      );
+    }, 5000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [cutPreview]);
 
   useEffect(() => {
     const activeSegment = segments[activeShotIndex];
@@ -699,6 +853,177 @@ export function ReviewSplitsWorkspace({
     void processQueue();
   }, [effectiveDuration, segments, videoUrl, workspaceReady]);
 
+  function getTimelineRatio(clientX: number) {
+    const timeline = timelineRef.current;
+    if (!timeline) {
+      return 0;
+    }
+
+    const bounds = timeline.getBoundingClientRect();
+    return clampTime((clientX - bounds.left) / Math.max(bounds.width, 1), 1);
+  }
+
+  function buildTimelineSelection(
+    startRatio: number,
+    endRatio: number,
+    status: TimelineSelectionStatus,
+    message?: string,
+    id = createClientId(),
+  ): TimelineSelection {
+    const startTime = roundTime(
+      Math.min(startRatio, endRatio) * Math.max(effectiveDuration, 0),
+    );
+    const endTime = roundTime(
+      Math.max(startRatio, endRatio) * Math.max(effectiveDuration, 0),
+    );
+
+    return {
+      id,
+      startTime,
+      endTime,
+      status,
+      message,
+    };
+  }
+
+  async function captureFrameAtTime(time: number) {
+    if (!videoUrl) {
+      return null;
+    }
+
+    const captureVideo = document.createElement("video");
+    captureVideo.preload = "auto";
+    captureVideo.muted = true;
+    captureVideo.playsInline = true;
+    captureVideo.src = videoUrl;
+
+    const waitForMetadata = async () => {
+      if (captureVideo.readyState >= 1) {
+        return;
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const handleLoadedMetadata = () => {
+          cleanup();
+          resolve();
+        };
+        const handleError = () => {
+          cleanup();
+          reject(new Error("Unable to read video metadata for frame preview."));
+        };
+        const cleanup = () => {
+          captureVideo.removeEventListener("loadedmetadata", handleLoadedMetadata);
+          captureVideo.removeEventListener("error", handleError);
+        };
+
+        captureVideo.addEventListener("loadedmetadata", handleLoadedMetadata);
+        captureVideo.addEventListener("error", handleError);
+      });
+    };
+
+    const seekToTime = async (targetTime: number) => {
+      await new Promise<void>((resolve, reject) => {
+        const handleSeeked = () => {
+          cleanup();
+          resolve();
+        };
+        const handleError = () => {
+          cleanup();
+          reject(new Error("Unable to seek video for frame preview."));
+        };
+        const cleanup = () => {
+          captureVideo.removeEventListener("seeked", handleSeeked);
+          captureVideo.removeEventListener("error", handleError);
+        };
+
+        captureVideo.addEventListener("seeked", handleSeeked, { once: true });
+        captureVideo.addEventListener("error", handleError, { once: true });
+        captureVideo.currentTime = clampTime(targetTime, captureVideo.duration || effectiveDuration);
+      });
+    };
+
+    try {
+      await waitForMetadata();
+      await seekToTime(time);
+
+      const canvas = document.createElement("canvas");
+      const width = captureVideo.videoWidth || 320;
+      const height = captureVideo.videoHeight || 180;
+      const targetWidth = Math.min(width, 320);
+      const targetHeight = Math.max(
+        1,
+        Math.round((height / Math.max(width, 1)) * targetWidth),
+      );
+
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        return null;
+      }
+
+      context.drawImage(captureVideo, 0, 0, targetWidth, targetHeight);
+      return canvas.toDataURL("image/jpeg", 0.84);
+    } finally {
+      captureVideo.pause();
+      captureVideo.removeAttribute("src");
+      captureVideo.load();
+    }
+  }
+
+  async function showDetectedCutPreview(cut: DetectedCut) {
+    const frameStep = reviewPayload?.fps ? 1 / reviewPayload.fps : 1 / 24;
+    const beforeTime = clampTime(cut.time - frameStep, effectiveDuration);
+    const afterTime = clampTime(cut.time + frameStep, effectiveDuration);
+
+    const [beforeFrame, afterFrame] = await Promise.all([
+      captureFrameAtTime(beforeTime),
+      captureFrameAtTime(afterTime),
+    ]);
+
+    if (!beforeFrame || !afterFrame) {
+      return;
+    }
+
+    setCutPreview({
+      id: createClientId(),
+      time: cut.time,
+      confidence: cut.confidence,
+      beforeFrame,
+      afterFrame,
+    });
+  }
+
+  async function requestRegionDetection(startTime: number, endTime: number) {
+    if (!reviewPayload?.source_video) {
+      throw new Error("The loaded splits JSON is missing a source_video path.");
+    }
+
+    const response = await fetch("/api/detect-split", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sourcePath: reviewPayload.source_video,
+        startTime,
+        endTime,
+      }),
+    });
+
+    const payload = (await response.json()) as {
+      cuts?: DetectedCut[];
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to detect cuts in the selected region.");
+    }
+
+    return Array.isArray(payload.cuts) ? payload.cuts : [];
+  }
+
   function seekTo(time: number) {
     const video = videoRef.current;
     if (!video) {
@@ -780,41 +1105,111 @@ export function ReviewSplitsWorkspace({
 
   function splitAtCurrentTime() {
     const splitTime = roundTime(clampTime(currentTime, effectiveDuration));
-    const segmentIndex = segments.findIndex(
-      (segment) =>
-        splitTime > segment.start + SPLIT_EPSILON &&
-        splitTime < segment.end - SPLIT_EPSILON,
-    );
-
-    if (segmentIndex === -1) {
+    if (findSegmentIndexForSplit(segments, splitTime) === -1) {
       return;
     }
 
     const snapshot = captureCurrentFrame();
 
     setSegments((currentSegments) => {
-      const segment = currentSegments[segmentIndex];
-      const left = createSegment(
-        segment.start,
-        splitTime,
-        segment.start + (splitTime - segment.start) / 2,
-        segment.thumbnail,
-        true,
-      );
-      const right = createSegment(
-        splitTime,
-        segment.end,
-        splitTime + (segment.end - splitTime) / 2,
-        snapshot,
-        snapshot ? false : true,
-      );
-
-      const nextSegments = [...currentSegments];
-      nextSegments.splice(segmentIndex, 1, left, right);
-      setSelectedBoundaryId(right.id);
-      setLastAddedSegmentId(right.id);
-      return nextSegments;
+      const result = insertSplitAtTime(currentSegments, splitTime, snapshot);
+      if (result.insertedBoundaryId) {
+        setSelectedBoundaryId(result.insertedBoundaryId);
+        setLastAddedSegmentId(result.insertedBoundaryId);
+      }
+      return result.nextSegments;
     });
+  }
+
+  async function detectCutsInRegion(startTime: number, endTime: number) {
+    const selectionId = createClientId();
+    const baseSelection = {
+      id: selectionId,
+      startTime,
+      endTime,
+    };
+
+    setTimelineSelection({
+      ...baseSelection,
+      status: "detecting",
+      message: "Detecting...",
+    });
+    setErrorMessage(null);
+
+    try {
+      const detectedCuts = (await requestRegionDetection(startTime, endTime))
+        .map((cut) => ({
+          time: roundTime(clampTime(cut.time, effectiveDuration)),
+          confidence: Number(cut.confidence) || 1,
+        }))
+        .sort((left, right) => left.time - right.time);
+
+      if (detectedCuts.length === 0) {
+        setTimelineSelection({
+          ...baseSelection,
+          status: "empty",
+          message: "No cuts detected",
+        });
+        return;
+      }
+
+      const insertedCuts: DetectedCut[] = [];
+      const insertedBoundaryIds: string[] = [];
+
+      setSegments((currentSegments) => {
+        let nextSegments = currentSegments;
+
+        for (const cut of detectedCuts) {
+          const result = insertSplitAtTime(nextSegments, cut.time);
+          if (!result.insertedBoundaryId) {
+            continue;
+          }
+
+          nextSegments = result.nextSegments;
+          insertedCuts.push(cut);
+          insertedBoundaryIds.push(result.insertedBoundaryId);
+        }
+
+        return nextSegments;
+      });
+
+      if (insertedBoundaryIds.length === 0 || insertedCuts.length === 0) {
+        setTimelineSelection({
+          ...baseSelection,
+          status: "empty",
+          message: "Cuts already exist here",
+        });
+        return;
+      }
+
+      setSelectedBoundaryId(insertedBoundaryIds[0] ?? null);
+      setLastAddedSegmentId(insertedBoundaryIds[0] ?? null);
+      setDetectedBoundaryIds(insertedBoundaryIds);
+      setTimelineSelection({
+        ...baseSelection,
+        status: "success",
+        message:
+          insertedCuts.length === 1
+            ? "1 cut snapped into place"
+            : `${insertedCuts.length} cuts snapped into place`,
+      });
+
+      void showDetectedCutPreview(
+        insertedCuts.reduce((best, current) =>
+          current.confidence > best.confidence ? current : best,
+        ),
+      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Split detection failed.";
+
+      setTimelineSelection({
+        ...baseSelection,
+        status: "error",
+        message: "Detection failed",
+      });
+      setErrorMessage(message);
+    }
   }
 
   function removeBoundary(boundaryId: string) {
@@ -866,6 +1261,9 @@ export function ReviewSplitsWorkspace({
       setCurrentTime(0);
       setExportSummary(null);
       setErrorMessage(null);
+      setTimelineSelection(null);
+      setDetectedBoundaryIds([]);
+      setCutPreview(null);
     });
   }
 
@@ -880,6 +1278,8 @@ export function ReviewSplitsWorkspace({
     setIsPlaying(false);
     setExportSummary(null);
     setErrorMessage(null);
+    setTimelineSelection(null);
+    setCutPreview(null);
   }
 
   async function handleSplitsSelection(file: File | null) {
@@ -938,10 +1338,92 @@ export function ReviewSplitsWorkspace({
     }
   }
 
-  function handleTimelineClick(event: ReactMouseEvent<HTMLDivElement>) {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const ratio = (event.clientX - bounds.left) / Math.max(bounds.width, 1);
-    seekTo(ratio * effectiveDuration);
+  function handleTimelinePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || timelineSelection?.status === "detecting") {
+      return;
+    }
+
+    event.preventDefault();
+    const ratio = getTimelineRatio(event.clientX);
+    const selectionId = createClientId();
+    timelinePointerRef.current = {
+      pointerId: event.pointerId,
+      selectionId,
+      startRatio: ratio,
+      currentRatio: ratio,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setTimelineSelection(buildTimelineSelection(ratio, ratio, "dragging", undefined, selectionId));
+    setCutPreview(null);
+  }
+
+  function handleTimelinePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const pointer = timelinePointerRef.current;
+    if (!pointer || pointer.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const ratio = getTimelineRatio(event.clientX);
+    pointer.currentRatio = ratio;
+    setTimelineSelection(
+      buildTimelineSelection(
+        pointer.startRatio,
+        ratio,
+        "dragging",
+        undefined,
+        pointer.selectionId,
+      ),
+    );
+  }
+
+  function clearTimelinePointer(pointerId?: number) {
+    const timeline = timelineRef.current;
+    if (timeline && pointerId !== undefined && timeline.hasPointerCapture(pointerId)) {
+      timeline.releasePointerCapture(pointerId);
+    }
+    timelinePointerRef.current = null;
+  }
+
+  function handleTimelinePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const pointer = timelinePointerRef.current;
+    if (!pointer || pointer.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const endRatio = getTimelineRatio(event.clientX);
+    const startRatio = pointer.startRatio;
+    clearTimelinePointer(event.pointerId);
+
+    const ratioSpan = Math.abs(endRatio - startRatio);
+    const startTime = roundTime(
+      Math.min(startRatio, endRatio) * Math.max(effectiveDuration, 0),
+    );
+    const endTime = roundTime(
+      Math.max(startRatio, endRatio) * Math.max(effectiveDuration, 0),
+    );
+
+    if (
+      ratioSpan < DRAG_SELECTION_MIN_RATIO ||
+      endTime - startTime < DRAG_SELECTION_MIN_SECONDS
+    ) {
+      setTimelineSelection(null);
+      seekTo(((startRatio + endRatio) / 2) * effectiveDuration);
+      return;
+    }
+
+    void detectCutsInRegion(startTime, endTime);
+  }
+
+  function handleTimelinePointerCancel(
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) {
+    const pointer = timelinePointerRef.current;
+    if (!pointer || pointer.pointerId !== event.pointerId) {
+      return;
+    }
+
+    clearTimelinePointer(event.pointerId);
+    setTimelineSelection(null);
   }
 
   function handleCardKeyDown(
@@ -963,6 +1445,23 @@ export function ReviewSplitsWorkspace({
       }
     }
   }
+
+  const timelineSelectionMetrics = timelineSelection
+    ? {
+        left: `${
+          (timelineSelection.startTime / Math.max(effectiveDuration, 0.001)) * 100
+        }%`,
+        width: `${
+          ((timelineSelection.endTime - timelineSelection.startTime) /
+            Math.max(effectiveDuration, 0.001)) *
+          100
+        }%`,
+      }
+    : null;
+
+  const cutPreviewLeft = cutPreview
+    ? `${(cutPreview.time / Math.max(effectiveDuration, 0.001)) * 100}%`
+    : "0%";
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--color-surface-primary)] text-[var(--color-text-primary)]">
@@ -1211,6 +1710,46 @@ export function ReviewSplitsWorkspace({
                       <FileJson />
                       Replace Splits
                     </button>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setHelpOpen((current) => !current)}
+                        className={cn(
+                          buttonVariants({ variant: "outline", size: "icon" }),
+                          "rounded-full border-[var(--color-border-default)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)] text-[var(--color-text-secondary)]",
+                        )}
+                        aria-label="Show review controls help"
+                        aria-expanded={helpOpen}
+                      >
+                        <CircleHelp />
+                      </button>
+
+                      <AnimatePresence>
+                        {helpOpen ? (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                            className="absolute right-0 top-[calc(100%+10px)] z-40 w-[min(320px,calc(100vw-48px))] rounded-[20px] border border-[color:color-mix(in_oklch,var(--color-border-default)_80%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_94%,transparent)] p-4 shadow-[var(--shadow-xl)] backdrop-blur-xl"
+                          >
+                            <p className="font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-accent)]">
+                              Review Controls
+                            </p>
+                            <div className="mt-3 space-y-2">
+                              {HELP_ITEMS.map((item) => (
+                                <p
+                                  key={item}
+                                  className="text-sm text-[var(--color-text-secondary)]"
+                                >
+                                  {item}
+                                </p>
+                              ))}
+                            </div>
+                          </motion.div>
+                        ) : null}
+                      </AnimatePresence>
+                    </div>
                   </div>
                 </div>
 
@@ -1281,7 +1820,11 @@ export function ReviewSplitsWorkspace({
 
               <section className="relative overflow-hidden rounded-[20px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_82%,transparent)] px-3 py-3">
                 <div
-                  onClick={(event) => handleTimelineClick(event)}
+                  ref={timelineRef}
+                  onPointerDown={handleTimelinePointerDown}
+                  onPointerMove={handleTimelinePointerMove}
+                  onPointerUp={handleTimelinePointerUp}
+                  onPointerCancel={handleTimelinePointerCancel}
                   className="relative h-full w-full cursor-pointer rounded-[16px] border border-[color:color-mix(in_oklch,var(--color-border-default)_58%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_80%,transparent)] px-1 transition-colors hover:border-[color:color-mix(in_oklch,var(--color-accent-base)_60%,transparent)]"
                 >
                   {segments.map((segment, index) => {
@@ -1304,12 +1847,88 @@ export function ReviewSplitsWorkspace({
                     );
                   })}
 
+                  {timelineSelection && timelineSelectionMetrics ? (
+                    <motion.div
+                      key={timelineSelection.id}
+                      initial={{ opacity: 0.35 }}
+                      animate={{
+                        opacity:
+                          timelineSelection.status === "detecting"
+                            ? [0.45, 0.82, 0.45]
+                            : timelineSelection.status === "success"
+                              ? 0.86
+                              : 0.72,
+                        scaleY:
+                          timelineSelection.status === "success"
+                            ? [1, 1.06, 1]
+                            : 1,
+                      }}
+                      transition={{
+                        duration: timelineSelection.status === "detecting" ? 1 : 0.28,
+                        repeat: timelineSelection.status === "detecting" ? Infinity : 0,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                      className="pointer-events-none absolute inset-y-1 z-20 overflow-hidden rounded-[12px] border"
+                      style={{
+                        left: timelineSelectionMetrics.left,
+                        width: timelineSelectionMetrics.width,
+                        background:
+                          timelineSelection.status === "empty" ||
+                          timelineSelection.status === "error"
+                            ? "linear-gradient(135deg, color-mix(in oklch, var(--color-status-error) 28%, transparent), color-mix(in oklch, var(--color-overlay-badge) 18%, transparent))"
+                            : timelineSelection.status === "success"
+                              ? "linear-gradient(135deg, color-mix(in oklch, var(--color-status-verified) 26%, transparent), color-mix(in oklch, var(--color-accent-base) 16%, transparent))"
+                              : "linear-gradient(135deg, color-mix(in oklch, var(--color-overlay-arrow) 28%, transparent), color-mix(in oklch, var(--color-overlay-trajectory) 16%, transparent))",
+                        borderColor:
+                          timelineSelection.status === "empty" ||
+                          timelineSelection.status === "error"
+                            ? "color-mix(in oklch, var(--color-status-error) 58%, transparent)"
+                            : timelineSelection.status === "success"
+                              ? "color-mix(in oklch, var(--color-status-verified) 56%, transparent)"
+                              : "color-mix(in oklch, var(--color-overlay-arrow) 62%, transparent)",
+                        boxShadow:
+                          timelineSelection.status === "detecting"
+                            ? "0 0 0 1px color-mix(in oklch, var(--color-overlay-arrow) 28%, transparent), 0 0 24px color-mix(in oklch, var(--color-overlay-arrow) 22%, transparent)"
+                            : "0 0 18px color-mix(in oklch, var(--color-overlay-arrow) 14%, transparent)",
+                      }}
+                    >
+                      {timelineSelection.status === "detecting" ? (
+                        <motion.div
+                          aria-hidden="true"
+                          className="absolute inset-0"
+                          animate={{ x: ["-30%", "100%"] }}
+                          transition={{
+                            duration: 1.05,
+                            repeat: Infinity,
+                            ease: "linear",
+                          }}
+                          style={{
+                            background:
+                              "linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--color-neutral-50) 16%, transparent) 45%, transparent 100%)",
+                          }}
+                        />
+                      ) : null}
+
+                      {timelineSelection.message ? (
+                        <div className="absolute inset-x-2 top-1.5 flex items-center justify-between gap-2">
+                          <span className="rounded-full border border-[color:color-mix(in_oklch,var(--color-surface-primary)_36%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_56%,transparent)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] backdrop-blur">
+                            {timelineSelection.message}
+                          </span>
+                          {timelineSelection.status === "detecting" ? (
+                            <LoaderCircle className="size-3.5 animate-spin text-[var(--color-text-primary)]" />
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </motion.div>
+                  ) : null}
+
                   {boundaries.map((boundary) => {
                     const left = `${(boundary.time / Math.max(effectiveDuration, 0.001)) * 100}%`;
                     const isSelected = selectedBoundaryId === boundary.id;
+                    const isDetected = detectedBoundaryIds.includes(boundary.id);
 
                     return (
-                      <button
+                      <motion.button
                         key={boundary.id}
                         type="button"
                         onClick={(event) => {
@@ -1317,8 +1936,21 @@ export function ReviewSplitsWorkspace({
                           setSelectedBoundaryId(boundary.id);
                           seekTo(boundary.time);
                         }}
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                        }}
                         className="absolute inset-y-0 w-4 -translate-x-1/2"
                         style={{ left }}
+                        initial={false}
+                        animate={
+                          isDetected
+                            ? { y: [-12, 0], scale: [0.84, 1.16, 1] }
+                            : { y: 0, scale: 1 }
+                        }
+                        transition={{
+                          duration: isDetected ? 0.42 : 0.2,
+                          ease: [0.22, 1, 0.36, 1],
+                        }}
                         aria-label={`Select split ${boundary.label} at ${formatTimecode(boundary.time)}`}
                       >
                         <span
@@ -1329,12 +1961,70 @@ export function ReviewSplitsWorkspace({
                               : "var(--color-overlay-arrow)",
                             boxShadow: isSelected
                               ? "0 0 0 1px color-mix(in oklch, var(--color-overlay-badge) 32%, transparent), 0 0 18px color-mix(in oklch, var(--color-overlay-badge) 42%, transparent)"
+                              : isDetected
+                                ? "0 0 0 1px color-mix(in oklch, var(--color-status-verified) 36%, transparent), 0 0 22px color-mix(in oklch, var(--color-status-verified) 28%, transparent)"
                               : "0 0 14px color-mix(in oklch, var(--color-overlay-arrow) 34%, transparent)",
                           }}
                         />
-                      </button>
+                      </motion.button>
                     );
                   })}
+
+                  <AnimatePresence>
+                    {cutPreview ? (
+                      <motion.button
+                        type="button"
+                        initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                        className="absolute bottom-[calc(100%+12px)] z-30 w-[min(296px,calc(100vw-48px))] -translate-x-1/2 overflow-hidden rounded-[18px] border border-[color:color-mix(in_oklch,var(--color-border-default)_82%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-secondary)_94%,transparent)] p-3 text-left shadow-[var(--shadow-xl)] backdrop-blur-xl"
+                        style={{ left: cutPreviewLeft }}
+                        onClick={() => setCutPreview(null)}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-accent)]">
+                              Detected Cut
+                            </p>
+                            <p className="mt-1 text-sm text-[var(--color-text-primary)]">
+                              {formatTimecode(cutPreview.time)}
+                            </p>
+                          </div>
+                          <div className="rounded-full border border-[color:color-mix(in_oklch,var(--color-status-verified)_38%,transparent)] bg-[color:color-mix(in_oklch,var(--color-status-verified)_12%,transparent)] px-3 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-status-verified)]">
+                            {Math.round(cutPreview.confidence * 100)}%
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <div>
+                            <p className="mb-2 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                              Before
+                            </p>
+                            {/* Data URLs come from local canvas captures and should bypass Next image optimization. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={cutPreview.beforeFrame}
+                              alt="Frame before detected cut"
+                              className="aspect-video w-full rounded-[12px] border border-[var(--color-border-subtle)] object-cover"
+                            />
+                          </div>
+                          <div>
+                            <p className="mb-2 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+                              After
+                            </p>
+                            {/* Data URLs come from local canvas captures and should bypass Next image optimization. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={cutPreview.afterFrame}
+                              alt="Frame after detected cut"
+                              className="aspect-video w-full rounded-[12px] border border-[var(--color-border-subtle)] object-cover"
+                            />
+                          </div>
+                        </div>
+                      </motion.button>
+                    ) : null}
+                  </AnimatePresence>
 
                   <div
                     className="absolute inset-y-0 z-10 w-5 -translate-x-1/2"
