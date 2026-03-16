@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python
+pipeline/.venv/
+__pycache__/
+*.pyc
+
+# kiln temp
+.kiln/tmp/
+settings.local.json

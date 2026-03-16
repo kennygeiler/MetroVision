@@ -74,3 +74,11 @@ Core tables (to be created in M3): `films`, `shots`, `shot_metadata`, `shot_sema
 - 15 camera angles (6 vertical + 5 horizontal + 4 special)
 - 6 duration categories
 - Compound notation: max 3 simultaneous components as ordered `{type}:{direction}` pairs
+
+## Design System Contract
+
+- **Color palette**: Dark-first interface using OKLCH tokens only. Accent hue is cyan at 200. Neutral surfaces and borders use cool neutrals centered on hue 260.
+- **Typography**: Inter Variable for UI copy, headings, and navigation. JetBrains Mono for technical data, taxonomy slugs, timecodes, and metadata labels.
+- **Spacing rhythm**: 4px base spacing system. Use the shared space scale from `tokens.css`; do not invent one-off spacing values unless a layout truly requires it.
+- **Token imports**: Import `src/styles/tokens.css` into the global stylesheet with `@import './tokens.css'`. All app-level styling should consume the exported CSS custom properties.
+- **Ban list**: No pure black or pure white. No hardcoded colors outside the token set. No generic SaaS templates or dashboard aesthetics.

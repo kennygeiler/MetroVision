@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./tokens.css";
+
+@theme inline {
+  --color-background: var(--color-surface-primary);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-surface-secondary);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-surface-secondary);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-interactive-default);
+  --color-primary-foreground: var(--color-surface-primary);
+  --color-secondary: var(--color-surface-tertiary);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-surface-secondary);
+  --color-muted-foreground: var(--color-text-secondary);
+  --color-accent: var(--color-surface-tertiary);
+  --color-accent-foreground: var(--color-text-primary);
+  --color-destructive: var(--color-status-error);
+  --color-border: var(--color-border-default);
+  --color-input: var(--color-border-default);
+  --color-ring: var(--color-interactive-default);
+  --font-sans: var(--font-body-family);
+  --font-mono: var(--font-mono-family);
+  --radius-sm: var(--radius-token-sm);
+  --radius-md: var(--radius-token-md);
+  --radius-lg: var(--radius-token-lg);
+  --radius-xl: var(--radius-token-xl);
+}
+
+:root {
+  --font-heading: var(--font-body-family, "Inter Variable", system-ui, sans-serif);
+  --font-body: var(--font-body-family, "Inter Variable", system-ui, sans-serif);
+  --font-mono: var(--font-mono-family, "JetBrains Mono", ui-monospace, monospace);
+  --radius-token-sm: var(--radius-sm);
+  --radius-token-md: var(--radius-md);
+  --radius-token-lg: var(--radius-lg);
+  --radius-token-xl: var(--radius-xl);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-none;
+  }
+
+  html {
+    background-color: var(--color-surface-primary);
+    color: var(--color-text-primary);
+    color-scheme: dark;
+    font-family: var(--font-body);
+  }
+
+  body {
+    min-height: 100vh;
+    background-color: var(--color-surface-primary);
+    color: var(--color-text-primary);
+    font-family: var(--font-body);
+    text-rendering: optimizeLegibility;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+  }
+
+  ::selection {
+    background-color: color-mix(
+      in oklch,
+      var(--color-accent-base) 28%,
+      transparent
+    );
+    color: var(--color-text-primary);
+  }
+}

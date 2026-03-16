@@ -1,0 +1,6 @@
+scenedetect[opencv]
+google-generativeai
+anthropic
+httpx
+python-dotenv
+ffmpeg-python
