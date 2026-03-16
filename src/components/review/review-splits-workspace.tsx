@@ -2556,156 +2556,110 @@ export function ReviewSplitsWorkspace({
                     </div>
                   </section>
 
-                  <section className="flex h-[180px] flex-none overflow-hidden rounded-[22px] border border-[var(--color-border-subtle)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_76%,transparent)]">
-                    <div className="scene-scrollbar-thin min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-[var(--space-3)] py-[var(--space-3)]">
-                      <div className="flex h-full gap-[var(--space-3)]">
-                        <AnimatePresence initial={false}>
-                          {segments.map((segment, index) => {
-                            const isActive = index === activeShotIndex;
-                            const isSelected = selectedCardId === segment.id;
-                            const removeBoundaryId =
-                              index === 0 ? segments[1]?.id ?? null : segment.id;
-                            const rightBoundaryMeta = segments[index + 1]
-                              ? {
-                                  source: segments[index + 1].splitSource,
-                                  confidence: segments[index + 1].confidence,
-                                }
-                              : {
-                                  source: segment.splitSource,
-                                  confidence: segment.confidence,
-                                };
+                  <section className="flex h-28 flex-none items-stretch gap-3 overflow-x-auto overflow-y-hidden px-2 py-2 scene-scrollbar-thin">
+                    {segments.map((segment, index) => {
+                      const isActive = index === activeShotIndex;
+                      const isSelected = selectedCardId === segment.id;
+                      const removeBoundaryId =
+                        index === 0 ? segments[1]?.id ?? null : segment.id;
+                      const rightBoundaryMeta = segments[index + 1]
+                        ? {
+                            source: segments[index + 1].splitSource,
+                            confidence: segments[index + 1].confidence,
+                          }
+                        : {
+                            source: segment.splitSource,
+                            confidence: segment.confidence,
+                          };
 
-                            return (
-                              <motion.article
-                                key={segment.id}
-                                layout
-                                initial={{ opacity: 0, y: 20, scale: 0.98 }}
-                                animate={{
-                                  opacity: 1,
-                                  y: 0,
-                                  scale: 1,
-                                  borderColor: isSelected
-                                    ? "color-mix(in oklch, var(--color-status-verified) 70%, transparent)"
-                                    : isActive
-                                      ? "color-mix(in oklch, var(--color-accent-base) 82%, transparent)"
-                                      : "color-mix(in oklch, var(--color-border-default) 78%, transparent)",
-                                  boxShadow:
-                                    lastAddedSegmentId === segment.id
-                                      ? "0 0 0 2px color-mix(in oklch, var(--color-status-verified) 46%, transparent), 0 0 28px color-mix(in oklch, var(--color-status-verified) 24%, transparent)"
-                                      : isSelected
-                                        ? "0 0 0 2px color-mix(in oklch, var(--color-status-verified) 42%, transparent), 0 0 28px color-mix(in oklch, var(--color-status-verified) 18%, transparent)"
-                                        : isActive
-                                          ? "0 0 0 1px color-mix(in oklch, var(--color-accent-base) 38%, transparent), 0 0 24px color-mix(in oklch, var(--color-accent-base) 14%, transparent)"
-                                          : "var(--shadow-md)",
-                                }}
-                                exit={{ opacity: 0, y: -16, scale: 0.98 }}
-                                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                                whileHover={{
-                                  scale: 1.02,
-                                  borderColor: isSelected
-                                    ? "color-mix(in oklch, var(--color-status-verified) 80%, transparent)"
-                                    : isActive
-                                      ? "color-mix(in oklch, var(--color-accent-light) 88%, transparent)"
-                                      : "color-mix(in oklch, var(--color-accent-light) 52%, var(--color-border-default))",
-                                }}
-                                className="group/filmstrip relative flex h-full w-[200px] shrink-0 overflow-hidden rounded-[18px] border"
+                      return (
+                        <motion.button
+                          key={segment.id}
+                          ref={(node) => {
+                            if (node) {
+                              cardRefs.current.set(segment.id, node);
+                            } else {
+                              cardRefs.current.delete(segment.id);
+                            }
+                          }}
+                          type="button"
+                          layout
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.2 }}
+                          onClick={() => handleSegmentCardSelect(segment, index)}
+                          onKeyDown={(event) => handleCardKeyDown(event, segment)}
+                          aria-label={`Jump to shot ${index + 1}`}
+                          aria-pressed={isSelected}
+                          className="group/card relative flex w-44 shrink-0 gap-2 rounded-xl border bg-[var(--color-surface-secondary)] p-2 text-left transition-all"
+                          style={{
+                            borderColor: isSelected
+                              ? "var(--color-status-verified)"
+                              : isActive
+                                ? "var(--color-accent-base)"
+                                : "var(--color-border-default)",
+                            boxShadow: isSelected
+                              ? "0 0 12px color-mix(in oklch, var(--color-status-verified) 30%, transparent)"
+                              : isActive
+                                ? "0 0 12px color-mix(in oklch, var(--color-accent-base) 20%, transparent)"
+                                : "none",
+                          }}
+                        >
+                          {/* Thumbnail */}
+                          <div className="relative h-full w-20 shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface-tertiary)]">
+                            {segment.thumbnail ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                src={segment.thumbnail}
+                                alt={`Shot ${index + 1}`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="scene-skeleton h-full w-full" />
+                            )}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+                            <div>
+                              <p className="font-mono text-xs font-bold text-[var(--color-text-primary)]">
+                                #{index + 1}
+                              </p>
+                              <p className="mt-0.5 font-mono text-[10px] text-[var(--color-text-secondary)]">
+                                {formatDuration(segment.end - segment.start)}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span
+                                className="size-1.5 shrink-0 rounded-full"
                                 style={{
-                                  background:
-                                    "linear-gradient(180deg, color-mix(in oklch, var(--color-surface-secondary) 96%, transparent), color-mix(in oklch, var(--color-surface-primary) 100%, transparent))",
+                                  backgroundColor: getSplitSourceColor(rightBoundaryMeta.source),
                                 }}
-                              >
-                                <button
-                                  ref={(node) => {
-                                    if (node) {
-                                      cardRefs.current.set(segment.id, node);
-                                    } else {
-                                      cardRefs.current.delete(segment.id);
-                                    }
-                                  }}
-                                  type="button"
-                                  onClick={() => handleSegmentCardSelect(segment, index)}
-                                  onKeyDown={(event) => handleCardKeyDown(event, segment)}
-                                  className="relative flex h-full w-full flex-col gap-[var(--space-2)] p-[var(--space-3)] text-left"
-                                  aria-label={`Jump to shot ${index + 1}`}
-                                  aria-pressed={isSelected}
-                                >
-                                  <div className="relative overflow-hidden rounded-[14px] border border-[color:color-mix(in_oklch,var(--color-border-default)_68%,transparent)] bg-[var(--color-surface-tertiary)]">
-                                    {segment.thumbnail ? (
-                                      // Data URLs come from local canvas captures and should bypass Next image optimization.
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img
-                                        src={segment.thumbnail}
-                                        alt={`Shot ${index + 1} thumbnail`}
-                                        className="aspect-video h-full w-full object-cover transition-transform duration-300 group-hover/filmstrip:scale-[1.02]"
-                                      />
-                                    ) : (
-                                      <div className="scene-skeleton aspect-video h-full w-full" />
-                                    )}
+                              />
+                              <span className="truncate font-mono text-[9px] text-[var(--color-text-tertiary)]">
+                                {getSplitSourceShortLabel(rightBoundaryMeta.source)}
+                              </span>
+                            </div>
+                          </div>
 
-                                    <div className="absolute inset-0 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--color-surface-primary)_6%,transparent)_0%,transparent_58%,color-mix(in_oklch,var(--color-surface-primary)_60%,transparent)_100%)]" />
-                                    {isActive ? (
-                                      <motion.div
-                                        layoutId="active-shot-glow"
-                                        className="absolute inset-0"
-                                        style={{
-                                          boxShadow:
-                                            "inset 0 0 0 2px color-mix(in oklch, var(--color-accent-base) 84%, transparent), inset 0 0 72px color-mix(in oklch, var(--color-accent-base) 10%, transparent)",
-                                        }}
-                                      />
-                                    ) : null}
-                                    {isSelected ? (
-                                      <div className="absolute inset-0 shadow-[inset_0_0_0_2px_color-mix(in_oklch,var(--color-status-verified)_72%,transparent),inset_0_0_24px_color-mix(in_oklch,var(--color-status-verified)_12%,transparent)]" />
-                                    ) : null}
-                                  </div>
-
-                                  <div className="flex min-h-0 flex-1 flex-col justify-between gap-[var(--space-2)]">
-                                    <div className="min-w-0">
-                                      <p className="truncate font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                                        #{index + 1} · {formatTimecode(segment.start)} → {formatTimecode(segment.end)}
-                                      </p>
-                                      <p className="mt-1 text-sm text-[var(--color-text-primary)]">
-                                        {formatDuration(segment.end - segment.start)}
-                                      </p>
-                                    </div>
-
-                                    <div className="flex items-center justify-between gap-[var(--space-2)]">
-                                      <div className="flex min-w-0 items-center gap-[var(--space-2)] font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-                                        <span
-                                          className="size-1.5 rounded-full"
-                                          style={{
-                                            backgroundColor: getSplitSourceColor(rightBoundaryMeta.source),
-                                          }}
-                                        />
-                                        <span className="truncate">
-                                          {getSplitSourceShortLabel(rightBoundaryMeta.source)} · {formatConfidence(rightBoundaryMeta.confidence)}
-                                        </span>
-                                      </div>
-                                      <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-                                        {index === 0 ? "Lead" : "Cut"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </button>
-
-                                {index > 0 && removeBoundaryId ? (
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      removeBoundary(removeBoundaryId);
-                                    }}
-                                    className="absolute right-[var(--space-3)] top-[var(--space-3)] z-20 rounded-full border border-[color:color-mix(in_oklch,var(--color-status-error)_34%,transparent)] bg-[color:color-mix(in_oklch,var(--color-surface-primary)_78%,transparent)] p-1 text-[var(--color-text-secondary)] opacity-0 backdrop-blur transition-[opacity,color,border-color,background-color] duration-200 group-hover/filmstrip:opacity-100 group-focus-within/filmstrip:opacity-100 hover:text-[var(--color-text-primary)]"
-                                    aria-label={`Remove split near shot ${index + 1}`}
-                                  >
-                                    <X className="size-3.5" />
-                                  </button>
-                                ) : null}
-                              </motion.article>
-                            );
-                          })}
-                        </AnimatePresence>
-                      </div>
-                    </div>
+                          {/* Remove button — hover only, not on first card */}
+                          {index > 0 && removeBoundaryId ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                removeBoundary(removeBoundaryId);
+                              }}
+                              className="absolute -right-1 -top-1 z-20 flex size-5 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] text-[var(--color-text-secondary)] opacity-0 transition-opacity group-hover/card:opacity-100"
+                              aria-label={`Remove split near shot ${index + 1}`}
+                            >
+                              <X className="size-3" />
+                            </button>
+                          ) : null}
+                        </motion.button>
+                      );
+                    })}
                   </section>
                 </section>
               </div>
