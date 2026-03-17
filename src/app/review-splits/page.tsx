@@ -4,26 +4,13 @@ import { ReviewSplitsWorkspace } from "@/components/review/review-splits-workspa
 
 export const metadata: Metadata = {
   title: "Review Splits",
-  description: "Local shot boundary review workspace for SceneDeck pipeline exports.",
+  description: "Review detected shot boundaries and export corrected splits.",
 };
 
-type ReviewSplitsPageProps = {
-  searchParams?: Promise<{
-    splits?: string | string[];
-  }>;
-};
-
-export default async function ReviewSplitsPage({
-  searchParams,
-}: ReviewSplitsPageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const splitsParam = resolvedSearchParams?.splits;
-
+export default function ReviewSplitsPage() {
   return (
     <main className="h-[100dvh] overflow-hidden bg-[var(--color-surface-primary)]">
-      <ReviewSplitsWorkspace
-        initialSplitsUrl={typeof splitsParam === "string" ? splitsParam : null}
-      />
+      <ReviewSplitsWorkspace />
     </main>
   );
 }
