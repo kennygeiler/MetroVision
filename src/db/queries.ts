@@ -203,14 +203,13 @@ function mapShotRow(row: ShotRow): ShotWithDetails {
 function mapShotObjectRow(row: typeof schema.shotObjects.$inferSelect) {
   return {
     id: row.id,
+    trackId: row.trackId,
     label: row.label,
     category: row.category ?? null,
     confidence: row.confidence ?? null,
-    bboxX: row.bboxX ?? null,
-    bboxY: row.bboxY ?? null,
-    bboxW: row.bboxW ?? null,
-    bboxH: row.bboxH ?? null,
-    frameTime: row.frameTime ?? null,
+    keyframes: row.keyframes ?? [],
+    startTime: row.startTime ?? 0,
+    endTime: row.endTime ?? 0,
     attributes: (row.attributes as Record<string, string> | null) ?? null,
   };
 }
@@ -224,7 +223,7 @@ async function getObjectsGroupedByShotIds(shotIds: string[]) {
     .select()
     .from(schema.shotObjects)
     .where(inArray(schema.shotObjects.shotId, shotIds))
-    .orderBy(schema.shotObjects.frameTime, desc(schema.shotObjects.confidence));
+    .orderBy(schema.shotObjects.startTime, desc(schema.shotObjects.confidence));
 
   const objectsByShotId = new Map<string, ShotWithDetails["objects"]>();
 
@@ -457,7 +456,7 @@ export async function getObjectsForShot(shotId: string) {
     .select()
     .from(schema.shotObjects)
     .where(eq(schema.shotObjects.shotId, shotId))
-    .orderBy(schema.shotObjects.frameTime, desc(schema.shotObjects.confidence));
+    .orderBy(schema.shotObjects.startTime, desc(schema.shotObjects.confidence));
 
   return rows.map(mapShotObjectRow);
 }

@@ -12,7 +12,7 @@ import { db, schema } from "@/db";
 import { buildShotSearchText, generateTextEmbedding } from "@/db/embeddings";
 import type { CompoundPart } from "@/db/schema";
 import {
-  detectObjectsFromImagePath,
+  detectObjectsMultiFrame,
   replaceShotObjects,
 } from "@/lib/object-detection";
 import type { ShotWithDetails } from "@/lib/types";
@@ -69,7 +69,7 @@ type ProcessedShot = {
   videoUrl: string;
   thumbnailUrl: string;
   classification: ClassifiedShot;
-  detectedObjects: Awaited<ReturnType<typeof detectObjectsFromImagePath>>;
+  detectedObjects: Awaited<ReturnType<typeof detectObjectsMultiFrame>>;
   searchText: string;
   embedding: number[];
 };
@@ -417,7 +417,10 @@ export async function POST(request: Request) {
     for (const [index, split] of payload.splits.entries()) {
       const assets = await extractClipAssets(payload.videoPath, split, index, tempDir);
       const classification = await classifyClip(assets.clipPath);
-      const detectedObjects = await detectObjectsFromImagePath(assets.thumbnailPath);
+      const detectedObjects = await detectObjectsMultiFrame(
+        assets.clipPath,
+        assets.duration,
+      );
       const shotSlug = `shot-${String(index + 1).padStart(4, "0")}`;
       const videoUrl = await uploadAsset(
         assets.clipPath,
@@ -507,7 +510,7 @@ export async function POST(request: Request) {
         searchText: shot.searchText,
       });
 
-      await replaceShotObjects(insertedShot.id, shot.detectedObjects, shot.midpoint);
+      await replaceShotObjects(insertedShot.id, shot.detectedObjects);
     }
 
     return NextResponse.json({

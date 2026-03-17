@@ -108,7 +108,7 @@ export function ShotCard({ shot }: ShotCardProps) {
                     "color-mix(in oklch, var(--color-overlay-info) 58%, transparent)",
                 }}
               >
-                {shot.objects.length} {shot.objects.length === 1 ? "object" : "objects"}
+                {shot.objects.length} {shot.objects.length === 1 ? "track" : "tracks"}
               </span>
               {topObjectLabels.map((object) => (
                 <span

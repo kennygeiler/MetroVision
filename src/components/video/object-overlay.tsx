@@ -1,36 +1,35 @@
 "use client";
 
-import { motion, type Variants } from "framer-motion";
+import type { CSSProperties } from "react";
 
-import type { ShotWithDetails } from "@/lib/types";
+import type { ShotObjectKeyframe } from "@/db/schema";
 
 type ObjectOverlayProps = {
-  objects: ShotWithDetails["objects"];
+  tracks: Array<{
+    id: string;
+    trackId: string;
+    label: string;
+    category: string | null;
+    confidence: number | null;
+    keyframes: Array<{ t: number; x: number; y: number; w: number; h: number }>;
+    startTime: number;
+    endTime: number;
+    attributes: Record<string, string> | null;
+  }>;
+  currentTime: number;
   visible: boolean;
 };
 
-const containerVariants: Variants = {
-  hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.08,
-    },
-  },
+type InterpolatedBox = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 };
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.98, y: 6 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    y: 0,
-    transition: {
-      duration: 0.28,
-      ease: [0.22, 1, 0.36, 1],
-    },
-  },
-};
+const ENTRY_DURATION_SECONDS = 0.2;
+const EXIT_DURATION_SECONDS = 0.15;
+const MAX_VISIBLE_TRACKS = 20;
 
 function getCategoryColor(category: string | null) {
   switch (category) {
@@ -39,7 +38,7 @@ function getCategoryColor(category: string | null) {
     case "vehicle":
       return "var(--color-overlay-badge)";
     case "object":
-      return "var(--color-signal-violet)";
+      return "var(--color-overlay-trajectory)";
     case "environment":
       return "var(--color-overlay-info)";
     case "animal":
@@ -51,6 +50,40 @@ function getCategoryColor(category: string | null) {
   }
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function interpolateBbox(keyframes: ShotObjectKeyframe[], time: number): InterpolatedBox | null {
+  if (keyframes.length === 0) {
+    return null;
+  }
+
+  const before = [...keyframes].reverse().find((keyframe) => keyframe.t <= time);
+  const after = keyframes.find((keyframe) => keyframe.t > time);
+
+  if (!before && !after) {
+    return null;
+  }
+
+  if (!before) {
+    return after ? { x: after.x, y: after.y, w: after.w, h: after.h } : null;
+  }
+
+  if (!after) {
+    return { x: before.x, y: before.y, w: before.w, h: before.h };
+  }
+
+  const progress = (time - before.t) / (after.t - before.t);
+
+  return {
+    x: before.x + (after.x - before.x) * progress,
+    y: before.y + (after.y - before.y) * progress,
+    w: before.w + (after.w - before.w) * progress,
+    h: before.h + (after.h - before.h) * progress,
+  };
+}
+
 function formatConfidence(confidence: number | null) {
   if (typeof confidence !== "number") {
     return null;
@@ -59,110 +92,155 @@ function formatConfidence(confidence: number | null) {
   return `${Math.round(confidence * 100)}%`;
 }
 
-function formatAttributes(attributes: Record<string, string> | null) {
-  if (!attributes) {
-    return null;
-  }
-
-  const formatted = Object.entries(attributes)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join(" • ");
-
-  return formatted || null;
+function buildTrajectoryPoints(keyframes: ShotObjectKeyframe[]) {
+  return keyframes
+    .map((keyframe) => {
+      const x = (keyframe.x + keyframe.w / 2) * 100;
+      const y = (keyframe.y + keyframe.h / 2) * 100;
+      return `${x},${y}`;
+    })
+    .join(" ");
 }
 
-export function ObjectOverlay({ objects, visible }: ObjectOverlayProps) {
-  if (!visible) {
+export function ObjectOverlay({
+  tracks,
+  currentTime,
+  visible,
+}: ObjectOverlayProps) {
+  if (!visible || tracks.length === 0) {
     return null;
   }
 
-  const positionedObjects = objects.filter(
-    (object) =>
-      typeof object.bboxX === "number" &&
-      typeof object.bboxY === "number" &&
-      typeof object.bboxW === "number" &&
-      typeof object.bboxH === "number",
-  );
+  const activeTracks = tracks
+    .filter(
+      (track) =>
+        track.keyframes.length > 0 &&
+        currentTime >= track.startTime &&
+        currentTime <= track.endTime + EXIT_DURATION_SECONDS,
+    )
+    .map((track) => {
+      const sampleTime = clamp(currentTime, track.startTime, track.endTime);
+      const bbox = interpolateBbox(track.keyframes, sampleTime);
 
-  if (positionedObjects.length === 0) {
+      if (!bbox) {
+        return null;
+      }
+
+      const entryProgress = clamp(
+        (currentTime - track.startTime) / ENTRY_DURATION_SECONDS,
+        0,
+        1,
+      );
+      const exitProgress =
+        currentTime <= track.endTime
+          ? 1
+          : 1 -
+            clamp(
+              (currentTime - track.endTime) / EXIT_DURATION_SECONDS,
+              0,
+              1,
+            );
+      const opacity = entryProgress * exitProgress;
+      const scale = 0.9 + entryProgress * 0.1;
+
+      return {
+        ...track,
+        bbox,
+        opacity,
+        scale,
+        confidenceRank: track.confidence ?? 0,
+      };
+    })
+    .filter((track): track is NonNullable<typeof track> => Boolean(track))
+    .sort((left, right) => right.confidenceRank - left.confidenceRank)
+    .slice(0, MAX_VISIBLE_TRACKS);
+
+  if (activeTracks.length === 0) {
     return null;
   }
 
   return (
-    <motion.div
-      initial="hidden"
-      animate="visible"
-      variants={containerVariants}
-      className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
-      aria-hidden="true"
-    >
-      {positionedObjects.map((object) => {
-        const color = getCategoryColor(object.category);
-        const confidenceLabel = formatConfidence(object.confidence);
-        const attributeLabel = formatAttributes(object.attributes);
-        const isHighConfidence = (object.confidence ?? 0) > 0.9;
+    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {activeTracks.map((track) =>
+          track.keyframes.length > 1 ? (
+            <polyline
+              key={`${track.id}-trajectory`}
+              points={buildTrajectoryPoints(track.keyframes)}
+              fill="none"
+              stroke={getCategoryColor(track.category)}
+              strokeDasharray="1.5 2.5"
+              strokeWidth="0.18"
+              opacity={0.2}
+              vectorEffect="non-scaling-stroke"
+            />
+          ) : null,
+        )}
+      </svg>
+
+      {activeTracks.map((track) => {
+        const color = getCategoryColor(track.category);
+        const confidence = formatConfidence(track.confidence);
+        const label = `${track.label}${confidence ? ` ${confidence}` : ""}`.toUpperCase();
+        const wrapperStyle = {
+          transform: `translate3d(${track.bbox.x * 100}%, ${track.bbox.y * 100}%, 0)`,
+          opacity: track.opacity,
+        } satisfies CSSProperties;
+        const boxStyle = {
+          width: `${track.bbox.w * 100}%`,
+          height: `${track.bbox.h * 100}%`,
+          transform: `scale(${track.scale})`,
+          transformOrigin: "top left",
+          transition:
+            "opacity 150ms linear, transform 200ms cubic-bezier(0.22, 1, 0.36, 1)",
+          backgroundColor: `color-mix(in oklch, ${color} 4%, transparent)`,
+          ["--track-color" as string]: color,
+        } satisfies CSSProperties;
 
         return (
-          <motion.div
-            key={object.id}
-            variants={itemVariants}
-            className="group absolute pointer-events-auto rounded-[10px] transition-transform duration-200 hover:z-30 hover:scale-[1.01]"
-            style={{
-              left: `${object.bboxX! * 100}%`,
-              top: `${object.bboxY! * 100}%`,
-              width: `${object.bboxW! * 100}%`,
-              height: `${object.bboxH! * 100}%`,
-              border: `2px solid color-mix(in oklch, ${color} 90%, transparent)`,
-              backgroundColor: `color-mix(in oklch, ${color} 8%, transparent)`,
-            }}
+          <div
+            key={track.id}
+            className="absolute inset-0 will-change-transform"
+            style={wrapperStyle}
           >
-            {isHighConfidence ? (
-              <motion.div
-                className="absolute inset-0 rounded-[8px]"
-                animate={{
-                  boxShadow: [
-                    `0 0 0 1px color-mix(in oklch, ${color} 56%, transparent), 0 0 18px color-mix(in oklch, ${color} 18%, transparent)`,
-                    `0 0 0 1px color-mix(in oklch, ${color} 92%, transparent), 0 0 26px color-mix(in oklch, ${color} 34%, transparent)`,
-                    `0 0 0 1px color-mix(in oklch, ${color} 56%, transparent), 0 0 18px color-mix(in oklch, ${color} 18%, transparent)`,
-                  ],
+            <div className="relative h-full will-change-transform" style={boxStyle}>
+              <div
+                className="absolute -left-px -top-6 inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-white shadow-[var(--shadow-lg)] backdrop-blur-md"
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  backgroundColor: `color-mix(in oklch, ${color} 85%, transparent)`,
+                  borderColor: `color-mix(in oklch, ${color} 48%, transparent)`,
                 }}
-                transition={{
-                  duration: 1.8,
-                  repeat: Number.POSITIVE_INFINITY,
-                  ease: "easeInOut",
-                }}
-              />
-            ) : null}
-            <div
-              className="absolute -left-px -top-px rounded-br-[10px] rounded-tl-[8px] border-b border-r px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--color-surface-primary)] transition-all duration-200 group-hover:min-w-[10rem]"
-              style={{
-                fontFamily: "var(--font-mono)",
-                backgroundColor: color,
-                borderColor: `color-mix(in oklch, ${color} 76%, transparent)`,
-                boxShadow: `0 10px 24px color-mix(in oklch, ${color} 14%, transparent)`,
-              }}
-            >
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <span>{object.label}</span>
-                {confidenceLabel ? <span>{confidenceLabel}</span> : null}
+              >
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: color }}
+                />
+                <span>{label}</span>
               </div>
-              {attributeLabel ? (
-                <div className="mt-1 max-h-0 max-w-0 overflow-hidden whitespace-normal text-[9px] leading-4 opacity-0 transition-all duration-200 group-hover:max-h-20 group-hover:max-w-[16rem] group-hover:opacity-100">
-                  {attributeLabel}
-                </div>
-              ) : null}
+
+              <div
+                className="absolute -left-px -top-px h-3 w-3 border-l-[1.5px] border-t-[1.5px]"
+                style={{ borderColor: color }}
+              />
+              <div
+                className="absolute -right-px -top-px h-3 w-3 border-r-[1.5px] border-t-[1.5px]"
+                style={{ borderColor: color }}
+              />
+              <div
+                className="absolute -bottom-px -left-px h-3 w-3 border-b-[1.5px] border-l-[1.5px]"
+                style={{ borderColor: color }}
+              />
+              <div
+                className="absolute -bottom-px -right-px h-3 w-3 border-b-[1.5px] border-r-[1.5px]"
+                style={{ borderColor: color }}
+              />
             </div>
-            <div
-              className="absolute -left-[1px] -top-[1px] h-3 w-3 border-l-2 border-t-2"
-              style={{ borderColor: color }}
-            />
-            <div
-              className="absolute -bottom-[1px] -right-[1px] h-3 w-3 border-b-2 border-r-2"
-              style={{ borderColor: color }}
-            />
-          </motion.div>
+          </div>
         );
       })}
-    </motion.div>
+    </div>
   );
 }
+
+export { interpolateBbox };

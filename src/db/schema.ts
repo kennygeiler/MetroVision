@@ -27,6 +27,13 @@ export type CompoundPart = {
 export type VerificationFieldRatings = Record<string, number | null>;
 export type VerificationCorrections = Record<string, string | null>;
 export type ShotObjectAttributes = Record<string, string>;
+export type ShotObjectKeyframe = {
+  t: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
 
 const vector = customType<{
   data: number[];
@@ -129,14 +136,13 @@ export const shotObjects = pgTable("shot_objects", {
   shotId: uuid("shot_id")
     .references(() => shots.id, { onDelete: "cascade" })
     .notNull(),
+  trackId: text("track_id").notNull(),
   label: text("label").notNull(),
   category: text("category"),
   confidence: real("confidence"),
-  bboxX: real("bbox_x"),
-  bboxY: real("bbox_y"),
-  bboxW: real("bbox_w"),
-  bboxH: real("bbox_h"),
-  frameTime: real("frame_time"),
+  keyframes: jsonb("keyframes").$type<ShotObjectKeyframe[]>().notNull(),
+  startTime: real("start_time").notNull(),
+  endTime: real("end_time").notNull(),
   attributes: jsonb("attributes").$type<ShotObjectAttributes>(),
 });
 

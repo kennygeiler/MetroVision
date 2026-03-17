@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Boxes, Eye, EyeOff } from "lucide-react";
 
@@ -40,6 +40,65 @@ const legendItems = [
 export function ShotPlayer({ shot }: ShotPlayerProps) {
   const [showOverlay, setShowOverlay] = useState(true);
   const [showObjects, setShowObjects] = useState(true);
+  const [currentTime, setCurrentTime] = useState(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const frameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    const cancelFrame = () => {
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+    };
+
+    const syncCurrentTime = () => {
+      setCurrentTime(video.currentTime);
+
+      if (!video.paused && !video.ended) {
+        frameRef.current = requestAnimationFrame(syncCurrentTime);
+      } else {
+        frameRef.current = null;
+      }
+    };
+
+    const startSync = () => {
+      cancelFrame();
+      frameRef.current = requestAnimationFrame(syncCurrentTime);
+    };
+
+    const stopSync = () => {
+      cancelFrame();
+      setCurrentTime(video.currentTime);
+    };
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(video.currentTime);
+    };
+
+    video.addEventListener("play", startSync);
+    video.addEventListener("pause", stopSync);
+    video.addEventListener("ended", stopSync);
+    video.addEventListener("seeking", handleTimeUpdate);
+    video.addEventListener("seeked", handleTimeUpdate);
+    video.addEventListener("timeupdate", handleTimeUpdate);
+
+    return () => {
+      cancelFrame();
+      video.removeEventListener("play", startSync);
+      video.removeEventListener("pause", stopSync);
+      video.removeEventListener("ended", stopSync);
+      video.removeEventListener("seeking", handleTimeUpdate);
+      video.removeEventListener("seeked", handleTimeUpdate);
+      video.removeEventListener("timeupdate", handleTimeUpdate);
+    };
+  }, [shot.videoUrl]);
 
   return (
     <div className="space-y-4">
@@ -63,6 +122,7 @@ export function ShotPlayer({ shot }: ShotPlayerProps) {
 
         {shot.videoUrl ? (
           <video
+            ref={videoRef}
             className="absolute inset-0 h-full w-full object-cover"
             src={shot.videoUrl}
             poster={shot.thumbnailUrl ?? undefined}
@@ -136,7 +196,7 @@ export function ShotPlayer({ shot }: ShotPlayerProps) {
         </div>
 
         {showOverlay ? <MetadataOverlay shot={shot} /> : null}
-        <ObjectOverlay objects={shot.objects} visible={showObjects} />
+        <ObjectOverlay tracks={shot.objects} currentTime={currentTime} visible={showObjects} />
       </div>
 
       <div

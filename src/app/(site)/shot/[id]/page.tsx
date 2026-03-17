@@ -231,7 +231,7 @@ export default async function ShotDetailPage({ params }: ShotDetailPageProps) {
             </h2>
           </div>
           <span className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
-            {shot.objects.length} {shot.objects.length === 1 ? "object" : "objects"}
+            {shot.objects.length} {shot.objects.length === 1 ? "track" : "tracks"}
           </span>
         </div>
 
@@ -272,11 +272,12 @@ export default async function ShotDetailPage({ params }: ShotDetailPageProps) {
                         >
                           {object.category ?? "untyped"}
                         </span>
-                        {object.frameTime !== null ? (
-                          <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-                            {object.frameTime.toFixed(2)}s
-                          </span>
-                        ) : null}
+                        <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                          {object.startTime.toFixed(2)}s - {object.endTime.toFixed(2)}s
+                        </span>
+                        <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                          {object.keyframes.length} keyframes
+                        </span>
                       </div>
                     </div>
                     <span className="font-mono text-xs text-[var(--color-text-secondary)]">

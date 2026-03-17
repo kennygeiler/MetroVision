@@ -1,4 +1,8 @@
-import type { CompoundPart } from "@/db/schema";
+import type {
+  CompoundPart,
+  ShotObjectAttributes,
+  ShotObjectKeyframe,
+} from "@/db/schema";
 import type {
   DirectionSlug,
   DurationCategorySlug,
@@ -68,15 +72,14 @@ export type ShotWithDetails = {
   createdAt: string | null;
   objects: Array<{
     id: string;
+    trackId: string;
     label: string;
     category: string | null;
     confidence: number | null;
-    bboxX: number | null;
-    bboxY: number | null;
-    bboxW: number | null;
-    bboxH: number | null;
-    frameTime: number | null;
-    attributes: Record<string, string> | null;
+    keyframes: ShotObjectKeyframe[];
+    startTime: number;
+    endTime: number;
+    attributes: ShotObjectAttributes | null;
   }>;
   relevance?: number;
 };
