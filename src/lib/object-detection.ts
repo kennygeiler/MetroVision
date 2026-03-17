@@ -17,7 +17,7 @@ export const GEMINI_OBJECT_MODEL = "gemini-2.5-flash";
 export const OBJECT_SAMPLE_INTERVAL_SECONDS = 1;
 export const YOLO_REPLICATE_MODEL =
   process.env.REPLICATE_YOLO_MODEL?.trim() ||
-  "ultralytics/yolov8:2a1e44d6de17f2ade7b6e1c0e39e391c1053a37b4e97bcdab96b2f41e1205e40";
+  "adirik/grounding-dino:efd10a8ddc57ea28773327e881ce95e20cc1d734c589f7dd01d2036921ed78aa";
 const YOLO_REPLICATE_MODEL_REF = YOLO_REPLICATE_MODEL as `${string}/${string}:${string}`;
 
 const YOLO_CONFIDENCE_THRESHOLD = 0.25;
@@ -662,7 +662,7 @@ async function extractFrameImage(
   frameIndex: number,
   outputDir: string,
 ) {
-  const framePath = path.join(outputDir, `frame_${frameIndex}.jpg`);
+  const framePath = path.join(outputDir, `frame_${frameIndex}.png`);
 
   await runProcess("ffmpeg", [
     "-hide_banner",
@@ -675,8 +675,8 @@ async function extractFrameImage(
     videoPath,
     "-vframes",
     "1",
-    "-q:v",
-    "2",
+    "-f",
+    "image2",
     framePath,
   ]);
 
@@ -705,8 +705,8 @@ export function sampleObjectDetectionTimestamps(shotDuration: number) {
     timestamps.push(roundTime(current));
   }
 
-  if (duration > 0 && duration - timestamps[timestamps.length - 1]! > 0.01) {
-    timestamps.push(roundTime(duration));
+  if (duration > 0 && duration - timestamps[timestamps.length - 1]! > 0.5) {
+    timestamps.push(roundTime(Math.max(duration - 0.1, 0)));
   }
 
   return timestamps;
@@ -952,13 +952,30 @@ export async function detectWithYolo(imagePath: string): Promise<YoloDetection[]
     probeImageDimensions(imagePath),
   ]);
 
-  const output = await getReplicateClient().run(YOLO_REPLICATE_MODEL_REF, {
-    input: {
-      image: imageBuffer,
-      conf: YOLO_CONFIDENCE_THRESHOLD,
-      iou: YOLO_IOU_THRESHOLD,
-    },
-  });
+  const ext = imagePath.endsWith(".png") ? "png" : "jpeg";
+  const base64Image = `data:image/${ext};base64,${imageBuffer.toString("base64")}`;
+
+  let output: unknown = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      output = await getReplicateClient().run(YOLO_REPLICATE_MODEL_REF, {
+        input: {
+          image: base64Image,
+          query: "person . car . truck . chair . table . dog . cat . bottle . cup . knife . gun . door . window . tree . building . food . book . phone . bag . hat . plant",
+          box_threshold: YOLO_CONFIDENCE_THRESHOLD,
+          text_threshold: 0.2,
+        },
+      });
+      break;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("429") && attempt < 4) {
+        await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 12000));
+        continue;
+      }
+      throw error;
+    }
+  }
 
   const expandedPayloads: unknown[] = [];
   await expandStructuredPayload(output, expandedPayloads);
@@ -1208,6 +1225,10 @@ async function extractFrameSet(videoPath: string, timestamps: number[]) {
       const frame = await extractFrameImage(videoPath, timestamp, frameIndex, tempDir);
       frame.detections = await detectWithYolo(frame.filePath);
       frames.push(frame);
+      // Rate limit: Replicate throttles to 6 req/min on low credit
+      if (frameIndex < timestamps.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
     }
 
     return frames;
@@ -1223,7 +1244,14 @@ export async function detectAndEnrich(
 ): Promise<ObjectTrack[]> {
   const timestamps = sampleObjectDetectionTimestamps(shotDuration);
   const frames = await extractFrameSet(videoPath, timestamps);
-  const tracks = trackDetections(frames);
+  const rawTracks = trackDetections(frames);
+
+  // Filter: require at least 2 keyframes and confidence > 0.35
+  // Then keep only top 8 by confidence
+  const tracks = rawTracks
+    .filter((t) => t.keyframes.length >= 2 && (t.confidence ?? 0) > 0.35)
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
+    .slice(0, 8);
 
   if (tracks.length === 0) {
     return [];
