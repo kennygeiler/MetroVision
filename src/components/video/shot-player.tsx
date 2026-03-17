@@ -73,34 +73,30 @@ export function ShotPlayer({ shot }: ShotPlayerProps) {
             fill
             priority
             sizes="(min-width: 1024px) 960px, 100vw"
-            className="absolute inset-0 object-cover opacity-60"
+            className="absolute inset-0 object-cover"
           />
         ) : null}
 
-        <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="max-w-xl"
-          >
-            <p className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-              Playback placeholder
-            </p>
-            <h2
-              className="mt-3 text-2xl font-semibold tracking-[var(--letter-spacing-snug)] text-[var(--color-text-primary)] sm:text-3xl"
-              style={{ fontFamily: "var(--font-heading)" }}
+        {!shot.videoUrl ? (
+          <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="max-w-xl"
             >
-              {shot.film.title}
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-[var(--color-text-secondary)] sm:text-base">
-              {shot.videoUrl
-                ? "Playback is sourced from the database clip record, with the telemetry overlay layered directly on top."
-                : shot.semantic?.description ??
-                  "The overlay remains active even when a real media asset has not been attached yet, so motion metadata can still be reviewed in context."}
-            </p>
-          </motion.div>
-        </div>
+              <h2
+                className="text-2xl font-semibold tracking-[var(--letter-spacing-snug)] text-[var(--color-text-primary)] sm:text-3xl"
+                style={{ fontFamily: "var(--font-heading)" }}
+              >
+                {shot.film.title}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-[var(--color-text-secondary)] sm:text-base">
+                {shot.semantic?.description ?? "No video clip available. Run the pipeline to attach a media asset."}
+              </p>
+            </motion.div>
+          </div>
+        ) : null}
 
         <div className="absolute right-4 top-4 z-30">
           <Button

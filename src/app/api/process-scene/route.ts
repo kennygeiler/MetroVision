@@ -297,7 +297,7 @@ async function uploadAsset(
 ) {
   const body = await readFile(filePath);
   const result = await put(pathname, body, {
-    access: "public",
+    access: "private",
     addRandomSuffix: true,
     contentType,
     token,
@@ -356,12 +356,11 @@ function buildSearchText(film: { id: string; title: string; director: string; ye
 }
 
 async function upsertFilm(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   filmTitle: string,
   director: string,
   year: number,
 ) {
-  const [existingFilm] = await tx
+  const [existingFilm] = await db
     .select({
       id: schema.films.id,
       year: schema.films.year,
@@ -372,7 +371,7 @@ async function upsertFilm(
 
   if (existingFilm) {
     if (existingFilm.year === null) {
-      await tx
+      await db
         .update(schema.films)
         .set({ year })
         .where(eq(schema.films.id, existingFilm.id));
@@ -381,7 +380,7 @@ async function upsertFilm(
     return existingFilm.id;
   }
 
-  const [insertedFilm] = await tx
+  const [insertedFilm] = await db
     .insert(schema.films)
     .values({
       title: filmTitle,
@@ -440,80 +439,68 @@ export async function POST(request: Request) {
     }
 
     let filmId = "";
-    const withEmbeddings = await db.transaction(async (tx) => {
-      filmId = await upsertFilm(tx, payload.filmTitle, payload.director, payload.year);
-      const makeSearchText = buildSearchText({
-        id: filmId,
-        title: payload.filmTitle,
-        director: payload.director,
-        year: payload.year,
+    filmId = await upsertFilm(payload.filmTitle, payload.director, payload.year);
+    const makeSearchText = buildSearchText({
+      id: filmId,
+      title: payload.filmTitle,
+      director: payload.director,
+      year: payload.year,
+    });
+
+    for (const shot of extractedShots) {
+      shot.searchText = makeSearchText(shot);
+      shot.embedding = await generateTextEmbedding(shot.searchText);
+    }
+
+    for (const shot of extractedShots) {
+      const [insertedShot] = await db
+        .insert(schema.shots)
+        .values({
+          filmId,
+          sourceFile,
+          startTc: shot.start,
+          endTc: shot.end,
+          duration: shot.duration,
+          videoUrl: shot.videoUrl,
+          thumbnailUrl: shot.thumbnailUrl,
+        })
+        .returning({ id: schema.shots.id });
+
+      await db.insert(schema.shotMetadata).values({
+        shotId: insertedShot.id,
+        movementType: shot.classification.movement_type as typeof schema.shotMetadata.$inferInsert.movementType,
+        direction: shot.classification.direction as typeof schema.shotMetadata.$inferInsert.direction,
+        speed: shot.classification.speed as typeof schema.shotMetadata.$inferInsert.speed,
+        shotSize: shot.classification.shot_size as typeof schema.shotMetadata.$inferInsert.shotSize,
+        angleVertical: shot.classification.angle_vertical as typeof schema.shotMetadata.$inferInsert.angleVertical,
+        angleHorizontal: shot.classification.angle_horizontal as typeof schema.shotMetadata.$inferInsert.angleHorizontal,
+        angleSpecial: shot.classification.angle_special,
+        durationCat: shot.classification.duration_cat as typeof schema.shotMetadata.$inferInsert.durationCat,
+        isCompound: shot.classification.is_compound,
+        compoundParts: shot.classification.compound_parts as CompoundPart[],
+        classificationSource: "gemini",
       });
 
-      const shotsWithEmbeddings: ProcessedShot[] = [];
+      await db.insert(schema.shotSemantic).values({
+        shotId: insertedShot.id,
+        description: shot.classification.description || null,
+        subjects: [],
+        mood: shot.classification.mood || null,
+        lighting: shot.classification.lighting || null,
+        techniqueNotes: null,
+      });
 
-      for (const shot of extractedShots) {
-        const searchText = makeSearchText(shot);
-        const embedding = await generateTextEmbedding(searchText);
-
-        shotsWithEmbeddings.push({
-          ...shot,
-          searchText,
-          embedding,
-        });
-      }
-
-      for (const shot of shotsWithEmbeddings) {
-        const [insertedShot] = await tx
-          .insert(schema.shots)
-          .values({
-            filmId,
-            sourceFile,
-            startTc: shot.start,
-            endTc: shot.end,
-            duration: shot.duration,
-            videoUrl: shot.videoUrl,
-            thumbnailUrl: shot.thumbnailUrl,
-          })
-          .returning({ id: schema.shots.id });
-
-        await tx.insert(schema.shotMetadata).values({
-          shotId: insertedShot.id,
-          movementType: shot.classification.movement_type as typeof schema.shotMetadata.$inferInsert.movementType,
-          direction: shot.classification.direction as typeof schema.shotMetadata.$inferInsert.direction,
-          speed: shot.classification.speed as typeof schema.shotMetadata.$inferInsert.speed,
-          shotSize: shot.classification.shot_size as typeof schema.shotMetadata.$inferInsert.shotSize,
-          angleVertical: shot.classification.angle_vertical as typeof schema.shotMetadata.$inferInsert.angleVertical,
-          angleHorizontal: shot.classification.angle_horizontal as typeof schema.shotMetadata.$inferInsert.angleHorizontal,
-          angleSpecial: shot.classification.angle_special,
-          durationCat: shot.classification.duration_cat as typeof schema.shotMetadata.$inferInsert.durationCat,
-          isCompound: shot.classification.is_compound,
-          compoundParts: shot.classification.compound_parts as CompoundPart[],
-          classificationSource: "gemini",
-        });
-
-        await tx.insert(schema.shotSemantic).values({
-          shotId: insertedShot.id,
-          description: shot.classification.description || null,
-          subjects: [],
-          mood: shot.classification.mood || null,
-          lighting: shot.classification.lighting || null,
-          techniqueNotes: null,
-        });
-
-        await tx.insert(schema.shotEmbeddings).values({
-          shotId: insertedShot.id,
-          embedding: shot.embedding,
-          searchText: shot.searchText,
-        });
-      }
-
-      return shotsWithEmbeddings;
-    });
+      await db.insert(schema.shotEmbeddings).values({
+        shotId: insertedShot.id,
+        embedding: shot.embedding,
+        searchText: shot.searchText,
+      });
+    }
 
     return NextResponse.json({
       success: true,
       filmId,
-      shotCount: withEmbeddings.length,
+      shotCount: extractedShots.length,
     });
   } catch (error) {
     const message =

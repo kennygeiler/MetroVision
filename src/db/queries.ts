@@ -10,6 +10,13 @@ import {
 } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+
+/** Convert private blob URLs to proxied URLs that browsers can access. */
+function proxyBlobUrl(url: string | null): string | null {
+  if (!url) return null;
+  if (!url.includes("private.blob.vercel-storage.com")) return url;
+  return `/api/blob/${encodeURIComponent(url)}`;
+}
 import {
   generateTextEmbedding,
   toVectorLiteral,
@@ -186,8 +193,8 @@ function mapShotRow(row: ShotRow): ShotWithDetails {
     sourceFile: row.shotSourceFile ?? null,
     startTc: row.shotStartTc ?? null,
     endTc: row.shotEndTc ?? null,
-    videoUrl: row.shotVideoUrl ?? null,
-    thumbnailUrl: row.shotThumbnailUrl ?? null,
+    videoUrl: proxyBlobUrl(row.shotVideoUrl ?? null),
+    thumbnailUrl: proxyBlobUrl(row.shotThumbnailUrl ?? null),
     createdAt: toIsoString(row.shotCreatedAt ?? null),
   };
 }
@@ -202,8 +209,8 @@ function mapExportShotRow(row: ShotRow): ExportShotRecord {
     startTc: row.shotStartTc ?? null,
     endTc: row.shotEndTc ?? null,
     duration: row.shotDuration ?? 0,
-    videoUrl: row.shotVideoUrl ?? null,
-    thumbnailUrl: row.shotThumbnailUrl ?? null,
+    videoUrl: proxyBlobUrl(row.shotVideoUrl ?? null),
+    thumbnailUrl: proxyBlobUrl(row.shotThumbnailUrl ?? null),
     movementType: (row.metadataMovementType ?? "static") as MovementTypeSlug,
     direction: (row.metadataDirection ?? "none") as DirectionSlug,
     speed: (row.metadataSpeed ?? "moderate") as SpeedSlug,

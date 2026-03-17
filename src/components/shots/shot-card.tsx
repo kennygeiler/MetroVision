@@ -33,7 +33,7 @@ export function ShotCard({ shot }: ShotCardProps) {
             src={shot.thumbnailUrl}
             fill
             sizes="(min-width: 1280px) 360px, (min-width: 640px) 50vw, 100vw"
-            className="absolute inset-0 object-cover opacity-60"
+            className="absolute inset-0 object-cover"
           />
         ) : null}
         <div
