@@ -27,34 +27,35 @@ type InterpolatedBox = {
   h: number;
 };
 
-const ENTRY_DURATION_SECONDS = 0.2;
-const EXIT_DURATION_SECONDS = 0.15;
-const MAX_VISIBLE_TRACKS = 20;
+const CATEGORY_COLORS = {
+  person: "var(--color-overlay-object-person)",
+  vehicle: "var(--color-overlay-object-vehicle)",
+  object: "var(--color-overlay-object-object)",
+  environment: "var(--color-overlay-object-environment)",
+  animal: "var(--color-overlay-object-animal)",
+  text: "var(--color-overlay-object-text)",
+} as const;
+
+const CORNERS = [
+  "left-0 top-0 border-l-[2px] border-t-[2px]",
+  "right-0 top-0 border-r-[2px] border-t-[2px]",
+  "bottom-0 left-0 border-b-[2px] border-l-[2px]",
+  "bottom-0 right-0 border-b-[2px] border-r-[2px]",
+] as const;
+
+const ENTRY_BUFFER_SECONDS = 0.15;
+const EXIT_BUFFER_SECONDS = 0.1;
+const MAX_VISIBLE_TRACKS = 10;
 
 function getCategoryColor(category: string | null) {
-  switch (category) {
-    case "person":
-      return "var(--color-overlay-motion)";
-    case "vehicle":
-      return "var(--color-overlay-badge)";
-    case "object":
-      return "var(--color-overlay-trajectory)";
-    case "environment":
-      return "var(--color-overlay-info)";
-    case "animal":
-      return "var(--color-signal-amber)";
-    case "text":
-      return "var(--color-text-secondary)";
-    default:
-      return "var(--color-overlay-speed)";
-  }
+  return CATEGORY_COLORS[category as keyof typeof CATEGORY_COLORS] ?? CATEGORY_COLORS.object;
 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function interpolateBbox(keyframes: ShotObjectKeyframe[], time: number): InterpolatedBox | null {
+export function interpolateBbox(keyframes: ShotObjectKeyframe[], time: number): InterpolatedBox | null {
   if (keyframes.length === 0) {
     return null;
   }
@@ -84,22 +85,34 @@ function interpolateBbox(keyframes: ShotObjectKeyframe[], time: number): Interpo
   };
 }
 
-function formatConfidence(confidence: number | null) {
-  if (typeof confidence !== "number") {
-    return null;
+function getMotionVector(keyframes: ShotObjectKeyframe[], time: number) {
+  if (keyframes.length < 2) {
+    return { x: 0, y: 0, moving: false };
   }
 
-  return `${Math.round(confidence * 100)}%`;
+  const previousIndex = keyframes.findIndex((keyframe) => keyframe.t >= time);
+  const afterIndex = previousIndex <= 0 ? 1 : previousIndex;
+  const before = keyframes[clamp(afterIndex - 1, 0, keyframes.length - 1)];
+  const after = keyframes[clamp(afterIndex, 0, keyframes.length - 1)];
+  if (!before || !after || before.t === after.t) {
+    return { x: 0, y: 0, moving: false };
+  }
+
+  const beforeCenter = { x: before.x + before.w / 2, y: before.y + before.h / 2 };
+  const afterCenter = { x: after.x + after.w / 2, y: after.y + after.h / 2 };
+  const dx = afterCenter.x - beforeCenter.x;
+  const dy = afterCenter.y - beforeCenter.y;
+  const magnitude = Math.hypot(dx, dy);
+
+  return magnitude < 0.002
+    ? { x: 0, y: 0, moving: false }
+    : { x: (dx / magnitude) * 2, y: (dy / magnitude) * 2, moving: true };
 }
 
-function buildTrajectoryPoints(keyframes: ShotObjectKeyframe[]) {
-  return keyframes
-    .map((keyframe) => {
-      const x = (keyframe.x + keyframe.w / 2) * 100;
-      const y = (keyframe.y + keyframe.h / 2) * 100;
-      return `${x},${y}`;
-    })
-    .join(" ");
+function formatLabel(label: string, confidence: number | null) {
+  const percentage =
+    typeof confidence === "number" ? `${Math.round(confidence * 100)}%` : "--%";
+  return `${label.toUpperCase()}  ${percentage}`;
 }
 
 export function ObjectOverlay({
@@ -115,43 +128,27 @@ export function ObjectOverlay({
     .filter(
       (track) =>
         track.keyframes.length > 0 &&
-        currentTime >= track.startTime &&
-        currentTime <= track.endTime + EXIT_DURATION_SECONDS,
+        currentTime >= track.startTime - ENTRY_BUFFER_SECONDS &&
+        currentTime <= track.endTime + EXIT_BUFFER_SECONDS,
     )
     .map((track) => {
       const sampleTime = clamp(currentTime, track.startTime, track.endTime);
       const bbox = interpolateBbox(track.keyframes, sampleTime);
-
       if (!bbox) {
         return null;
       }
 
-      const entryProgress = clamp(
-        (currentTime - track.startTime) / ENTRY_DURATION_SECONDS,
-        0,
-        1,
-      );
-      const exitProgress =
-        currentTime <= track.endTime
-          ? 1
-          : 1 -
-            clamp(
-              (currentTime - track.endTime) / EXIT_DURATION_SECONDS,
-              0,
-              1,
-            );
-      const opacity = entryProgress * exitProgress;
-      const scale = 0.9 + entryProgress * 0.1;
-
       return {
         ...track,
         bbox,
-        opacity,
-        scale,
+        color: getCategoryColor(track.category),
+        labelText: formatLabel(track.label, track.confidence),
+        motion: getMotionVector(track.keyframes, sampleTime),
+        isVisible: currentTime >= track.startTime && currentTime <= track.endTime,
         confidenceRank: track.confidence ?? 0,
       };
     })
-    .filter((track): track is NonNullable<typeof track> => Boolean(track))
+    .filter((track): track is NonNullable<typeof track> => track !== null)
     .sort((left, right) => right.confidenceRank - left.confidenceRank)
     .slice(0, MAX_VISIBLE_TRACKS);
 
@@ -160,87 +157,57 @@ export function ObjectOverlay({
   }
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {activeTracks.map((track) =>
-          track.keyframes.length > 1 ? (
-            <polyline
-              key={`${track.id}-trajectory`}
-              points={buildTrajectoryPoints(track.keyframes)}
-              fill="none"
-              stroke={getCategoryColor(track.category)}
-              strokeDasharray="1.5 2.5"
-              strokeWidth="0.18"
-              opacity={0.2}
-              vectorEffect="non-scaling-stroke"
-            />
-          ) : null,
-        )}
-      </svg>
-
+    <div className="absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
       {activeTracks.map((track) => {
-        const color = getCategoryColor(track.category);
-        const confidence = formatConfidence(track.confidence);
-        const label = `${track.label}${confidence ? ` ${confidence}` : ""}`.toUpperCase();
         const wrapperStyle = {
-          transform: `translate3d(${track.bbox.x * 100}%, ${track.bbox.y * 100}%, 0)`,
-          opacity: track.opacity,
-        } satisfies CSSProperties;
-        const boxStyle = {
           width: `${track.bbox.w * 100}%`,
           height: `${track.bbox.h * 100}%`,
-          transform: `scale(${track.scale})`,
-          transformOrigin: "top left",
-          transition:
-            "opacity 150ms linear, transform 200ms cubic-bezier(0.22, 1, 0.36, 1)",
-          backgroundColor: `color-mix(in oklch, ${color} 4%, transparent)`,
-          ["--track-color" as string]: color,
+          transform: `translate(${track.bbox.x * 100}%, ${track.bbox.y * 100}%)`,
+          opacity: track.isVisible ? 1 : 0,
+          transition: "opacity 150ms linear",
+          ["--track-color" as string]: track.color,
+        } satisfies CSSProperties;
+        const ghostStyle = {
+          transform: `translate(${track.motion.x}px, ${track.motion.y}px)`,
+          opacity: track.motion.moving ? 0.5 : 0,
         } satisfies CSSProperties;
 
         return (
           <div
             key={track.id}
-            className="absolute inset-0 will-change-transform"
+            className="group absolute left-0 top-0 pointer-events-auto will-change-transform"
             style={wrapperStyle}
           >
-            <div className="relative h-full will-change-transform" style={boxStyle}>
-              <div
-                className="absolute -left-px -top-6 inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-white shadow-[var(--shadow-lg)] backdrop-blur-md"
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  backgroundColor: `color-mix(in oklch, ${color} 85%, transparent)`,
-                  borderColor: `color-mix(in oklch, ${color} 48%, transparent)`,
-                }}
-              >
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: color }}
-                />
-                <span>{label}</span>
-              </div>
+            <div
+              className="absolute left-0 top-0 h-full w-full border border-[color:var(--track-color)] opacity-0 transition-opacity duration-150 group-hover:opacity-30"
+            />
 
-              <div
-                className="absolute -left-px -top-px h-3 w-3 border-l-[1.5px] border-t-[1.5px]"
-                style={{ borderColor: color }}
-              />
-              <div
-                className="absolute -right-px -top-px h-3 w-3 border-r-[1.5px] border-t-[1.5px]"
-                style={{ borderColor: color }}
-              />
-              <div
-                className="absolute -bottom-px -left-px h-3 w-3 border-b-[1.5px] border-l-[1.5px]"
-                style={{ borderColor: color }}
-              />
-              <div
-                className="absolute -bottom-px -right-px h-3 w-3 border-b-[1.5px] border-r-[1.5px]"
-                style={{ borderColor: color }}
-              />
+            <div
+              className="absolute left-0 top-0 flex h-[18px] -translate-y-full items-center bg-[color:var(--track-color)] px-[6px] font-mono text-[9px] uppercase tracking-[0.16em] text-white"
+              style={{ whiteSpace: "pre" }}
+            >
+              {track.labelText}
             </div>
+
+            {track.motion.moving
+              ? CORNERS.map((cornerClassName) => (
+                  <div
+                    key={`${track.id}-${cornerClassName}-ghost`}
+                    className={`absolute h-4 w-4 border-[color:var(--track-color)] ${cornerClassName}`}
+                    style={ghostStyle}
+                  />
+                ))
+              : null}
+
+            {CORNERS.map((cornerClassName) => (
+              <div
+                key={`${track.id}-${cornerClassName}`}
+                className={`absolute h-4 w-4 border-[color:var(--track-color)] ${cornerClassName}`}
+              />
+            ))}
           </div>
         );
       })}
     </div>
   );
 }
-
-export { interpolateBbox };

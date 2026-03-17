@@ -12,30 +12,56 @@ import type {
 } from "@/db/schema";
 
 export const GEMINI_OBJECT_MODEL = "gemini-2.5-flash";
-export const OBJECT_SAMPLE_INTERVAL_SECONDS = 1.5;
-const MAX_OBJECT_SAMPLES = 10;
-const MIN_OBJECT_SAMPLES = 2;
+export const OBJECT_SAMPLE_INTERVAL_SECONDS = 1;
+const MAX_OBJECT_SAMPLES = 8;
+const MIN_OBJECT_SAMPLES = 3;
+const MIN_TRACK_CONFIDENCE = 0.5;
 
-export const OBJECT_DETECTION_PROMPT = `You are analyzing a frame from a film scene. Identify all significant visual elements with their approximate bounding box locations.
+export const OBJECT_DETECTION_PROMPT = `You are a professional computer vision system analyzing a sequence of video frames from a film. The frames are sampled at regular intervals from a single continuous shot.
 
-For each detected element, provide:
-- label: short descriptive name (2-4 words, e.g., "man in fedora", "vintage black car", "tall golden reeds")
-- category: one of "person", "vehicle", "object", "environment", "animal", "text"
-- confidence: 0.0-1.0 how certain you are
-- bbox: [x, y, width, height] as normalized coordinates (0-1 range relative to frame dimensions)
-  - x = left edge position (0 = left of frame, 1 = right)
-  - y = top edge position (0 = top, 1 = bottom)
-  - width = box width as fraction of frame
-  - height = box height as fraction of frame
-- attributes: object with any notable details (color, action, clothing, etc.)
+FRAMES PROVIDED (in chronological order):
+{list of frame timestamps}
 
-Focus on cinematographically relevant elements: characters, key props, vehicles, environmental features, lighting sources.
+For each significant visual element (person, vehicle, object, key environment feature), track it across ALL frames where it appears. Assign each unique object a consistent track_id (T1, T2, T3, etc.) that persists across frames.
 
-Return ONLY valid JSON array:
-[
-  { "label": "man in fedora", "category": "person", "confidence": 0.92, "bbox": [0.3, 0.2, 0.15, 0.6], "attributes": {"clothing": "dark suit", "action": "walking"} },
-  { "label": "vintage black car", "category": "vehicle", "confidence": 0.88, "bbox": [0.5, 0.4, 0.35, 0.3], "attributes": {"color": "black", "era": "1940s"} }
-]`;
+RULES:
+- The SAME person/object must have the SAME track_id in every frame
+- Bounding boxes must be TIGHT around the object (not loose)
+- Coordinates are normalized 0.0-1.0 relative to frame dimensions
+- x = left edge, y = top edge, w = width, h = height
+- Only detect objects that are cinematographically relevant (characters, key props, vehicles, environmental anchors)
+- Maximum 8 tracked objects per shot
+- Confidence reflects how certain you are this is a real, significant element (not noise)
+
+Return ONLY valid JSON:
+{
+  "tracks": [
+    {
+      "track_id": "T1",
+      "label": "man in dark suit",
+      "category": "person",
+      "confidence": 0.95,
+      "attributes": {"clothing": "dark suit and fedora", "action": "walking"},
+      "detections": [
+        {"frame_index": 0, "bbox": [0.32, 0.15, 0.12, 0.65]},
+        {"frame_index": 1, "bbox": [0.35, 0.15, 0.12, 0.65]},
+        {"frame_index": 2, "bbox": [0.38, 0.16, 0.12, 0.64]}
+      ]
+    },
+    {
+      "track_id": "T2",
+      "label": "black sedan",
+      "category": "vehicle",
+      "confidence": 0.90,
+      "attributes": {"color": "black", "era": "1940s"},
+      "detections": [
+        {"frame_index": 0, "bbox": [0.55, 0.35, 0.30, 0.25]},
+        {"frame_index": 1, "bbox": [0.55, 0.35, 0.30, 0.25]},
+        {"frame_index": 2, "bbox": [0.55, 0.35, 0.30, 0.25]}
+      ]
+    }
+  ]
+}`;
 
 const ALLOWED_CATEGORIES = new Set([
   "person",
@@ -54,19 +80,36 @@ type DetectedCategory =
   | "animal"
   | "text";
 
-type RawDetectedObject = {
-  label?: unknown;
-  category?: unknown;
-  confidence?: unknown;
-  bbox?: unknown;
-  attributes?: unknown;
-};
-
 type NormalizedBbox = {
   x: number;
   y: number;
   w: number;
   h: number;
+};
+
+type RawTrackDetection = {
+  frame_index?: unknown;
+  bbox?: unknown;
+};
+
+type RawTrack = {
+  track_id?: unknown;
+  label?: unknown;
+  category?: unknown;
+  confidence?: unknown;
+  attributes?: unknown;
+  detections?: unknown;
+};
+
+type RawTrackResponse = {
+  tracks?: unknown;
+};
+
+type FrameImage = {
+  frameIndex: number;
+  timestamp: number;
+  data: string;
+  contentType: string;
 };
 
 export type DetectedObject = {
@@ -75,15 +118,6 @@ export type DetectedObject = {
   confidence: number | null;
   bbox: NormalizedBbox;
   attributes: ShotObjectAttributes | null;
-};
-
-type FrameDetection = DetectedObject & {
-  time: number;
-};
-
-type MutableTrack = {
-  trackId: string;
-  detections: FrameDetection[];
 };
 
 export type ObjectTrack = {
@@ -122,8 +156,12 @@ function roundTime(value: number) {
   return roundNumber(value, 3);
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function clampUnitInterval(value: number) {
-  return Math.min(1, Math.max(0, roundNumber(value)));
+  return clamp(roundNumber(value), 0, 1);
 }
 
 function normalizeConfidence(value: unknown) {
@@ -139,18 +177,21 @@ function normalizeBbox(value: unknown): NormalizedBbox | null {
     return null;
   }
 
-  const [x, y, width, height] = value.map((entry) => Number(entry));
-
-  if (![x, y, width, height].every(Number.isFinite)) {
+  const [rawX, rawY, rawW, rawH] = value.map((entry) => Number(entry));
+  if (![rawX, rawY, rawW, rawH].every(Number.isFinite)) {
     return null;
   }
 
-  return {
-    x: clampUnitInterval(x),
-    y: clampUnitInterval(y),
-    w: clampUnitInterval(width),
-    h: clampUnitInterval(height),
-  };
+  const x = clampUnitInterval(rawX);
+  const y = clampUnitInterval(rawY);
+  const w = clamp(roundNumber(rawW), 0, 1 - x);
+  const h = clamp(roundNumber(rawH), 0, 1 - y);
+
+  if (w <= 0 || h <= 0) {
+    return null;
+  }
+
+  return { x, y, w, h };
 }
 
 function normalizeAttributes(value: unknown): ShotObjectAttributes | null {
@@ -177,199 +218,152 @@ function normalizeAttributes(value: unknown): ShotObjectAttributes | null {
   return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
-function extractJsonArray(payload: string) {
+function extractJsonObject(payload: string) {
   const trimmed = payload.trim();
-  const fenced = trimmed.startsWith("```")
+  const unfenced = trimmed.startsWith("```")
     ? trimmed.replace(/^```(?:json)?/u, "").replace(/```$/u, "").trim()
     : trimmed;
-  const start = fenced.indexOf("[");
-  const end = fenced.lastIndexOf("]");
+  const start = unfenced.indexOf("{");
+  const end = unfenced.lastIndexOf("}");
 
   if (start === -1 || end === -1 || end < start) {
-    throw new Error("Gemini object detection did not return a JSON array.");
+    throw new Error("Gemini object detection did not return a JSON object.");
   }
 
-  return JSON.parse(fenced.slice(start, end + 1)) as unknown;
+  return JSON.parse(unfenced.slice(start, end + 1)) as unknown;
 }
 
-function normalizeDetectedObjects(payload: unknown): DetectedObject[] {
-  if (!Array.isArray(payload)) {
-    throw new Error("Gemini object detection payload must be an array.");
+function buildBatchPrompt(timestamps: number[]) {
+  const frameList = timestamps
+    .map((timestamp, index) => `- Frame ${index}: ${roundTime(timestamp)}s`)
+    .join("\n");
+
+  return OBJECT_DETECTION_PROMPT.replace("{list of frame timestamps}", frameList);
+}
+
+function normalizeFrameDetection(
+  detection: RawTrackDetection,
+  timestamps: number[],
+) {
+  const frameIndex =
+    typeof detection.frame_index === "number" && Number.isInteger(detection.frame_index)
+      ? detection.frame_index
+      : Number.NaN;
+  const bbox = normalizeBbox(detection.bbox);
+
+  if (!Number.isInteger(frameIndex) || frameIndex < 0 || frameIndex >= timestamps.length || !bbox) {
+    return null;
   }
 
-  const objects: DetectedObject[] = [];
-
-  for (const item of payload as RawDetectedObject[]) {
-    const label = typeof item.label === "string" ? item.label.trim() : "";
-    if (!label) {
-      continue;
-    }
-
-    const bbox = normalizeBbox(item.bbox);
-    if (!bbox) {
-      continue;
-    }
-
-    const category =
-      typeof item.category === "string" &&
-      ALLOWED_CATEGORIES.has(item.category as DetectedCategory)
-        ? (item.category as DetectedCategory)
-        : null;
-
-    objects.push({
-      label,
-      category,
-      confidence: normalizeConfidence(item.confidence),
-      bbox,
-      attributes: normalizeAttributes(item.attributes),
-    });
-  }
-
-  return objects;
-}
-
-function buildPromptForTimestamp(timestamp: number) {
-  return `${OBJECT_DETECTION_PROMPT}
-
-Frame timestamp: ${roundTime(timestamp)} seconds into the shot. Use the timestamp only as context for what may be in motion. Return only the JSON array.`;
-}
-
-function tokenizeLabel(label: string) {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-}
-
-function labelsAreSimilar(left: string, right: string) {
-  const normalizedLeft = tokenizeLabel(left);
-  const normalizedRight = tokenizeLabel(right);
-
-  if (normalizedLeft.length === 0 || normalizedRight.length === 0) {
-    return false;
-  }
-
-  if (normalizedLeft.join(" ") === normalizedRight.join(" ")) {
-    return true;
-  }
-
-  const leftSet = new Set(normalizedLeft);
-  const rightSet = new Set(normalizedRight);
-  const overlap = [...leftSet].filter((token) => rightSet.has(token)).length;
-  const minTokenCount = Math.min(leftSet.size, rightSet.size);
-  const unionCount = new Set([...leftSet, ...rightSet]).size;
-
-  return overlap / minTokenCount >= 0.6 || overlap / unionCount >= 0.5;
-}
-
-function getBoxCenter(box: NormalizedBbox) {
   return {
-    x: box.x + box.w / 2,
-    y: box.y + box.h / 2,
+    frameIndex,
+    keyframe: {
+      t: roundTime(timestamps[frameIndex]),
+      x: bbox.x,
+      y: bbox.y,
+      w: bbox.w,
+      h: bbox.h,
+    } satisfies ShotObjectKeyframe,
   };
 }
 
-function getIntersectionOverUnion(left: NormalizedBbox, right: NormalizedBbox) {
-  const x1 = Math.max(left.x, right.x);
-  const y1 = Math.max(left.y, right.y);
-  const x2 = Math.min(left.x + left.w, right.x + right.w);
-  const y2 = Math.min(left.y + left.h, right.y + right.h);
-
-  const intersectionWidth = Math.max(0, x2 - x1);
-  const intersectionHeight = Math.max(0, y2 - y1);
-  const intersection = intersectionWidth * intersectionHeight;
-  const leftArea = left.w * left.h;
-  const rightArea = right.w * right.h;
-  const union = leftArea + rightArea - intersection;
-
-  if (union <= 0) {
-    return 0;
+function normalizeTrackResponse(payload: unknown, timestamps: number[]): ObjectTrack[] {
+  const tracks = (payload as RawTrackResponse)?.tracks;
+  if (!Array.isArray(tracks)) {
+    throw new Error("Gemini object tracking payload must include a tracks array.");
   }
 
-  return intersection / union;
-}
+  const seenTrackIds = new Set<string>();
+  const normalizedTracks: ObjectTrack[] = [];
 
-function getCenterDistance(left: NormalizedBbox, right: NormalizedBbox) {
-  const leftCenter = getBoxCenter(left);
-  const rightCenter = getBoxCenter(right);
-  return Math.hypot(leftCenter.x - rightCenter.x, leftCenter.y - rightCenter.y);
-}
+  for (const [index, item] of tracks.entries()) {
+    const track = item as RawTrack;
+    const label = typeof track.label === "string" ? track.label.trim() : "";
+    const confidence = normalizeConfidence(track.confidence);
+    const category: ObjectTrack["category"] =
+      typeof track.category === "string" &&
+      ALLOWED_CATEGORIES.has(track.category as DetectedCategory)
+        ? (track.category as DetectedCategory)
+        : null;
+    const trackIdCandidate =
+      typeof track.track_id === "string" ? track.track_id.trim() : "";
+    const trackId =
+      trackIdCandidate && !seenTrackIds.has(trackIdCandidate)
+        ? trackIdCandidate
+        : `T${index + 1}`;
+    seenTrackIds.add(trackId);
 
-function getMostCommonValue(values: Array<string | null>) {
-  const counts = new Map<string, number>();
+    const keyframes = Array.isArray(track.detections)
+      ? track.detections
+          .map((detection) => normalizeFrameDetection(detection as RawTrackDetection, timestamps))
+          .filter((detection): detection is NonNullable<typeof detection> => detection !== null)
+          .sort((left, right) => left.frameIndex - right.frameIndex)
+          .filter(
+            (detection, detectionIndex, detections) =>
+              detectionIndex === 0 ||
+              detection.frameIndex !== detections[detectionIndex - 1]?.frameIndex,
+          )
+          .map((detection) => detection.keyframe)
+      : [];
 
-  for (const value of values) {
-    if (!value) {
+    if (!label || confidence === null || confidence < MIN_TRACK_CONFIDENCE || keyframes.length < 2) {
       continue;
     }
 
-    counts.set(value, (counts.get(value) ?? 0) + 1);
+    normalizedTracks.push({
+      trackId,
+      label,
+      category,
+      confidence,
+      keyframes,
+      startTime: keyframes[0]?.t ?? 0,
+      endTime: keyframes.at(-1)?.t ?? keyframes[0]?.t ?? 0,
+      attributes: normalizeAttributes(track.attributes),
+    });
   }
 
-  let winner: string | null = null;
-  let winnerCount = -1;
-
-  for (const [value, count] of counts.entries()) {
-    if (count > winnerCount) {
-      winner = value;
-      winnerCount = count;
-    }
-  }
-
-  return winner;
-}
-
-function mergeAttributes(
-  attributesList: Array<ShotObjectAttributes | null>,
-): ShotObjectAttributes | null {
-  const merged: ShotObjectAttributes = {};
-
-  for (const attributes of attributesList) {
-    if (!attributes) {
-      continue;
-    }
-
-    for (const [key, value] of Object.entries(attributes)) {
-      merged[key] = value;
-    }
-  }
-
-  return Object.keys(merged).length > 0 ? merged : null;
+  return normalizedTracks
+    .sort(
+      (left, right) =>
+        left.startTime - right.startTime ||
+        (right.confidence ?? 0) - (left.confidence ?? 0),
+    )
+    .slice(0, MAX_OBJECT_SAMPLES);
 }
 
 export function sampleObjectDetectionTimestamps(shotDuration: number) {
   const duration = Number.isFinite(shotDuration) ? Math.max(0, shotDuration) : 0;
-  const timestamps = new Set<number>([0]);
 
+  if (duration <= OBJECT_SAMPLE_INTERVAL_SECONDS * (MIN_OBJECT_SAMPLES - 1)) {
+    const count = MIN_OBJECT_SAMPLES;
+    const step = count > 1 ? duration / (count - 1) : 0;
+    return Array.from({ length: count }, (_, index) => roundTime(step * index));
+  }
+
+  const timestamps: number[] = [];
   for (
-    let current = OBJECT_SAMPLE_INTERVAL_SECONDS;
-    current <= duration && timestamps.size < MAX_OBJECT_SAMPLES;
+    let current = 0;
+    current <= duration && timestamps.length < MAX_OBJECT_SAMPLES;
     current += OBJECT_SAMPLE_INTERVAL_SECONDS
   ) {
-    timestamps.add(roundTime(current));
+    timestamps.push(roundTime(current));
   }
 
-  if (timestamps.size < MIN_OBJECT_SAMPLES) {
-    timestamps.add(roundTime(duration > 0 ? duration : OBJECT_SAMPLE_INTERVAL_SECONDS));
+  if (timestamps.length < MIN_OBJECT_SAMPLES) {
+    timestamps.push(roundTime(duration));
   }
 
-  return [...timestamps].sort((left, right) => left - right).slice(0, MAX_OBJECT_SAMPLES);
+  return timestamps.slice(0, MAX_OBJECT_SAMPLES);
 }
 
-async function runProcessForBuffer(command: string, args: string[]) {
-  return new Promise<Buffer>((resolve, reject) => {
+async function runProcess(command: string, args: string[]) {
+  return new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
       env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", "ignore", "pipe"],
     });
 
-    const stdoutChunks: Buffer[] = [];
     let stderr = "";
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdoutChunks.push(Buffer.from(chunk));
-    });
 
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -378,7 +372,7 @@ async function runProcessForBuffer(command: string, args: string[]) {
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) {
-        resolve(Buffer.concat(stdoutChunks));
+        resolve();
         return;
       }
 
@@ -389,31 +383,57 @@ async function runProcessForBuffer(command: string, args: string[]) {
   });
 }
 
-async function extractFrameBuffer(videoPath: string, timestamp: number) {
-  return runProcessForBuffer("ffmpeg", [
+async function extractFrameImage(
+  videoPath: string,
+  timestamp: number,
+  frameIndex: number,
+  outputDir: string,
+) {
+  const framePath = path.join(outputDir, `frame_${frameIndex}.jpg`);
+
+  await runProcess("ffmpeg", [
     "-hide_banner",
     "-loglevel",
     "error",
+    "-y",
     "-ss",
     roundTime(timestamp).toFixed(3),
     "-i",
     videoPath,
     "-vframes",
     "1",
-    "-f",
-    "image2pipe",
-    "-vcodec",
-    "mjpeg",
-    "pipe:1",
+    "-q:v",
+    "2",
+    framePath,
   ]);
+
+  const buffer = await readFile(framePath);
+
+  return {
+    frameIndex,
+    timestamp,
+    data: buffer.toString("base64"),
+    contentType: "image/jpeg",
+  } satisfies FrameImage;
 }
 
-async function detectObjectsInFrame(
-  imageBuffer: Buffer,
-  timestamp: number,
-  contentType = "image/jpeg",
-  apiKey?: string,
-) {
+async function extractFrameImages(videoPath: string, timestamps: number[]) {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-object-frames-"));
+
+  try {
+    const frames: FrameImage[] = [];
+
+    for (const [frameIndex, timestamp] of timestamps.entries()) {
+      frames.push(await extractFrameImage(videoPath, timestamp, frameIndex, tempDir));
+    }
+
+    return frames;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function requestTrackedObjects(frames: FrameImage[], apiKey?: string) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_OBJECT_MODEL}:generateContent`,
     {
@@ -426,13 +446,18 @@ async function detectObjectsInFrame(
         contents: [
           {
             parts: [
-              { text: buildPromptForTimestamp(timestamp) },
-              {
-                inline_data: {
-                  mime_type: contentType,
-                  data: imageBuffer.toString("base64"),
+              { text: buildBatchPrompt(frames.map((frame) => frame.timestamp)) },
+              ...frames.flatMap((frame) => [
+                {
+                  text: `Frame ${frame.frameIndex} at ${roundTime(frame.timestamp)} seconds.`,
                 },
-              },
+                {
+                  inline_data: {
+                    mime_type: frame.contentType,
+                    data: frame.data,
+                  },
+                },
+              ]),
             ],
           },
         ],
@@ -469,104 +494,55 @@ async function detectObjectsInFrame(
     throw new Error("Gemini object detection response did not include text.");
   }
 
-  return normalizeDetectedObjects(extractJsonArray(text));
+  return normalizeTrackResponse(
+    extractJsonObject(text),
+    frames.map((frame) => frame.timestamp),
+  );
 }
 
-function buildTrackFromDetections(track: MutableTrack): ObjectTrack {
-  const keyframes = track.detections
-    .map((detection) => ({
-      t: roundTime(detection.time),
-      x: detection.bbox.x,
-      y: detection.bbox.y,
-      w: detection.bbox.w,
-      h: detection.bbox.h,
-    }))
-    .sort((left, right) => left.t - right.t);
-  const confidences = track.detections
-    .map((detection) => detection.confidence)
-    .filter((confidence): confidence is number => typeof confidence === "number");
-  const averageConfidence =
-    confidences.length > 0
-      ? roundNumber(
-          confidences.reduce((sum, confidence) => sum + confidence, 0) / confidences.length,
-        )
-      : null;
+async function detectObjectsInFrame(
+  imageBuffer: Buffer,
+  timestamp: number,
+  contentType = "image/jpeg",
+  apiKey?: string,
+) {
+  const tracks = await requestTrackedObjects(
+    [
+      {
+        frameIndex: 0,
+        timestamp,
+        data: imageBuffer.toString("base64"),
+        contentType,
+      },
+      {
+        frameIndex: 1,
+        timestamp: roundTime(timestamp + 0.001),
+        data: imageBuffer.toString("base64"),
+        contentType,
+      },
+    ],
+    apiKey,
+  );
 
-  return {
-    trackId: track.trackId,
-    label: getMostCommonValue(track.detections.map((detection) => detection.label)) ?? "object",
-    category: getMostCommonValue(track.detections.map((detection) => detection.category)),
-    confidence: averageConfidence,
-    keyframes,
-    startTime: keyframes[0]?.t ?? 0,
-    endTime: keyframes.at(-1)?.t ?? keyframes[0]?.t ?? 0,
-    attributes: mergeAttributes(track.detections.map((detection) => detection.attributes)),
-  };
-}
-
-function buildObjectTracks(frameDetections: FrameDetection[][]) {
-  const tracks: MutableTrack[] = [];
-
-  for (const detections of frameDetections) {
-    const matchedTrackIds = new Set<string>();
-
-    for (const detection of detections) {
-      let bestTrack: MutableTrack | null = null;
-      let bestScore = Number.NEGATIVE_INFINITY;
-
-      for (const track of tracks) {
-        if (matchedTrackIds.has(track.trackId)) {
-          continue;
-        }
-
-        const lastDetection = track.detections.at(-1);
-        if (!lastDetection || lastDetection.time > detection.time) {
-          continue;
-        }
-
-        if (!labelsAreSimilar(lastDetection.label, detection.label)) {
-          continue;
-        }
-
-        const iou = getIntersectionOverUnion(lastDetection.bbox, detection.bbox);
-        const centerDistance = getCenterDistance(lastDetection.bbox, detection.bbox);
-
-        if (iou <= 0.3 && centerDistance >= 0.2) {
-          continue;
-        }
-
-        const score =
-          iou +
-          Math.max(0, 0.2 - centerDistance) +
-          (lastDetection.category === detection.category ? 0.1 : 0);
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestTrack = track;
-        }
-      }
-
-      if (bestTrack) {
-        bestTrack.detections.push(detection);
-        matchedTrackIds.add(bestTrack.trackId);
-        continue;
-      }
-
-      tracks.push({
-        trackId: `track_${String(tracks.length + 1).padStart(3, "0")}`,
-        detections: [detection],
-      });
-    }
-  }
-
-  return tracks
-    .map(buildTrackFromDetections)
-    .filter((track) => track.keyframes.length > 0)
-    .sort(
-      (left, right) =>
-        left.startTime - right.startTime ||
-        (right.confidence ?? 0) - (left.confidence ?? 0),
-    );
+  return tracks.flatMap((track) => {
+    const keyframe = track.keyframes[0];
+    return keyframe
+      ? [
+          {
+            label: track.label,
+            category: track.category as DetectedCategory | null,
+            confidence: track.confidence,
+            bbox: {
+              x: keyframe.x,
+              y: keyframe.y,
+              w: keyframe.w,
+              h: keyframe.h,
+            },
+            attributes: track.attributes,
+          } satisfies DetectedObject,
+        ]
+      : [];
+  });
 }
 
 function mapStoredTrack(row: typeof schema.shotObjects.$inferSelect): StoredObjectTrack {
@@ -627,20 +603,8 @@ export async function detectObjectsMultiFrame(
   shotDuration: number,
 ): Promise<ObjectTrack[]> {
   const timestamps = sampleObjectDetectionTimestamps(shotDuration);
-  const frameDetections: FrameDetection[][] = [];
-
-  for (const timestamp of timestamps) {
-    const frameBuffer = await extractFrameBuffer(videoPath, timestamp);
-    const detections = await detectObjectsInFrame(frameBuffer, timestamp);
-    frameDetections.push(
-      detections.map((detection) => ({
-        ...detection,
-        time: timestamp,
-      })),
-    );
-  }
-
-  return buildObjectTracks(frameDetections);
+  const frames = await extractFrameImages(videoPath, timestamps);
+  return requestTrackedObjects(frames);
 }
 
 export async function replaceShotObjects(shotId: string, tracks: ObjectTrack[]) {

@@ -51,7 +51,7 @@ export function ShotPlayer({ shot }: ShotPlayerProps) {
       return;
     }
 
-    const cancelFrame = () => {
+    const stopFrame = () => {
       if (frameRef.current !== null) {
         cancelAnimationFrame(frameRef.current);
         frameRef.current = null;
@@ -63,40 +63,45 @@ export function ShotPlayer({ shot }: ShotPlayerProps) {
 
       if (!video.paused && !video.ended) {
         frameRef.current = requestAnimationFrame(syncCurrentTime);
-      } else {
-        frameRef.current = null;
       }
     };
 
     const startSync = () => {
-      cancelFrame();
-      frameRef.current = requestAnimationFrame(syncCurrentTime);
+      stopFrame();
+      syncCurrentTime();
     };
 
     const stopSync = () => {
-      cancelFrame();
+      stopFrame();
       setCurrentTime(video.currentTime);
     };
 
-    const handleTimeUpdate = () => {
+    const handleDiscreteSync = () => {
       setCurrentTime(video.currentTime);
     };
+
+    setCurrentTime(video.currentTime);
+    if (!video.paused && !video.ended) {
+      startSync();
+    }
 
     video.addEventListener("play", startSync);
     video.addEventListener("pause", stopSync);
     video.addEventListener("ended", stopSync);
-    video.addEventListener("seeking", handleTimeUpdate);
-    video.addEventListener("seeked", handleTimeUpdate);
-    video.addEventListener("timeupdate", handleTimeUpdate);
+    video.addEventListener("loadedmetadata", handleDiscreteSync);
+    video.addEventListener("seeking", handleDiscreteSync);
+    video.addEventListener("seeked", handleDiscreteSync);
+    video.addEventListener("timeupdate", handleDiscreteSync);
 
     return () => {
-      cancelFrame();
+      stopFrame();
       video.removeEventListener("play", startSync);
       video.removeEventListener("pause", stopSync);
       video.removeEventListener("ended", stopSync);
-      video.removeEventListener("seeking", handleTimeUpdate);
-      video.removeEventListener("seeked", handleTimeUpdate);
-      video.removeEventListener("timeupdate", handleTimeUpdate);
+      video.removeEventListener("loadedmetadata", handleDiscreteSync);
+      video.removeEventListener("seeking", handleDiscreteSync);
+      video.removeEventListener("seeked", handleDiscreteSync);
+      video.removeEventListener("timeupdate", handleDiscreteSync);
     };
   }, [shot.videoUrl]);
 

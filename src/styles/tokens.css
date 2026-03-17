@@ -56,6 +56,12 @@
   --color-overlay-badge:      var(--color-signal-amber);
   --color-overlay-info:       var(--color-signal-green);
   --color-overlay-speed:      var(--color-accent-light);
+  --color-overlay-object-person: #22d3ee;
+  --color-overlay-object-vehicle: #f59e0b;
+  --color-overlay-object-object: #a78bfa;
+  --color-overlay-object-environment: #4ade80;
+  --color-overlay-object-animal: #fb923c;
+  --color-overlay-object-text: #94a3b8;
 
   /* ─── Semantic: Status ─── */
   --color-status-verified:   var(--color-signal-green);
