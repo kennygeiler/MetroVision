@@ -3,10 +3,11 @@
 import Image from "next/image";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Eye, EyeOff } from "lucide-react";
+import { Boxes, Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { MetadataOverlay } from "@/components/video/metadata-overlay";
+import { ObjectOverlay } from "@/components/video/object-overlay";
 import type { ShotWithDetails } from "@/lib/types";
 
 type ShotPlayerProps = {
@@ -30,10 +31,15 @@ const legendItems = [
     label: "Badge system",
     color: "var(--color-overlay-badge)",
   },
+  {
+    label: "Object recognition",
+    color: "var(--color-overlay-info)",
+  },
 ] as const;
 
 export function ShotPlayer({ shot }: ShotPlayerProps) {
   const [showOverlay, setShowOverlay] = useState(true);
+  const [showObjects, setShowObjects] = useState(true);
 
   return (
     <div className="space-y-4">
@@ -98,7 +104,7 @@ export function ShotPlayer({ shot }: ShotPlayerProps) {
           </div>
         ) : null}
 
-        <div className="absolute right-4 top-4 z-30">
+        <div className="absolute right-4 top-4 z-30 flex flex-wrap justify-end gap-2">
           <Button
             type="button"
             variant="outline"
@@ -111,11 +117,26 @@ export function ShotPlayer({ shot }: ShotPlayerProps) {
             onClick={() => setShowOverlay((current) => !current)}
           >
             {showOverlay ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-            {showOverlay ? "Hide overlay" : "Show overlay"}
+            Overlay
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full border-[var(--color-border-default)] px-3 text-[var(--color-text-primary)] backdrop-blur-xl hover:bg-[var(--color-surface-tertiary)]"
+            style={{
+              backgroundColor:
+                "color-mix(in oklch, var(--color-surface-primary) 58%, transparent)",
+            }}
+            onClick={() => setShowObjects((current) => !current)}
+          >
+            <Boxes aria-hidden="true" />
+            Objects
           </Button>
         </div>
 
         {showOverlay ? <MetadataOverlay shot={shot} /> : null}
+        <ObjectOverlay objects={shot.objects} visible={showObjects} />
       </div>
 
       <div
@@ -132,7 +153,7 @@ export function ShotPlayer({ shot }: ShotPlayerProps) {
             Overlay legend
           </p>
           <span className="text-sm text-[var(--color-text-secondary)]">
-            Color channels map the overlay layer to movement analysis primitives.
+            Color channels map the overlay layers to movement analysis and detected scene elements.
           </span>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">

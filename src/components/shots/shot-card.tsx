@@ -14,6 +14,8 @@ type ShotCardProps = {
 };
 
 export function ShotCard({ shot }: ShotCardProps) {
+  const topObjectLabels = shot.objects.slice(0, 3);
+
   return (
     <Link
       href={`/shot/${shot.id}`}
@@ -95,6 +97,35 @@ export function ShotCard({ shot }: ShotCardProps) {
           <p className="mt-1 font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
             {getDirectionDisplayName(shot.metadata.direction)}
           </p>
+          {shot.objects.length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span
+                className="rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)]"
+                style={{
+                  backgroundColor:
+                    "color-mix(in oklch, var(--color-overlay-info) 18%, transparent)",
+                  borderColor:
+                    "color-mix(in oklch, var(--color-overlay-info) 58%, transparent)",
+                }}
+              >
+                {shot.objects.length} {shot.objects.length === 1 ? "object" : "objects"}
+              </span>
+              {topObjectLabels.map((object) => (
+                <span
+                  key={object.id}
+                  className="rounded-full border px-2.5 py-1 font-mono text-[10px] text-[var(--color-text-secondary)]"
+                  style={{
+                    backgroundColor:
+                      "color-mix(in oklch, var(--color-surface-primary) 72%, transparent)",
+                    borderColor:
+                      "color-mix(in oklch, var(--color-border-subtle) 88%, transparent)",
+                  }}
+                >
+                  {object.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
         <span className="text-sm text-[var(--color-text-accent)] transition-transform duration-300 group-hover:translate-x-1">
           Open shot

@@ -16,6 +16,25 @@ import {
   getVerticalAngleDisplayName,
 } from "@/lib/shot-display";
 
+function getObjectCategoryColor(category: string | null) {
+  switch (category) {
+    case "person":
+      return "var(--color-overlay-motion)";
+    case "vehicle":
+      return "var(--color-overlay-badge)";
+    case "object":
+      return "var(--color-signal-violet)";
+    case "environment":
+      return "var(--color-overlay-info)";
+    case "animal":
+      return "var(--color-signal-amber)";
+    case "text":
+      return "var(--color-text-secondary)";
+    default:
+      return "var(--color-border-strong)";
+  }
+}
+
 type ShotDetailPageProps = {
   params: Promise<{
     id: string;
@@ -186,6 +205,132 @@ export default async function ShotDetailPage({ params }: ShotDetailPageProps) {
             </p>
           ) : null}
         </aside>
+      </section>
+
+      <section
+        className="rounded-[var(--radius-xl)] border p-6"
+        style={{
+          backgroundColor:
+            "color-mix(in oklch, var(--color-surface-secondary) 76%, transparent)",
+          borderColor:
+            "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+              Objects
+            </p>
+            <h2
+              className="mt-2 text-2xl font-semibold tracking-[var(--letter-spacing-snug)] text-[var(--color-text-primary)]"
+              style={{ fontFamily: "var(--font-heading)" }}
+            >
+              Scene detections
+            </h2>
+          </div>
+          <span className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)]">
+            {shot.objects.length} {shot.objects.length === 1 ? "object" : "objects"}
+          </span>
+        </div>
+
+        {shot.objects.length > 0 ? (
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {shot.objects.map((object) => {
+              const color = getObjectCategoryColor(object.category);
+              const attributes = Object.entries(object.attributes ?? {});
+              const confidence = Math.max(
+                0,
+                Math.min(100, Math.round((object.confidence ?? 0) * 100)),
+              );
+
+              return (
+                <article
+                  key={object.id}
+                  className="rounded-[var(--radius-lg)] border p-4"
+                  style={{
+                    backgroundColor:
+                      "color-mix(in oklch, var(--color-surface-primary) 72%, transparent)",
+                    borderColor:
+                      "color-mix(in oklch, var(--color-border-subtle) 90%, transparent)",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        {object.label}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span
+                          className="rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)]"
+                          style={{
+                            color,
+                            backgroundColor: `color-mix(in oklch, ${color} 14%, transparent)`,
+                            borderColor: `color-mix(in oklch, ${color} 46%, transparent)`,
+                          }}
+                        >
+                          {object.category ?? "untyped"}
+                        </span>
+                        {object.frameTime !== null ? (
+                          <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                            {object.frameTime.toFixed(2)}s
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs text-[var(--color-text-secondary)]">
+                      {typeof object.confidence === "number" ? `${confidence}%` : "n/a"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4">
+                    <div
+                      className="h-2 overflow-hidden rounded-full"
+                      style={{
+                        backgroundColor:
+                          "color-mix(in oklch, var(--color-surface-secondary) 88%, transparent)",
+                      }}
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${confidence}%`,
+                          background: `linear-gradient(90deg, color-mix(in oklch, ${color} 56%, transparent), ${color})`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                      Attributes
+                    </p>
+                    {attributes.length > 0 ? (
+                      attributes.map(([key, value]) => (
+                        <div
+                          key={`${object.id}-${key}`}
+                          className="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span className="text-[var(--color-text-tertiary)]">{key}</span>
+                          <span className="text-right text-[var(--color-text-secondary)]">
+                            {value}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-[var(--color-text-secondary)]">
+                        No secondary attributes attached.
+                      </p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-[var(--color-text-secondary)]">
+            No detected objects are attached to this shot yet.
+          </p>
+        )}
       </section>
     </div>
   );

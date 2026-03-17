@@ -26,6 +26,7 @@ export type CompoundPart = {
 
 export type VerificationFieldRatings = Record<string, number | null>;
 export type VerificationCorrections = Record<string, string | null>;
+export type ShotObjectAttributes = Record<string, string>;
 
 const vector = customType<{
   data: number[];
@@ -118,10 +119,25 @@ export const shotEmbeddings = pgTable("shot_embeddings", {
   shotId: uuid("shot_id")
     .references(() => shots.id, { onDelete: "cascade" })
     .notNull()
-    .unique()
     .primaryKey(),
   embedding: vector("embedding", { dimensions: 768 }).notNull(),
   searchText: text("search_text"),
+});
+
+export const shotObjects = pgTable("shot_objects", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  shotId: uuid("shot_id")
+    .references(() => shots.id, { onDelete: "cascade" })
+    .notNull(),
+  label: text("label").notNull(),
+  category: text("category"),
+  confidence: real("confidence"),
+  bboxX: real("bbox_x"),
+  bboxY: real("bbox_y"),
+  bboxW: real("bbox_w"),
+  bboxH: real("bbox_h"),
+  frameTime: real("frame_time"),
+  attributes: jsonb("attributes").$type<ShotObjectAttributes>(),
 });
 
 export type Film = typeof films.$inferSelect;
@@ -141,3 +157,6 @@ export type NewVerification = typeof verifications.$inferInsert;
 
 export type ShotEmbedding = typeof shotEmbeddings.$inferSelect;
 export type NewShotEmbedding = typeof shotEmbeddings.$inferInsert;
+
+export type ShotObject = typeof shotObjects.$inferSelect;
+export type NewShotObject = typeof shotObjects.$inferInsert;

@@ -66,6 +66,18 @@ export type ShotWithDetails = {
   videoUrl: string | null;
   thumbnailUrl: string | null;
   createdAt: string | null;
+  objects: Array<{
+    id: string;
+    label: string;
+    category: string | null;
+    confidence: number | null;
+    bboxX: number | null;
+    bboxY: number | null;
+    bboxW: number | null;
+    bboxH: number | null;
+    frameTime: number | null;
+    attributes: Record<string, string> | null;
+  }>;
   relevance?: number;
 };
 

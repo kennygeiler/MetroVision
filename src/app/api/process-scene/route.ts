@@ -11,6 +11,10 @@ import { NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { buildShotSearchText, generateTextEmbedding } from "@/db/embeddings";
 import type { CompoundPart } from "@/db/schema";
+import {
+  detectObjectsFromImagePath,
+  replaceShotObjects,
+} from "@/lib/object-detection";
 import type { ShotWithDetails } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -59,11 +63,13 @@ type ProcessedShot = {
   start: number;
   end: number;
   duration: number;
+  midpoint: number;
   clipPath: string;
   thumbnailPath: string;
   videoUrl: string;
   thumbnailUrl: string;
   classification: ClassifiedShot;
+  detectedObjects: Awaited<ReturnType<typeof detectObjectsFromImagePath>>;
   searchText: string;
   embedding: number[];
 };
@@ -258,6 +264,7 @@ async function extractClipAssets(
     clipPath,
     thumbnailPath,
     duration,
+    midpoint,
   };
 }
 
@@ -349,6 +356,7 @@ function buildSearchText(film: { id: string; title: string; director: string; ye
       videoUrl: shot.videoUrl,
       thumbnailUrl: shot.thumbnailUrl,
       createdAt: null,
+      objects: [],
     };
 
     return buildShotSearchText(shotForEmbedding);
@@ -409,6 +417,7 @@ export async function POST(request: Request) {
     for (const [index, split] of payload.splits.entries()) {
       const assets = await extractClipAssets(payload.videoPath, split, index, tempDir);
       const classification = await classifyClip(assets.clipPath);
+      const detectedObjects = await detectObjectsFromImagePath(assets.thumbnailPath);
       const shotSlug = `shot-${String(index + 1).padStart(4, "0")}`;
       const videoUrl = await uploadAsset(
         assets.clipPath,
@@ -428,11 +437,13 @@ export async function POST(request: Request) {
         start: split.start,
         end: split.end,
         duration: assets.duration,
+        midpoint: assets.midpoint,
         clipPath: assets.clipPath,
         thumbnailPath: assets.thumbnailPath,
         videoUrl,
         thumbnailUrl,
         classification,
+        detectedObjects,
         searchText: "",
         embedding: [],
       } satisfies ProcessedShot);
@@ -495,6 +506,8 @@ export async function POST(request: Request) {
         embedding: shot.embedding,
         searchText: shot.searchText,
       });
+
+      await replaceShotObjects(insertedShot.id, shot.detectedObjects, shot.midpoint);
     }
 
     return NextResponse.json({

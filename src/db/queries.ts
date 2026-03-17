@@ -196,7 +196,54 @@ function mapShotRow(row: ShotRow): ShotWithDetails {
     videoUrl: proxyBlobUrl(row.shotVideoUrl ?? null),
     thumbnailUrl: proxyBlobUrl(row.shotThumbnailUrl ?? null),
     createdAt: toIsoString(row.shotCreatedAt ?? null),
+    objects: [],
   };
+}
+
+function mapShotObjectRow(row: typeof schema.shotObjects.$inferSelect) {
+  return {
+    id: row.id,
+    label: row.label,
+    category: row.category ?? null,
+    confidence: row.confidence ?? null,
+    bboxX: row.bboxX ?? null,
+    bboxY: row.bboxY ?? null,
+    bboxW: row.bboxW ?? null,
+    bboxH: row.bboxH ?? null,
+    frameTime: row.frameTime ?? null,
+    attributes: (row.attributes as Record<string, string> | null) ?? null,
+  };
+}
+
+async function getObjectsGroupedByShotIds(shotIds: string[]) {
+  if (shotIds.length === 0) {
+    return new Map<string, ShotWithDetails["objects"]>();
+  }
+
+  const rows = await db
+    .select()
+    .from(schema.shotObjects)
+    .where(inArray(schema.shotObjects.shotId, shotIds))
+    .orderBy(schema.shotObjects.frameTime, desc(schema.shotObjects.confidence));
+
+  const objectsByShotId = new Map<string, ShotWithDetails["objects"]>();
+
+  for (const row of rows) {
+    const objects = objectsByShotId.get(row.shotId) ?? [];
+    objects.push(mapShotObjectRow(row));
+    objectsByShotId.set(row.shotId, objects);
+  }
+
+  return objectsByShotId;
+}
+
+async function attachObjectsToShots(shots: ShotWithDetails[]) {
+  const objectsByShotId = await getObjectsGroupedByShotIds(shots.map((shot) => shot.id));
+
+  return shots.map((shot) => ({
+    ...shot,
+    objects: objectsByShotId.get(shot.id) ?? [],
+  }));
 }
 
 function mapExportShotRow(row: ShotRow): ExportShotRecord {
@@ -389,7 +436,7 @@ export async function getAllShots(filters?: ShotQueryFilters) {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(schema.shots.createdAt));
 
-  return rows.map(mapShotRow);
+  return attachObjectsToShots(rows.map(mapShotRow));
 }
 
 export async function getShotById(id: string) {
@@ -397,7 +444,22 @@ export async function getShotById(id: string) {
     .where(eq(schema.shots.id, id))
     .limit(1);
 
-  return row ? mapShotRow(row) : null;
+  if (!row) {
+    return null;
+  }
+
+  const [shot] = await attachObjectsToShots([mapShotRow(row)]);
+  return shot ?? null;
+}
+
+export async function getObjectsForShot(shotId: string) {
+  const rows = await db
+    .select()
+    .from(schema.shotObjects)
+    .where(eq(schema.shotObjects.shotId, shotId))
+    .orderBy(schema.shotObjects.frameTime, desc(schema.shotObjects.confidence));
+
+  return rows.map(mapShotObjectRow);
 }
 
 export async function getShotsForExport(filters?: {
@@ -529,7 +591,7 @@ async function searchShotsWithEmbeddings(
     });
   }
 
-  return rankedShots;
+  return attachObjectsToShots(rankedShots);
 }
 
 export async function searchShots(query: string, options?: SearchShotsOptions) {
