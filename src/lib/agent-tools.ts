@@ -113,6 +113,63 @@ export const TOOL_DECLARATIONS = [
       properties: {},
     },
   },
+  {
+    name: "render_pacing_heatmap",
+    description:
+      "Render a pacing heatmap visualization for a film showing shot duration patterns over time. Use when the user asks about pacing, rhythm, or tempo of a film.",
+    parameters: {
+      type: "object",
+      properties: {
+        filmTitle: { type: "string", description: "Film title to visualize" },
+      },
+      required: ["filmTitle"],
+    },
+  },
+  {
+    name: "render_director_radar",
+    description:
+      "Render a radar chart comparing camera technique distributions for one or more directors. Use when comparing directorial styles.",
+    parameters: {
+      type: "object",
+      properties: {
+        directors: {
+          type: "array",
+          items: { type: "string" },
+          description: "Director names to compare on radar chart",
+        },
+      },
+      required: ["directors"],
+    },
+  },
+  {
+    name: "render_shotlist",
+    description:
+      "Render a structured shotlist table for a film or scene. Use when the user wants to see or export a shotlist.",
+    parameters: {
+      type: "object",
+      properties: {
+        filmTitle: { type: "string", description: "Film title" },
+        sceneNumber: { type: "number", description: "Optional scene number to filter" },
+      },
+      required: ["filmTitle"],
+    },
+  },
+  {
+    name: "render_comparison_table",
+    description:
+      "Render a side-by-side comparison table of two films' cinematography statistics. Use when comparing films.",
+    parameters: {
+      type: "object",
+      properties: {
+        filmTitles: {
+          type: "array",
+          items: { type: "string" },
+          description: "Two film titles to compare",
+        },
+      },
+      required: ["filmTitles"],
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -136,6 +193,14 @@ export async function executeToolCall(
       return handleGetTechniqueExamples(args);
     case "get_archive_summary":
       return handleGetArchiveSummary();
+    case "render_pacing_heatmap":
+      return handleRenderPacingHeatmap(args);
+    case "render_director_radar":
+      return handleRenderDirectorRadar(args);
+    case "render_shotlist":
+      return handleRenderShotlist(args);
+    case "render_comparison_table":
+      return handleRenderComparisonTable(args);
     default:
       return { error: `Unknown tool: ${name}` };
   }
@@ -495,5 +560,168 @@ async function handleGetArchiveSummary() {
     })),
     movementTypeDistribution: movementCounts,
     shotSizeDistribution: sizeCounts,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Generative UI Visualization Handlers (M6)
+// These return typed payloads that the chat client maps to D3 components.
+// AC-08: No LLM-generated code — only structured data for pre-registered components.
+// ---------------------------------------------------------------------------
+
+async function handleRenderPacingHeatmap(args: Record<string, unknown>) {
+  const title = String(args.filmTitle ?? "");
+  const films = await getAllFilms();
+  const match =
+    films.find((f) => f.title.toLowerCase() === title.toLowerCase()) ??
+    films.find((f) => f.title.toLowerCase().includes(title.toLowerCase()));
+
+  if (!match) {
+    return { error: `Film "${title}" not found.`, vizType: null };
+  }
+
+  const film = await getFilmById(match.id);
+  if (!film) return { error: "Could not load film.", vizType: null };
+
+  const shots = film.scenes.flatMap((s) =>
+    s.shots.map((shot) => ({
+      id: shot.id,
+      filmTitle: film.title,
+      director: film.director,
+      sceneTitle: s.title,
+      sceneNumber: s.sceneNumber,
+      shotIndex: 0,
+      movementType: shot.metadata.movementType,
+      direction: shot.metadata.direction,
+      speed: shot.metadata.speed,
+      shotSize: shot.metadata.shotSize,
+      angleVertical: shot.metadata.angleVertical,
+      duration: shot.duration,
+      objectCount: 0,
+      description: shot.semantic?.description ?? null,
+      filmId: film.id,
+    })),
+  );
+
+  return {
+    vizType: "pacing_heatmap",
+    filmTitle: film.title,
+    director: film.director,
+    data: shots,
+  };
+}
+
+async function handleRenderDirectorRadar(args: Record<string, unknown>) {
+  const directors = (args.directors as string[]) ?? [];
+  const vizData = await getVisualizationData();
+
+  const directorData: Record<string, Record<string, number>> = {};
+
+  for (const director of directors) {
+    const shots = vizData.shots.filter(
+      (s) => s.director.toLowerCase() === director.toLowerCase(),
+    );
+    if (shots.length === 0) continue;
+
+    const counts: Record<string, number> = {};
+    for (const shot of shots) {
+      counts[shot.movementType] = (counts[shot.movementType] ?? 0) + 1;
+    }
+    // Normalize to percentages
+    const total = shots.length;
+    const pcts: Record<string, number> = {};
+    for (const [k, v] of Object.entries(counts)) {
+      pcts[k] = Math.round((v / total) * 1000) / 10;
+    }
+    directorData[director] = pcts;
+  }
+
+  return {
+    vizType: "director_radar",
+    directors: Object.keys(directorData),
+    data: directorData,
+  };
+}
+
+async function handleRenderShotlist(args: Record<string, unknown>) {
+  const title = String(args.filmTitle ?? "");
+  const sceneNum = args.sceneNumber ? Number(args.sceneNumber) : undefined;
+
+  const films = await getAllFilms();
+  const match =
+    films.find((f) => f.title.toLowerCase() === title.toLowerCase()) ??
+    films.find((f) => f.title.toLowerCase().includes(title.toLowerCase()));
+
+  if (!match) return { error: `Film "${title}" not found.`, vizType: null };
+
+  const film = await getFilmById(match.id);
+  if (!film) return { error: "Could not load film.", vizType: null };
+
+  const scenes = sceneNum
+    ? film.scenes.filter((s) => s.sceneNumber === sceneNum)
+    : film.scenes;
+
+  const shotlist = scenes.flatMap((scene) =>
+    scene.shots.map((shot, idx) => ({
+      shotNumber: idx + 1,
+      sceneNumber: scene.sceneNumber,
+      sceneTitle: scene.title,
+      movementType: shot.metadata.movementType,
+      direction: shot.metadata.direction,
+      shotSize: shot.metadata.shotSize,
+      speed: shot.metadata.speed,
+      duration: shot.duration,
+      description: shot.semantic?.description ?? "",
+      thumbnailUrl: shot.thumbnailUrl,
+    })),
+  );
+
+  return {
+    vizType: "shotlist",
+    filmTitle: film.title,
+    director: film.director,
+    sceneFilter: sceneNum ?? null,
+    data: shotlist,
+  };
+}
+
+async function handleRenderComparisonTable(args: Record<string, unknown>) {
+  const filmTitles = (args.filmTitles as string[]) ?? [];
+  const allFilms = await getAllFilms();
+
+  const comparisons: Array<{
+    title: string;
+    director: string;
+    year: number | null;
+    shotCount: number;
+    sceneCount: number;
+    averageShotLength: number;
+    movementTypeFrequency: Record<string, number>;
+    shotSizeDistribution: Record<string, number>;
+  }> = [];
+
+  for (const title of filmTitles.slice(0, 4)) {
+    const match =
+      allFilms.find((f) => f.title.toLowerCase() === title.toLowerCase()) ??
+      allFilms.find((f) => f.title.toLowerCase().includes(title.toLowerCase()));
+
+    if (!match) continue;
+
+    const stats = await getFilmCoverageStats(match.id);
+    comparisons.push({
+      title: match.title,
+      director: match.director,
+      year: match.year,
+      shotCount: stats.shotCount,
+      sceneCount: stats.sceneCount,
+      averageShotLength: Math.round(stats.averageShotLength * 100) / 100,
+      movementTypeFrequency: stats.movementTypeFrequency,
+      shotSizeDistribution: stats.shotSizeDistribution,
+    });
+  }
+
+  return {
+    vizType: "comparison_table",
+    data: comparisons,
   };
 }

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { AGENT_SYSTEM_PROMPT } from "@/lib/agent-system-prompt";
 import { TOOL_DECLARATIONS, executeToolCall } from "@/lib/agent-tools";
+import { retrieve, formatRetrievalContext } from "@/lib/rag-retrieval";
 
 interface ChatMessage {
   role: "user" | "model";
@@ -117,8 +118,34 @@ export async function POST(request: Request) {
         };
 
         try {
+          // RAG: retrieve relevant context from knowledge corpus + film database
+          const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+          let ragContext = "";
+          if (lastUserMsg) {
+            try {
+              const retrieval = await retrieve(lastUserMsg.content, {
+                openAiApiKey: process.env.OPENAI_API_KEY,
+              });
+              ragContext = formatRetrievalContext(retrieval);
+              if (ragContext) {
+                send({ type: "tool_call", name: "rag_retrieval", args: { query: lastUserMsg.content } });
+                send({ type: "tool_result", name: "rag_retrieval", data: { chunksFound: retrieval.corpusChunks.length, shotsFound: retrieval.shots.length } });
+              }
+            } catch {
+              // RAG failure is non-fatal — continue without corpus context
+            }
+          }
+
+          // Inject RAG context into the conversation as a system-level grounding
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let contents: any[] = toGeminiContents(messages);
+          if (ragContext) {
+            contents = [
+              { role: "user", parts: [{ text: `[MetroVision Knowledge Context]\n\n${ragContext}\n\n---\n\nPlease use this context to ground your response. Now respond to the conversation above.` }] },
+              { role: "model", parts: [{ text: "I have the MetroVision knowledge context. I'll use it to ground my analysis." }] },
+              ...contents,
+            ];
+          }
           let response = await callGemini(contents);
 
           // Function calling loop — keep going while Gemini returns tool calls
