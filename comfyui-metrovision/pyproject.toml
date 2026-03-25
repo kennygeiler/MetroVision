@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comfyui-metrovision"
+version = "0.1.0"
+description = "MetroVision cinematography database nodes for ComfyUI"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+[tool.setuptools.packages.find]
+include = ["comfyui_metrovision*"]

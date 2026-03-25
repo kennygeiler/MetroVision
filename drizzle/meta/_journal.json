@@ -22,6 +22,13 @@
       "when": 1774463576732,
       "tag": "0002_material_red_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1774464055051,
+      "tag": "0003_orange_oracle",
+      "breakpoints": true
     }
   ]
 }

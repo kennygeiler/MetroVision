@@ -294,3 +294,19 @@ export type NewFilmEmbedding = typeof filmEmbeddings.$inferInsert;
 
 export type CorpusChunk = typeof corpusChunks.$inferSelect;
 export type NewCorpusChunk = typeof corpusChunks.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// M7: API Keys (operator-issued, no OAuth, no user accounts — AC-21)
+// ---------------------------------------------------------------------------
+
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revoked: boolean("revoked").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
