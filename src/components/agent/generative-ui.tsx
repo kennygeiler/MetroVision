@@ -18,13 +18,6 @@ const PacingHeatmap = dynamic(
   { ssr: false },
 );
 
-const DirectorRadar = dynamic(
-  () =>
-    import("@/components/visualize/director-radar").then(
-      (mod) => mod.DirectorRadar,
-    ),
-  { ssr: false },
-);
 
 // ---------------------------------------------------------------------------
 // Type guards for tool result payloads
@@ -226,18 +219,40 @@ export function GenerativeUIBlock({ data }: { data: unknown }) {
         </div>
       );
 
-    case "director_radar":
+    case "director_radar": {
+      const radarData = data.data as Record<string, Record<string, number>>;
+      const directorNames = data.directors as string[];
       return (
-        <div className="my-3 h-72 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-surface-secondary)] p-4">
-          <p className="mb-2 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-            Director Radar — {(data.directors as string[]).join(" vs ")}
-          </p>
-          <DirectorRadar
-            data={data.data as Record<string, Record<string, number>>}
-            directors={data.directors as string[]}
-          />
+        <div className="my-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-default)]">
+          <div className="border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] px-4 py-2.5">
+            <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+              Director Comparison
+            </p>
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">
+              {directorNames.join(" vs ")}
+            </p>
+          </div>
+          <div className="max-h-64 overflow-y-auto p-4">
+            {directorNames.map((dir) => {
+              const movements = radarData[dir] ?? {};
+              const sorted = Object.entries(movements).sort(([, a], [, b]) => b - a).slice(0, 8);
+              return (
+                <div key={dir} className="mb-3 last:mb-0">
+                  <p className="text-xs font-medium text-[var(--color-text-primary)]">{dir}</p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {sorted.map(([movement, pct]) => (
+                      <span key={movement} className="rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-text-secondary)]">
+                        {movement.replace(/_/g, " ")} {pct}%
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       );
+    }
 
     case "shotlist":
       return (
