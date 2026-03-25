@@ -513,7 +513,7 @@ export function ReviewSplitsWorkspace() {
     try {
       const formData = new FormData();
       formData.append("video", file);
-      const response = await fetch("/api/detect-shots", { method: "POST", body: formData });
+      const response = await fetch("/api/upload-video", { method: "POST", body: formData });
       const payload = (await response.json()) as DetectShotsResponse;
 
       if (!response.ok || !payload.videoPath) {

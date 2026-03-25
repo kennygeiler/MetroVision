@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const UPLOAD_DIR = path.join(tmpdir(), "scenedeck-uploads");
+const UPLOAD_DIR = path.join(tmpdir(), "metrovision-uploads");
 
 export async function POST(request: Request) {
   try {

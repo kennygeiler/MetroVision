@@ -1199,7 +1199,7 @@ function mergeTrackEnrichments(
 }
 
 async function extractFrameSet(videoPath: string, timestamps: number[]) {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-object-frames-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-object-frames-"));
 
   try {
     const frames: SampledFrame[] = [];
@@ -1367,7 +1367,7 @@ export async function detectObjectsFromVideo(shotId: string): Promise<StoredObje
     throw new Error("Shot duration is required for object tracking.");
   }
 
-  const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-objects-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-objects-"));
   const videoPath = path.join(tempDir, "input.mp4");
 
   try {

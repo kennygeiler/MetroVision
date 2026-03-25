@@ -12,9 +12,7 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:embeddings": "tsx src/db/generate-embeddings.ts",
     "db:studio": "drizzle-kit studio",
-    "worker": "tsx src/scripts/run-worker.ts",
     "batch-worker": "python3 -m pipeline.batch_worker",
-    "batch-prototype": "python3 pipeline/batch_api_prototype.py",
     "corpus:ingest": "tsx src/db/ingest-corpus.ts",
     "embeddings:scenes": "tsx src/db/generate-scene-embeddings.ts"
   },

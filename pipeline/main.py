@@ -125,7 +125,7 @@ def run_pipeline(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="SceneDeck video ingestion pipeline")
+    parser = argparse.ArgumentParser(description="MetroVision video ingestion pipeline")
     parser.add_argument("--video", required=True, help="Path to the source video file")
     parser.add_argument("--film-title", help="Film title")
     parser.add_argument("--director", help="Film director")

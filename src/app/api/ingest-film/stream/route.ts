@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         const t2 = Date.now();
         const { mkdtemp: mkTmp } = await import("node:fs/promises");
         const { tmpdir: getTmpDir } = await import("node:os");
-        const extractDir = await mkTmp(path.join(getTmpDir(), "scenedeck-extract-"));
+        const extractDir = await mkTmp(path.join(getTmpDir(), "metrovision-extract-"));
         const localAssets = await processInParallel(splits, extractConcurrency, async (split, worker) => {
           emit({ type: "shot", step: "extract", index: split.index, total: splits.length, worker, status: "start" });
           const result = await extractLocally(videoPath, split, filmSlug, extractDir);

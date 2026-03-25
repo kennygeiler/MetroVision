@@ -15,17 +15,17 @@ if (!databaseUrl) {
 type DatabaseInstance = ReturnType<typeof drizzle<typeof schema>>;
 
 const globalForDb = globalThis as typeof globalThis & {
-  __scenedeckDb?: DatabaseInstance;
+  __metrovisionDb?: DatabaseInstance;
 };
 
 export const db =
-  globalForDb.__scenedeckDb ??
+  globalForDb.__metrovisionDb ??
   drizzle(neon(databaseUrl), {
     schema,
   });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForDb.__scenedeckDb = db;
+  globalForDb.__metrovisionDb = db;
 }
 
 export { schema };

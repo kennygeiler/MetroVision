@@ -120,7 +120,7 @@ export async function detectShots(
   videoPath: string,
   detector: "content" | "adaptive" = "content",
 ): Promise<DetectedSplit[]> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-detect-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-detect-"));
   const csvPath = path.join(tempDir, "shots.csv");
 
   const scenedetectBin = process.env.SCENEDETECT_PATH ?? "scenedetect";
@@ -239,7 +239,7 @@ export async function extractAndUpload(
   split: DetectedSplit,
   filmSlug: string,
 ): Promise<{ clipKey: string; thumbnailKey: string }> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-clip-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-clip-"));
   try {
     const assets = await extractLocally(videoPath, split, filmSlug, tempDir);
     return uploadAssets(assets);
@@ -292,7 +292,7 @@ async function _classifyShotInner(
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_API_KEY is not set.");
 
-  const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-gemini-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-gemini-"));
   // OPTIMIZATION: max 10s clip at 320px, higher CRF = smaller file = faster upload
   const clipDuration = Math.min(split.end - split.start, 10);
   const clipFile = path.join(tempDir, "clip.mp4");

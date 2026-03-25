@@ -14,14 +14,14 @@ app.use(express.json({ limit: "10mb" }));
 
 // Root — prevents 404 noise in browser console
 app.get("/", (_req, res) => {
-  res.json({ service: "scenedeck-worker", status: "ok" });
+  res.json({ service: "metrovision-worker", status: "ok" });
 });
 
 // Health check
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
-    service: "scenedeck-worker",
+    service: "metrovision-worker",
     uptime: process.uptime(),
     env: {
       hasGoogleKey: !!process.env.GOOGLE_API_KEY,
@@ -36,6 +36,6 @@ app.get("/health", (_req, res) => {
 app.post("/api/ingest-film/stream", ingestFilmHandler);
 
 app.listen(PORT, () => {
-  console.log(`[worker] SceneDeck worker listening on port ${PORT}`);
+  console.log(`[worker] MetroVision worker listening on port ${PORT}`);
   console.log(`[worker] Health: http://localhost:${PORT}/health`);
 });

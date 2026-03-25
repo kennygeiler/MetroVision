@@ -141,7 +141,7 @@ async function resolveVideo(videoUrl: string): Promise<string> {
   // For HTTP URLs: use FFmpeg to quickly remux to local file.
   // FFmpeg streams efficiently and -c copy avoids re-encoding (just remuxes).
   // This is faster than a raw download because FFmpeg manages the I/O pipeline.
-  const downloadDir = path.join(tmpdir(), "scenedeck-worker-downloads");
+  const downloadDir = path.join(tmpdir(), "metrovision-worker-downloads");
   await mkdir(downloadDir, { recursive: true });
   const localPath = path.join(downloadDir, `${Date.now()}-film.mp4`);
 
@@ -159,7 +159,7 @@ async function resolveVideo(videoUrl: string): Promise<string> {
 }
 
 async function detectShots(videoPath: string, detector: "content" | "adaptive"): Promise<DetectedSplit[]> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-detect-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-detect-"));
   const csvPath = path.join(tempDir, "shots.csv");
   const bin = process.env.SCENEDETECT_PATH ?? "scenedetect";
   const detectorArgs = detector === "adaptive" ? ["detect-adaptive", "-t", "3.0"] : ["detect-content", "-t", "27.0"];
@@ -191,7 +191,7 @@ async function detectShots(videoPath: string, detector: "content" | "adaptive"):
 }
 
 async function extractAndUpload(videoPath: string, split: DetectedSplit, filmSlug: string): Promise<{ clipKey: string; thumbnailKey: string }> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-clip-"));
+  const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-clip-"));
   const shotName = `shot-${String(split.index + 1).padStart(3, "0")}`;
   const clipFile = path.join(tempDir, `${shotName}.mp4`);
   const thumbFile = path.join(tempDir, `${shotName}.jpg`);
@@ -228,7 +228,7 @@ async function classifyShot(videoPath: string, split: DetectedSplit, filmTitle: 
     const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) return fallbackClassification();
 
-    const tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-gemini-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-gemini-"));
     const clipFile = path.join(tempDir, "clip.mp4");
     const clipDuration = Math.min(split.end - split.start, 10);
     await runCommand("ffmpeg", ["-y", "-threads", "1", "-ss", String(split.start), "-t", String(clipDuration), "-i", videoPath, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "35", "-vf", "scale=320:trunc(ow/a/2)*2", "-r", "10", "-an", clipFile]);

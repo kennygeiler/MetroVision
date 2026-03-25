@@ -275,7 +275,7 @@ async function extractClipAssets(
 }
 
 async function classifyClip(clipPath: string) {
-  const pythonBinary = process.env.SCENEDECK_PYTHON_BIN || "python3";
+  const pythonBinary = process.env.METROVISION_PYTHON_BIN || "python3";
   const script = [
     "import contextlib",
     "import io",
@@ -419,7 +419,7 @@ export async function POST(request: Request) {
     const payload = parseBody((await request.json()) as ProcessSceneRequest);
     await access(payload.videoPath, constants.R_OK);
 
-    tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-process-"));
+    tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-process-"));
     const sourceFile = path.basename(payload.videoPath);
     const filmSlug = `${sanitizePathSegment(payload.filmTitle)}-${payload.year}`;
     const tmdbId = await searchTmdbMovieId(payload.filmTitle, payload.year);
