@@ -1,4 +1,6 @@
 "use client";
+// M1 Evaluation: TF.js/COCO-SSD retained — actively used for
+// real-time object detection overlay on video playback.
 
 import type { CSSProperties } from "react";
 
