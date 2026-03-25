@@ -411,7 +411,7 @@ export function ChatInterface() {
                                   : `Querying archive\u2026 ${tc.name}`}
                               </div>
                               {/* Mount D3/viz component if tool result has vizType */}
-                              {tc.result && <GenerativeUIBlock data={tc.result} />}
+                              {tc.result ? <GenerativeUIBlock data={tc.result} /> : null}
                             </div>
                           ))}
                         </div>
