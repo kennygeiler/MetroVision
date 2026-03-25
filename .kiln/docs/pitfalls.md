@@ -110,3 +110,25 @@ Pitfalls tracked: 12. Highest-risk areas: taxonomy drift between TS and Python, 
 - **Impact**: Semantic search route throws 500; no results returned.
 - **Resolution**: Use the `cosineDistance` helper from `drizzle-orm` (available in 0.33+) or write raw SQL with explicit cast: `sql\`${shots.embedding} <=> ${sql.raw(\`'[${vector.join(',')}]'::vector\`)}\``. Test with a real Neon connection before declaring it done.
 - **Prevention**: Include a smoke test of the `/api/search` route against real Neon data as part of M3 verification. Do not rely on TypeScript compilation alone to confirm pgvector query correctness.
+
+---
+
+## Infrastructure Risks (from 2026-03-24 scout scan)
+
+### PF-013: Zero Test Coverage
+- **Area**: Entire codebase
+- **Issue**: No test files, no test runner configured, no test script in package.json. No CI/CD pipeline.
+- **Impact**: Regressions go undetected. Refactoring is high-risk.
+- **Prevention**: Establish at minimum a smoke test suite before major refactoring.
+
+### PF-014: Dual Package Managers
+- **Area**: Root (pnpm) vs worker directory (npm)
+- **Issue**: Different lockfile formats and resolution strategies. AWS SDK version skew already detected between root and worker.
+- **Impact**: Dependency mismatches, inconsistent builds, potential runtime errors from version conflicts.
+- **Prevention**: Standardize on pnpm across the entire project. Migrate worker to pnpm workspace.
+
+### PF-015: Dual Ingest Pipelines (TS + Python)
+- **Area**: TypeScript and Python pipeline implementations
+- **Issue**: Both implementations exist. Unclear which is canonical. DB-backed queue used in practice despite BullMQ/Redis dependencies being declared.
+- **Impact**: Maintenance burden, confusion about which pipeline to modify, dead code.
+- **Prevention**: Decide on canonical pipeline and document the decision. Remove or archive the other.

@@ -1,76 +1,118 @@
-# SceneDeck Tech Stack
+# Tech Stack
 
-## Web Application
+## Languages
 
-| Technology | Version | Purpose | Rationale |
-|-----------|---------|---------|-----------|
-| Next.js | 15.x (App Router) | Full-stack framework | Largest AI training corpus for vibe-coding; zero-config Vercel deploy; React 19 support; Turbopack for fast dev |
-| React | 19.x | UI library | Ships with Next.js 15; Server Components for data fetching |
-| TypeScript | 5.x | Language | Default in create-next-app; type safety for taxonomy enums |
-| Tailwind CSS | 4.x | Styling | Default in create-next-app; zero config; AI agents generate reliably |
-| shadcn/ui | latest | Component library | Editable source files (not node_modules); AI agents can modify directly; built on Radix UI primitives |
-| Radix UI | latest | Headless UI primitives | Accessibility built-in; foundation for shadcn/ui |
-| Framer Motion | 11.x | Animation | Metadata overlay transitions; page transitions; dominant React animation library |
-| Drizzle ORM | 0.38.x+ | Database ORM | Type-safe; minimal boilerplate; AI agents generate reliably; better DX than Prisma for this use case |
-| pgvector | 0.8.x (via drizzle) | Vector search | Semantic search via embeddings; runs in Neon PostgreSQL |
-| vidstack or react-player | latest | Video playback | HTML5 video control abstraction; event hooks for overlay sync |
+| Language | Role | Rationale |
+|----------|------|-----------|
+| TypeScript | Web app, API routes, TS ingest worker | Largest AI training corpus, Next.js native, SSE streaming natural fit |
+| Python | Batch pipeline, ML tooling, ComfyUI nodes | PySceneDetect, Gemini Batch API JSONL, numpy/cv2, ComfyUI ecosystem are Python-native |
 
-## Data Pipeline (Python)
+Both languages are canonical and long-term. This is not technical debt -- it is the correct split for the workload types.
 
-| Technology | Version | Purpose | Rationale |
-|-----------|---------|---------|-----------|
-| Python | 3.11+ | Pipeline language | Universal for ML/CV tooling; all pipeline deps are Python-native |
-| PySceneDetect | 0.6.x | Shot boundary detection | CPU-only; pip-installable; AdaptiveDetector best for high-motion content; clean Python API |
-| FFmpeg | 7.x | Video processing | Shot clip extraction; thumbnail generation; format validation |
-| google-generativeai | latest | Gemini API client | Camera motion classification; scene grouping; semantic metadata |
-| anthropic | latest | Claude API client | Alternative/supplementary LLM for scene grouping and semantic metadata |
-| opencv-python | 4.x | Image processing | Frame extraction; used by PySceneDetect internally |
-| modal | latest | GPU serverless (fallback) | RAFT optical flow deployment if Gemini accuracy insufficient |
-| RAFT | -- | Optical flow (fallback) | State-of-the-art dense optical flow; deployed on Modal if needed |
-| httpx or requests | latest | HTTP client | Vercel Blob upload; Neon database writes |
-| python-dotenv | latest | Environment config | API key management in local pipeline |
+## Frontend
 
-## Infrastructure & Services
+| Dependency | Version | Rationale |
+|------------|---------|-----------|
+| Next.js | 15 (App Router) | Full-stack framework, largest AI training corpus, Vercel-native deployment |
+| React | 19 | Server Components, concurrent features, required by Next.js 15 |
+| TypeScript | ~5.x | Type safety across codebase |
+| shadcn/ui | latest | Accessible, customizable component primitives; copy-paste model avoids lock-in |
+| D3 | ^7 | 6 existing visualization types; standalone useRef+useEffect components |
+| Framer Motion | ^11 | Overlay state transitions, animation |
+| Tailwind CSS | ^3 | Utility-first styling, shadcn/ui dependency |
 
-| Service | Tier | Purpose | Rationale |
-|---------|------|---------|-----------|
-| Vercel | Hobby (free) | Web app hosting + CDN | Native Next.js platform; auto-deploy from GitHub; global edge network |
-| Neon PostgreSQL | Free tier | Database (0.5GB, 100h compute/mo) | Via Vercel Marketplace; auto env var injection; serverless scale-to-zero |
-| Vercel Blob | Pay-as-you-go | Video + thumbnail storage | CDN-backed; integrates with Next.js; sufficient for < 1GB seed data |
-| Gemini 2.0 Flash | Pay-per-use | Camera motion classification + semantic analysis | Under $5 for 100 clips; accepts video natively; no GPU infra needed |
-| Modal | Pay-per-use | GPU compute (fallback only) | Python-native DX; A10G at $0.000306/sec; cold start 2-8s |
-| OpenAI API | Pay-per-use | Text embeddings (text-embedding-3-small) | Semantic search embeddings; < $1 for 100 shots |
-| TMDB API | Free tier | Film metadata | Cast, crew, release dates, poster images |
-| GitHub | Free | Source control + CI | Vercel auto-deploy trigger |
+## Backend / API
+
+| Dependency | Version | Rationale |
+|------------|---------|-----------|
+| Next.js API Routes | 15 | Serverless API handlers co-located with frontend |
+| Express (worker) | ^4 | TS ingest worker HTTP server with SSE streaming |
+| Drizzle ORM | ~0.38.x | Type-safe ORM, pgvector support, active development (pin minor version per PF-010) |
+| @neondatabase/serverless | latest | HTTP driver for Neon, connection-stateless (avoids pool exhaustion per PF-006) |
+
+## Database
+
+| Service | Purpose | Notes |
+|---------|---------|-------|
+| Neon PostgreSQL | Primary data store | Free tier 0.5GB; pgvector extension must be enabled before migration (AC-03) |
+| pgvector | Vector similarity search | Cosine distance for embeddings; use `cosineDistance` helper from drizzle-orm 0.33+ |
+| tsvector/ts_rank | Full-text search (BM25-approximate) | Native Postgres; ParadeDB pg_bm25 if available on Neon |
+
+### Schema (Existing Tables)
+- films, scenes, shots, shot_embeddings, verifications
+
+### Schema (New Tables)
+- corpus_chunks (id, source, chunk_index, content, context_statement, embedding vector(1536), tsv tsvector)
+- scene_embeddings (id, scene_id, search_text, embedding vector(768))
+- film_embeddings (id, film_id, search_text, embedding vector(768))
+- batch_jobs (id, status, jsonl_path, submitted_at, completed_at, result_count, error)
+
+## AI / ML Services
+
+| Service | Purpose | Model / Tier | Notes |
+|---------|---------|-------------|-------|
+| Gemini 2.5 Flash | Shot classification | Paid Tier 1+ (150-300 RPM) | Interactive: rate-limited async; Batch: JSONL API (50% cost savings) |
+| Gemini Batch API | Bulk classification | 200K requests/job, 24h turnaround | Primary path for 5,000-film scale |
+| OpenAI Embeddings | Shot-level embeddings | text-embedding-3-small (768 dims) | Cost-efficient for high-volume shot embeddings |
+| OpenAI Embeddings | Corpus embeddings | text-embedding-3-large (1536 dims) | Higher quality for knowledge corpus retrieval |
+| Claude / Gemini | RAG reasoning engine | Latest available | Foundation model for chat + intelligence layer |
+| TMDB API | Film metadata | v3 | Title, director, cast, year, genre |
+
+## Python Pipeline
+
+| Dependency | Purpose | Notes |
+|------------|---------|-------|
+| PySceneDetect | Shot boundary detection | AdaptiveDetector, CPU-only, per-film threshold tuning (PF-009) |
+| asyncpg | Postgres access (batch worker) | Async Postgres driver for Python batch worker |
+| asyncio | Concurrency | Semaphore-bounded rate-limited Gemini calls |
+| google-generativeai | Gemini API client | Batch API + interactive classification |
+| ffmpeg (system) | Frame extraction, video re-encoding | Required system dependency |
+| python-dotenv | Environment config | API key management in local pipeline |
+
+## Object Storage
+
+| Service | Purpose | Notes |
+|---------|---------|-------|
+| AWS S3 | Video clips, keyframes, thumbnails | Pre-signed URLs for playback; canonical storage (replaces earlier Vercel Blob) |
+
+## Infrastructure
+
+| Service | Purpose | Notes |
+|---------|---------|-------|
+| Vercel | Web app hosting | App Router, serverless functions (60s timeout hobby tier) |
+| Docker | Worker containers | TS worker (Node 20 + ffmpeg + scenedetect) + Python batch worker |
+| pnpm | Package manager | Standardize across entire project; migrate worker from npm (AC-17) |
+
+## Removed / Deprecated Dependencies
+
+| Dependency | Status | Rationale |
+|------------|--------|-----------|
+| bullmq | REMOVE | Zero implementation exists; dead dependency (research confirmed) |
+| ioredis | REMOVE | No Redis needed; Postgres SKIP LOCKED replaces job queue |
+| Vercel Blob | DEPRECATED | Replaced by AWS S3 for media storage |
+| TensorFlow.js / COCO-SSD | EVALUATE | Client-side runtime dep causing bundle bloat; evaluate necessity |
+
+## ComfyUI Node Package
+
+| Item | Detail |
+|------|--------|
+| Language | Python |
+| Target API | V1 (widest compatibility), V3 upgrade path |
+| Dependencies | requests or httpx |
+| Distribution | pip-installable package or ComfyUI Manager listing |
 
 ## Dev Tooling
 
 | Tool | Purpose |
 |------|---------|
 | Claude Code / Cursor | AI-assisted development (zero manual coding constraint) |
-| pnpm | Node.js package manager (faster than npm, default in modern Next.js) |
+| pnpm | Node.js package manager |
 | uv or pip | Python package manager for pipeline |
-| ESLint + Prettier | Code quality (auto-configured by create-next-app) |
-| Turbopack | Next.js dev server bundler (ships with Next.js 15) |
-
-## Initialization Commands
-
-```bash
-# Web app
-npx create-next-app@latest scenedeck --typescript --tailwind --eslint --app --turbopack --use-pnpm
-cd scenedeck
-npx shadcn@latest init
-pnpm add drizzle-orm @neondatabase/serverless framer-motion
-pnpm add -D drizzle-kit
-
-# Pipeline
-python -m venv .venv
-source .venv/bin/activate
-pip install scenedetect[opencv] google-generativeai anthropic httpx python-dotenv
-```
+| ESLint + Prettier | Code quality |
+| Turbopack | Next.js dev server bundler |
 
 ## Version Pinning Policy
 
 - Pin major versions only (e.g., `next@15`, not `next@15.2.1`). Let minor/patch float for security fixes.
-- Exception: Drizzle ORM -- pin minor version due to active API changes.
+- Exception: Drizzle ORM -- pin minor version (`~0.38.x`) due to active API changes (PF-010).
 - Lock files (pnpm-lock.yaml, requirements.txt) committed to source control.

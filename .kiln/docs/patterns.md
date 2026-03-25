@@ -2,330 +2,261 @@
 # Patterns & Quality Guide
 
 ## TL;DR
-Patterns tracked: 16. Pitfalls tracked: 12. Key guidance: Taxonomy constants use `{ slug, displayName }` object structure — not plain arrays. Filter state for browse lives in URL search params (not useState). Drizzle schema lives in `src/db/schema.ts`; all types derive from `$inferSelect`/`$inferInsert`. The `src/` directory prefix applies to all app, lib, components, and db paths. pgvector extension must be enabled in Neon before migration. OpenAI embedding calls belong only in Route Handlers, never in Server Components.
+Key patterns: App Router Server Components only (no Pages Router), single `db` import from `src/db/index.ts`, RAF loops always have cancelAnimationFrame cleanup. Known pitfalls: taxonomy drift between TS and Python (PF-001), Drizzle pgvector extension must be enabled before migration (PF-003), filter state in useState breaks shareable URLs (PF-011). Test approach: zero test infrastructure currently exists (PF-013) — any new test setup should use Vitest with mocked Neon HTTP client.
 
 ---
 
-## P-001: App Router Server Components for Data Fetching
+## Patterns
+
+### P-001: App Router Only — No Pages Router Patterns
 - **Category**: structure
-- **Rule**: Fetch all data in Server Components or Route Handlers. Never use `getServerSideProps` or `getStaticProps`.
+- **Rule**: All pages, data fetching, and API handlers must use Next.js 15 App Router conventions. `getServerSideProps`, `getStaticProps`, `_app.tsx`, and a `pages/` directory are forbidden.
 - **Example**:
   ```tsx
-  // src/app/shots/page.tsx — correct
-  import { db } from '@/db'
-  import { shots } from '@/db/schema'
-
-  export default async function ShotsPage() {
-    const allShots = await db.select().from(shots)
-    return <ShotGrid shots={allShots} />
+  // CORRECT: src/app/films/[id]/page.tsx
+  export default async function FilmPage({ params }: { params: { id: string } }) {
+    const film = await db.query.films.findFirst({ where: eq(films.id, params.id) });
+    return <FilmDetail film={film} />;
   }
   ```
 - **Counter-example**:
-  ```tsx
-  // WRONG — Pages Router pattern, violates C-06
-  export async function getServerSideProps() {
-    const shots = await fetchShots()
-    return { props: { shots } }
-  }
+  ```ts
+  // WRONG — Pages Router
+  export async function getServerSideProps(context) { ... }
   ```
 
----
-
-## P-002: Client Components Only for Interactivity
-- **Category**: structure
-- **Rule**: Add `'use client'` only when the component requires browser APIs, event handlers, or React hooks like `useState`/`useEffect`. Keep the client boundary as deep in the tree as possible.
+### P-002: Single DB Import
+- **Category**: data-flow
+- **Rule**: Import `db` exclusively from `src/db/index.ts`. Never instantiate `neon()` or `drizzle()` inside a component or route handler. This avoids connection pool exhaustion (PF-006).
 - **Example**:
-  ```tsx
-  // src/components/video/shot-player.tsx — correct, client needed for video events
-  'use client'
-  import { useRef, useEffect } from 'react'
-
-  export function ShotPlayer({ src }: { src: string }) {
-    const videoRef = useRef<HTMLVideoElement>(null)
-    // ... overlay sync via requestAnimationFrame
-  }
+  ```ts
+  // CORRECT
+  import { db } from "@/db";
+  const films = await db.select().from(schema.films);
   ```
 - **Counter-example**:
-  ```tsx
-  // WRONG — marking a display-only component as client
-  'use client'
-  export function ShotTitle({ title }: { title: string }) {
-    return <h1>{title}</h1>  // no interactivity needed
-  }
+  ```ts
+  // WRONG — creates a new connection per request
+  const sql = neon(process.env.DATABASE_URL!);
+  const db = drizzle(sql);
   ```
 
----
-
-## P-003: Shared Taxonomy Constants — Single Source of Truth
+### P-003: Drizzle Builder API (Not db.query.*)
 - **Category**: data-flow
-- **Rule**: The camera movement taxonomy is defined in `src/lib/taxonomy.ts` (TypeScript) and `pipeline/taxonomy.py` (Python) with identical slug values. Any addition or rename must happen in both files simultaneously.
+- **Rule**: Prefer the `db.select().from().where()` builder pattern over `db.query.*` relational API. The builder API is more stable across Drizzle minor versions (pin `~0.38.x` per PF-010).
 - **Example**:
-  ```typescript
-  // src/lib/taxonomy.ts — actual project shape
-  export const MOVEMENT_TYPES = {
-    static: { slug: "static", displayName: "Static" },
-    pan:    { slug: "pan",    displayName: "Pan" },
-    // ... 21 total
-  } as const
-  export type MovementTypeKey = keyof typeof MOVEMENT_TYPES
-  export type MovementTypeSlug = (typeof MOVEMENT_TYPES)[MovementTypeKey]["slug"]
-  ```
-  ```python
-  # pipeline/taxonomy.py — must match slugs exactly
-  MOVEMENT_TYPES = [
-    'static', 'pan', 'tilt', 'dolly', 'truck', 'pedestal',
-    'crane', 'boom', 'zoom', 'dolly_zoom', 'handheld', 'steadicam',
-    'drone', 'aerial', 'arc', 'whip_pan', 'whip_tilt', 'rack_focus',
-    'follow', 'reveal', 'reframe'
-  ]
+  ```ts
+  // CORRECT
+  const shots = await db
+    .select()
+    .from(schema.shots)
+    .where(eq(schema.shots.filmId, filmId))
+    .orderBy(schema.shots.startTc);
   ```
 
----
-
-## P-004: Drizzle Schema as the Type Contract
-- **Category**: structure
-- **Rule**: Define all database shapes in `src/db/schema.ts`. Use Drizzle's `$inferSelect` / `$inferInsert` as TypeScript types throughout the app. Never declare parallel interface types that duplicate schema fields.
-- **Example**:
-  ```typescript
-  // src/db/schema.ts
-  export const shots = pgTable('shots', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    filmTitle: text('film_title').notNull(),
-    movementType: text('movement_type').notNull(),
-  })
-
-  // types used across the app
-  export type Shot = typeof shots.$inferSelect
-  export type NewShot = typeof shots.$inferInsert
-  ```
-
----
-
-## P-005: Canvas Overlay Sync via requestAnimationFrame
-- **Category**: async
-- **Rule**: Sync metadata overlay rendering to video playback using a `requestAnimationFrame` loop that reads `video.currentTime`. Never use `setInterval` or a fixed timer for frame sync.
-- **Example**:
-  ```typescript
-  useEffect(() => {
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    if (!video || !canvas) return
-    let rafId: number
-
-    const render = () => {
-      const ctx = canvas.getContext('2d')!
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      drawOverlay(ctx, video.currentTime, metadata)
-      rafId = requestAnimationFrame(render)
-    }
-
-    video.addEventListener('play', () => { rafId = requestAnimationFrame(render) })
-    video.addEventListener('pause', () => cancelAnimationFrame(rafId))
-    return () => cancelAnimationFrame(rafId)
-  }, [metadata])
-  ```
-
----
-
-## P-006: Route Handler Pattern for API Endpoints
-- **Category**: structure
-- **Rule**: API endpoints live in `src/app/api/[resource]/route.ts`. Export named async functions `GET`, `POST`, `PUT`, `DELETE`. Use `NextRequest` and `NextResponse`. Never use Express-style middleware patterns.
-- **Example**:
-  ```typescript
-  // src/app/api/shots/route.ts
-  import { NextRequest, NextResponse } from 'next/server'
-  import { db } from '@/db'
-  import { shots } from '@/db/schema'
-
-  export async function GET(_req: NextRequest) {
-    const data = await db.select().from(shots)
-    return NextResponse.json(data)
-  }
-  ```
-
----
-
-## P-007: Server Actions for Mutations
-- **Category**: structure
-- **Rule**: Use Server Actions (with `'use server'` directive) for form submissions and data mutations. This avoids needing a separate API route for simple write operations.
-- **Example**:
-  ```typescript
-  // src/app/actions/verify.ts
-  'use server'
-  import { db } from '@/db'
-  import { verifications } from '@/db/schema'
-
-  export async function submitVerification(shotId: string, rating: number) {
-    await db.insert(verifications).values({ shotId, rating })
-  }
-  ```
-
----
-
-## P-008: Python Pipeline Structure
-- **Category**: structure
-- **Rule**: The Python pipeline lives in `/pipeline` at the project root, isolated from the Next.js app. It has its own `requirements.txt` and `.env`. Entry points are single-purpose scripts (`ingest.py`, `classify.py`, `upload.py`).
-- **Example**:
-  ```
-  /pipeline
-    taxonomy.py       # taxonomy constants (mirrors src/lib/taxonomy.ts)
-    ingest.py         # shot detection via PySceneDetect
-    classify.py       # Gemini classification
-    upload.py         # Vercel Blob + Neon writes
-    requirements.txt
-    .env.example
-  ```
-
----
-
-## P-009: Gemini Classification Prompt Structure
-- **Category**: data-flow
-- **Rule**: When calling Gemini for camera motion classification, always pass the full taxonomy list in the prompt and request a structured JSON response. Include the compound notation constraint (max 3 simultaneous components).
-- **Example**:
-  ```python
-  CLASSIFY_PROMPT = f"""
-  Analyze this video clip and classify the camera movement.
-
-  Valid movement types: {', '.join(MOVEMENT_TYPES)}
-  Valid directions: {', '.join(DIRECTIONS)}
-  Valid speeds: {', '.join(SPEEDS)}
-
-  Compound notation: up to 3 simultaneous components as ordered type:direction pairs.
-
-  Return JSON: {{"movement_type": str, "direction": str, "speed": str, "confidence": float, "notes": str}}
-  """
-  ```
-
----
-
-## P-010: Environment Variable Access Pattern
-- **Category**: structure
-- **Rule**: In Next.js, server-side env vars are accessed directly via `process.env.VAR_NAME`. Client-exposed vars must be prefixed `NEXT_PUBLIC_`. In the Python pipeline, use `python-dotenv` to load `.env`. Never hardcode credentials.
-- **Example**:
-  ```typescript
-  // Server Component or Route Handler — correct
-  const db = neon(process.env.DATABASE_URL!)
-  ```
-  ```python
-  # pipeline script — correct
-  from dotenv import load_dotenv
-  import os
-  load_dotenv()
-  api_key = os.environ['GEMINI_API_KEY']
-  ```
-
----
-
-## P-011: shadcn/ui Component Addition Pattern
-- **Category**: structure
-- **Rule**: Add shadcn/ui components via the CLI (`npx shadcn@latest add [component]`), not by manually copying files. Components land in `src/components/ui/`. Never import from `@radix-ui` directly when a shadcn wrapper exists.
-- **Example**:
-  ```bash
-  npx shadcn@latest add button card dialog slider
-  ```
-
----
-
-## P-012: TypeScript Strict Mode Required
+### P-004: Drizzle Schema Type Inference
 - **Category**: naming
-- **Rule**: `strict: true` in `tsconfig.json` is non-negotiable. All taxonomy types must be `as const` derived types, not bare `string` types. Use `!` non-null assertions only when the value is guaranteed by prior logic; prefer optional chaining + early return otherwise.
+- **Rule**: Export `$inferSelect` and `$inferInsert` types from `src/db/schema.ts` for every table. Do not hand-write redundant type declarations.
 - **Example**:
-  ```typescript
-  // Correct — narrow type derived from taxonomy object
-  export type MovementTypeSlug = (typeof MOVEMENT_TYPES)[keyof typeof MOVEMENT_TYPES]["slug"]
-  function classify(m: MovementTypeSlug) { ... }
-
-  // Wrong — too broad
-  function classify(m: string) { ... }
+  ```ts
+  // In schema.ts
+  export type Film = typeof films.$inferSelect;
+  export type NewFilm = typeof films.$inferInsert;
   ```
 
----
-
-## P-013: Taxonomy Object Shape — `{ slug, displayName }` Pattern
-- **Category**: data-flow
-- **Rule**: All taxonomy constants in `src/lib/taxonomy.ts` use the object shape `{ slug: string, displayName: string }` keyed by slug. Iterate with `Object.values(TAXONOMY)` to get display items; use `.slug` for DB storage and URL params, `.displayName` for UI rendering. Do NOT treat them as plain arrays.
-- **Example**:
-  ```typescript
-  // Rendering filter buttons — correct
-  Object.values(MOVEMENT_TYPES).map((movement) => (
-    <button key={movement.slug} onClick={() => setFilter(movement.slug)}>
-      {movement.displayName}
-    </button>
-  ))
-
-  // Accessing a specific entry — correct
-  const label = MOVEMENT_TYPES['dolly_zoom'].displayName  // "Dolly Zoom"
-  ```
-- **Counter-example**:
-  ```typescript
-  // WRONG — treating as plain array
-  MOVEMENT_TYPES.map(m => m)  // TypeError: MOVEMENT_TYPES.map is not a function
-  ```
-
----
-
-## P-014: Filter State in URL Search Params
-- **Category**: structure
-- **Rule**: For the browse page, filter state must live in URL search params (via `useSearchParams` / `useRouter`), not local `useState`. This makes filter URLs shareable and satisfies M3 AC "Filter URLs are shareable — visiting a filter URL restores the filter state."
-- **Example**:
-  ```typescript
-  'use client'
-  import { useRouter, useSearchParams } from 'next/navigation'
-
-  export function FilterSidebar() {
-    const router = useRouter()
-    const searchParams = useSearchParams()
-    const active = searchParams.get('movement') ?? 'all'
-
-    function setFilter(slug: string) {
-      const params = new URLSearchParams(searchParams.toString())
-      if (slug === 'all') params.delete('movement')
-      else params.set('movement', slug)
-      router.push(`/browse?${params.toString()}`)
-    }
-    // ...
-  }
-  ```
-- **Counter-example**:
-  ```typescript
-  // WRONG — filter state lost on navigation / cannot be bookmarked
-  const [activeFilter, setActiveFilter] = useState('all')
-  ```
-
----
-
-## P-015: Drizzle db Client Singleton Pattern
-- **Category**: structure
-- **Rule**: Instantiate the Neon HTTP driver and Drizzle client exactly once in `src/db/index.ts`. Import `db` from this module everywhere. Never call `neon()` or `drizzle()` inside a component or Route Handler body.
-- **Example**:
-  ```typescript
-  // src/db/index.ts
-  import { neon } from '@neondatabase/serverless'
-  import { drizzle } from 'drizzle-orm/neon-http'
-  import * as schema from './schema'
-
-  const sql = neon(process.env.DATABASE_URL!)
-  export const db = drizzle(sql, { schema })
-  ```
-
----
-
-## P-016: OpenAI Embedding Calls in Route Handlers Only
+### P-005: RAF Cleanup in useEffect
 - **Category**: async
-- **Rule**: Calls to the OpenAI embeddings API (`text-embedding-3-small`) must only happen inside Route Handlers (`src/app/api/search/route.ts`). Never call the embeddings API from a Server Component — it adds latency to the initial page render and cannot be cached independently.
+- **Rule**: Every `requestAnimationFrame` loop inside a React component must be cancelled in the `useEffect` cleanup function. Omitting this causes memory leaks and errors on navigation (PF-005).
 - **Example**:
-  ```typescript
-  // src/app/api/search/route.ts — correct
-  import OpenAI from 'openai'
-  const openai = new OpenAI()
+  ```tsx
+  useEffect(() => {
+    let rafId: number;
+    const loop = () => {
+      // render frame
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+  ```
 
-  export async function GET(req: NextRequest) {
-    const query = req.nextUrl.searchParams.get('q') ?? ''
-    const { data } = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: query,
-    })
-    const embedding = data[0].embedding
-    // ... pgvector similarity search
+### P-006: URL Params for Filter State
+- **Category**: data-flow
+- **Rule**: Filter and browse state must live in URL search params via `useSearchParams` + `useRouter`, never in local `useState`. This enables shareable URLs, browser back/forward, and bookmarks (see PF-011).
+- **Example**:
+  ```tsx
+  'use client';
+  import { useSearchParams, useRouter } from 'next/navigation';
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const activeFilter = searchParams.get('movementType') ?? 'all';
+
+  function setFilter(value: string) {
+    const params = new URLSearchParams(searchParams);
+    params.set('movementType', value);
+    router.push(`?${params.toString()}`);
   }
   ```
+
+### P-007: Route Handler Error Pattern
+- **Category**: error-handling
+- **Rule**: All Route Handlers wrap their logic in try/catch, return `Response.json({ error: '...' }, { status: 500 })` on failure, and never let unhandled exceptions escape. Use `NextRequest` (not plain `Request`) to access `nextUrl.searchParams`.
+- **Example**:
+  ```ts
+  export async function GET(request: NextRequest) {
+    try {
+      const query = request.nextUrl.searchParams.get('q')?.trim();
+      // ...
+      return Response.json(result);
+    } catch (error) {
+      console.error('Failed to ...', error);
+      return Response.json({ error: 'Failed to ...' }, { status: 500 });
+    }
+  }
+  ```
+
+### P-008: Taxonomy Constants — Dual-File Rule
+- **Category**: structure
+- **Rule**: Camera movement taxonomy slugs are defined in both `src/lib/taxonomy.ts` (TS object with `{ slug, displayName }`) and `pipeline/taxonomy.py` (plain lists). Any change to a slug must be made in both files in the same commit, and the Python pipeline must assert `movement_type in MOVEMENT_TYPES` before any DB write (see PF-001).
+- **Example**:
+  ```ts
+  // src/lib/taxonomy.ts — TS side
+  export const MOVEMENT_TYPES = {
+    dolly: { slug: 'dolly', displayName: 'Dolly' },
+    // ...
+  } as const;
+  export type MovementTypeSlug = keyof typeof MOVEMENT_TYPES;
+  ```
+  ```python
+  # pipeline/taxonomy.py — Python side (must mirror slugs exactly)
+  MOVEMENT_TYPES = ['static', 'pan', 'tilt', 'dolly', ...]
+  assert movement_type in MOVEMENT_TYPES, f"Unknown movement type: {movement_type}"
+  ```
+
+### P-009: pgvector Custom Type in Schema
+- **Category**: data-flow
+- **Rule**: Drizzle does not have a built-in pgvector column type. Use the `customType` helper from `drizzle-orm/pg-core` with explicit `toDriver` (formats as `[n,n,n]` string) and `fromDriver` (parses back to `number[]`) converters. The pgvector extension must be enabled in Neon BEFORE running `drizzle-kit push` (see PF-003).
+- **Example**:
+  ```ts
+  const vector = customType<{ data: number[]; driverData: string; config: { dimensions: number } }>({
+    dataType(config) { return `vector(${config?.dimensions ?? 768})`; },
+    toDriver(value) { return `[${value.join(',')}]`; },
+    fromDriver(value) {
+      return value.slice(1, -1).split(',').filter(Boolean).map(Number);
+    },
+  });
+  // Usage:
+  embedding: vector('embedding', { dimensions: 768 }).notNull(),
+  ```
+
+### P-010: pgvector Cosine Distance Raw SQL
+- **Category**: data-flow
+- **Rule**: Use raw SQL with explicit cast for pgvector cosine distance queries. `drizzle-orm`'s `cosineDistance` helper (available 0.33+) may also be used if available. Never rely on TypeScript compilation alone to verify query correctness — test against real Neon data (see PF-012).
+- **Example**:
+  ```ts
+  // Raw SQL fallback
+  const vectorLiteral = `[${queryEmbedding.join(',')}]`;
+  const results = await db.execute(
+    sql`SELECT id, 1 - (embedding <=> ${vectorLiteral}::vector) AS score
+        FROM shot_embeddings
+        ORDER BY embedding <=> ${vectorLiteral}::vector
+        LIMIT 20`
+  );
+  ```
+
+### P-011: Two-Lane Pipeline Architecture
+- **Category**: structure
+- **Rule**: Interactive single-film ingestion flows exclusively through the TS Worker (`worker/src/ingest.ts`) via SSE. Bulk ingestion flows through the Python Batch Worker (`pipeline/batch_worker.py`) using Postgres SKIP LOCKED + Gemini Batch API. These are two canonical paths, not one replacing the other. The Next.js `detect-shots` route must not exist (AC-23).
+- **Example flow**:
+  ```
+  Web UI -> POST /api/ingest-film -> TS Worker SSE -> Gemini Flash (real-time) -> Postgres
+  Admin submit -> batch_jobs table -> Python Worker (SKIP LOCKED) -> Gemini Batch API -> Postgres
+  ```
+
+### P-012: Rate Limiting — Both Languages
+- **Category**: async
+- **Rule**: All Gemini API calls must be rate-limited. TS Worker: token-bucket at 130 RPM with `concurrency = min(tier_limit * 0.85, 50)`. Python pipeline: asyncio Semaphore + token-bucket at 130 RPM Tier 1. Never fire Gemini calls without rate limiting (AC-07).
+- **Example (Python)**:
+  ```python
+  semaphore = asyncio.Semaphore(50)
+  async def classify_with_limit(clip_path):
+      async with semaphore:
+          await asyncio.sleep(60 / 130)  # token bucket
+          return await classify_clip(clip_path)
+  ```
+
+### P-013: Gemini File API — No Persistent IDs
+- **Category**: data-flow
+- **Rule**: Never persist Gemini File API IDs to the database or pipeline state. File references expire after 48 hours. Always re-upload video files fresh at the start of each classification run (AC-13, PF-007).
+
+### P-014: D3 Components — Standalone useRef + useEffect
+- **Category**: structure
+- **Rule**: D3 visualization components mount via `useRef` + `useEffect` and receive fully complete typed JSON payloads before mounting. D3 components never mount on partial/streaming data (AC-09). Each D3 chart lives in `src/components/visualize/`.
+- **Example**:
+  ```tsx
+  'use client';
+  export function RhythmStream({ data }: { data: RhythmData }) {
+    const svgRef = useRef<SVGSVGElement>(null);
+    useEffect(() => {
+      if (!svgRef.current || !data) return;
+      const svg = d3.select(svgRef.current);
+      // ... full d3 render
+    }, [data]);
+    return <svg ref={svgRef} />;
+  }
+  ```
+
+### P-015: No LLM-Generated Code Execution in Chat
+- **Category**: structure
+- **Rule**: The chat Generative UI maps tool call names to pre-registered React/D3 components. Tool results are typed JSON payloads. The client never evaluates or executes LLM-generated code (AC-08).
+- **Example**:
+  ```ts
+  const TOOL_COMPONENT_MAP = {
+    render_rhythm_stream: RhythmStream,
+    render_pacing_heatmap: PacingHeatmap,
+    render_director_radar: DirectorRadar,
+    // ...
+  } as const;
+  // On tool_result event: mount TOOL_COMPONENT_MAP[toolName] with payload
+  ```
+
+### P-016: ComfyUI IS_CHANGED = float("NaN")
+- **Category**: structure
+- **Rule**: ComfyUI nodes that query external APIs must return `float("NaN")` from `IS_CHANGED`, not `True` (which is silently ignored by ComfyUI). This forces re-execution on every run (AC-12).
+- **Example**:
+  ```python
+  @classmethod
+  def IS_CHANGED(cls, **kwargs):
+      return float("NaN")
+  ```
+
+### P-017: NEXT_PUBLIC_ Prefix for Client Env Vars
+- **Category**: structure
+- **Rule**: Any environment variable accessed in a `'use client'` component must have the `NEXT_PUBLIC_` prefix. Server-only secrets (database URL, API keys) must never be `NEXT_PUBLIC_`. Missing this prefix returns `undefined` silently at runtime with no build error (PF-008).
+
+### P-018: Postgres SKIP LOCKED for Job Queue
+- **Category**: async
+- **Rule**: The batch job queue uses PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED` on the `pipeline_jobs` or `batch_jobs` table. No Redis, no BullMQ (AC-06). This pattern prevents two worker processes from claiming the same job.
+- **Example (Python asyncpg)**:
+  ```python
+  async with conn.transaction():
+      job = await conn.fetchrow(
+          "SELECT * FROM batch_jobs WHERE status = 'pending' LIMIT 1 FOR UPDATE SKIP LOCKED"
+      )
+  ```
+
+### P-019: pnpm Exclusively After M1
+- **Category**: structure
+- **Rule**: After Milestone 1 migration, pnpm is the sole package manager across all workspaces (root and worker). No npm lockfiles may exist anywhere in the repository tree (AC-17).
+
+### P-020: Schema Tables Use $inferSelect / $inferInsert
+- **Category**: naming
+- **Rule**: All Drizzle table type exports follow the pattern `export type Foo = typeof fooTable.$inferSelect` and `export type NewFoo = typeof fooTable.$inferInsert`. The `New` prefix names the insert type. This is the established convention in `src/db/schema.ts`.
+
+---
+
+## Pitfalls
+(see `/Users/kennygeiler/Documents/Vibing Coding Projects 2026/SceneDeck/.kiln/docs/pitfalls.md` for full detail)
+
+Key pitfall IDs: PF-001 (taxonomy drift), PF-002 (Pages Router), PF-003 (pgvector extension), PF-004 (Vercel timeout), PF-005 (RAF memory leak), PF-006 (Neon pool exhaustion), PF-007 (Gemini file expiry), PF-008 (NEXT_PUBLIC_ prefix), PF-009 (PySceneDetect threshold tuning), PF-010 (Drizzle version drift), PF-011 (filter useState), PF-012 (pgvector Drizzle syntax), PF-013 (zero test coverage), PF-014 (dual package managers), PF-015 (dual ingest pipelines).

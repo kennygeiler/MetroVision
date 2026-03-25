@@ -1,76 +1,94 @@
 # Research Findings
-Generated: 2026-03-15T00:00:00Z
-Topics: 7 (5 field-researched, 2 assessed by coordinator)
+Generated: 2026-03-24T00:00:00Z
+Topics: 5 (across 4 agents; sherlock covered 2 merged topics)
+Previous round: 2026-03-15 (7 topics covering foundational stack decisions -- retained below as historical context)
 
 ## Executive Summary
 
-There is no off-the-shelf camera motion classifier -- CamCloneMaster is a generation tool, not a classification API. The fastest viable path is using Gemini 2.0 Flash as a vision LLM to classify camera motion directly from video clips, with a custom RAFT optical flow pipeline on Modal as an accuracy fallback. This two-tier strategy eliminates GPU infrastructure from the critical path and lets the team ship a working pipeline in hours, not days. The frontend stack is unambiguous: Next.js 15 + Vercel + shadcn/ui, which has the largest AI training corpus for vibe coding and zero-config deployment. The camera movement taxonomy is comprehensive at 21 movement types with compound notation support, sourced from authoritative cinematography references.
+The 5,000-film classification goal is feasible but requires a two-lane pipeline architecture: the Gemini Batch API (50% cost savings, 200K requests/job, 24-hour turnaround) for bulk catalogue ingestion, and the existing TS worker with proper rate limiting for interactive single-film processing. The current codebase has three overlapping pipeline implementations and dead dependencies (bullmq/ioredis) that must be consolidated before scaling. The RAG intelligence layer should use 512-token recursive chunking with contextual enrichment and hybrid BM25+pgvector search (precision jumps from ~62% to ~84%). The chat interface already has ~70% of the infrastructure needed for visual output -- the missing piece is mounting D3 components from tool-call results instead of discarding them. ComfyUI integration is straightforward via a small Python node package targeting the V1 contract.
 
 ## Cross-Cutting Insights
 
-1. **Gemini-first strategy collapses three open questions.** Using Gemini 2.0 Flash for camera motion classification eliminates the need for cloud GPU infrastructure on day one (resolves OQ-1, OQ-2, and partially OQ-6). Modal becomes a fallback, not a prerequisite.
+1. **Python stays.** PySceneDetect, Gemini Batch API JSONL workflows, and ComfyUI nodes are all Python-native. The two-language architecture (TS for interactive web, Python for ML/batch/integrations) is the correct long-term split, not a liability to resolve.
 
-2. **Human QA is the accuracy safety net.** The vision's design of a 0-5 verification system (KD-05) means the pipeline does not need to be perfect -- it needs to be correctable. This lowers the bar for initial CV accuracy and supports starting with the simpler Gemini approach.
+2. **Postgres as universal backbone.** The database already serves as ORM store, vector index, and (with SKIP LOCKED) can replace Redis/BullMQ as the job queue. No new infrastructure dependencies are needed for the batch pipeline.
 
-3. **The stack is optimized for a single pattern: Next.js + Vercel + Neon.** Frontend framework, database, hosting, and video storage all converge on the Vercel ecosystem. This minimizes integration complexity and maximizes vibe-code compatibility.
+3. **Existing D3 components are reusable across surfaces.** The six standalone D3 visualization components (RhythmStream, HierarchySunburst, PacingHeatmap, ChordDiagram, CompositionScatter, DirectorRadar) can be embedded in chat messages, the web browse UI, and exported as reference decks without modification.
 
-4. **Shot boundary detection is solved.** PySceneDetect is production-ready, CPU-only, and pip-installable. TransNetV2 is more accurate but adds TF2 complexity that is not justified for 50-100 seed shots where human review is already planned.
+4. **Two distinct query audiences need different retrieval paths.** Academic researchers issue long natural-language technique queries (best served by corpus hybrid search + scene-level embeddings). AI filmmakers issue short specific queries (best served by shot-level metadata filtering + vector similarity). The RAG architecture must support both.
 
-5. **Taxonomy is well-established.** Cinematography literature provides a stable, authoritative taxonomy. The risk is not "what are the categories" but "mapping CV output to taxonomy labels consistently."
+5. **Rate limiting is the single most urgent technical gap.** Neither the TS worker nor the Python pipeline has rate limiting. At Tier 1 (150-300 RPM, 1,500 RPD), the TS worker's 15 concurrent unthrottled calls will intermittently 429. This blocks reliable scaling before any architectural work begins.
 
 ## Findings
 
-### CV Model for Camera Motion (cv-model-camera-motion)
-**Question**: What is the best specialized CV model for extracting and classifying camera motion from video into a fixed taxonomy?
-**Finding**: No off-the-shelf camera motion classifier exists on Replicate or HuggingFace. CamCloneMaster outputs 6-DoF pose sequences for generation, not taxonomy labels. A custom pipeline would use RAFT optical flow, homography decomposition to separate rotation/scale/translation, residual flow for handheld detection, and a rule-based classifier. However, Gemini 2.0 Flash can classify camera motion directly from video input as a vision LLM -- zero GPU infrastructure, under $5 for 100 clips.
-**Recommendation**: Start with Gemini 2.0 Flash for camera motion classification. Validate accuracy with human QA on the first 10-20 clips. If accuracy is below acceptable threshold, build the RAFT pipeline on Modal as a fallback.
-**Confidence**: 0.72 (merged sherlock + bourne findings)
-
-### Cloud GPU Service (cloud-gpu-service)
-**Question**: Which cloud GPU service is optimal for running video CV models given solo-dev setup speed, cost, and vibe-code compatibility?
-**Finding**: Two-tier strategy. Gemini 2.0 Flash eliminates GPU needs for classification (under $5/100 clips, zero infra). If custom CV model is needed, Modal is the best choice -- Python-native DX, ~$0.005/clip on T4 GPU, no Docker required. Banana.dev is defunct. Replicate viable but less flexible for custom models.
-**Recommendation**: Defer GPU infrastructure entirely. Use Gemini API first. If fallback needed, deploy RAFT on Modal with their serverless GPU functions.
-**Confidence**: 0.72
-
-### Camera Movement Taxonomy (camera-movement-taxonomy)
-**Question**: What is the complete fixed taxonomy of camera movements for cinematography classification?
-**Finding**: Comprehensive taxonomy: 21 movement types (static, pan, tilt, dolly, truck, crane/boom, zoom, rack focus, roll, steadicam, handheld, whip pan, whip tilt, arc, tracking, push-in, pull-out, reveal, follow, orbiting, reframe), 15 direction values, 7 speed categories, compound movement notation (e.g., "dolly-in + tilt-up"), 15 shot sizes (EWS through insert), 15 camera angles (6 vertical, 5 horizontal, 4 special), 6 duration categories.
-**Recommendation**: Adopt the taxonomy as-is for Tier 1 metadata. Implement compound notation for shots with multiple simultaneous movements. Use the shot size and angle categories as part of the fixed schema.
+### 1. Classification Scaling
+**Question**: How do we scale Gemini 2.5 Flash classification from current capacity to 50,000-150,000 shots across 5,000+ films?
+**Finding**: Gemini 2.5 Flash Tier 1 limits (150-300 RPM, 1,500 RPD) make serial processing infeasible -- 150,000 shots at the daily cap takes ~100 days. The Gemini Batch API (production-available since July 2025) accepts JSONL files up to 2GB with 200,000 requests per job, processes within 24 hours, and costs 50% less than synchronous calls. For interactive single-film ingestion, Python asyncio with Semaphore(50) and a token-bucket rate limiter at ~130 RPM provides safe throughput at Tier 1.
+**Recommendation**: Adopt Gemini Batch API as the primary bulk ingestion path. Add token-bucket rate limiting to both TS worker and Python pipeline for interactive use. Target Tier 2 ($250 cumulative spend) for higher RPM/RPD headroom.
 **Confidence**: 0.85
 
-### Frontend Framework (frontend-framework)
-**Question**: Which frontend framework best supports a visually striking, metadata-overlay-rich video UI built entirely through AI-assisted coding in 1-2 weeks?
-**Finding**: Next.js 15 (App Router) + Vercel is the unambiguous choice. Largest AI training corpus ensures best vibe-coding results. Full stack: shadcn/ui + Tailwind CSS for components, Framer Motion for animations, Vercel Blob for video storage, Neon PostgreSQL + Drizzle ORM for database. Zero-config deployment yields a live URL in under 15 minutes.
-**Recommendation**: Adopt Next.js 15 + Vercel + Neon + Drizzle as the full stack. Use shadcn/ui as the component foundation. Use Framer Motion for the metadata overlay animations.
-**Confidence**: 0.85
+### 2. Pipeline Canonicalization
+**Question**: How should the three overlapping pipeline implementations (Python CLI, TS worker, Next.js route) be consolidated?
+**Finding**: The TS worker is more capable (SSE streaming, TMDB, embeddings, S3, concurrency) but the Python pipeline has genuine strengths (PySceneDetect API access, Python ML ecosystem). bullmq and ioredis are installed with zero implementation -- dead weight. The Next.js detect-shots route is a side channel that bypasses the worker.
+**Recommendation**: Two-lane architecture -- TS worker for interactive single-film SSE streaming, new Python batch worker for bulk catalogue using PySceneDetect API + Gemini Batch API + Postgres SKIP LOCKED queue. Remove bullmq/ioredis. Retire the Python CLI entrypoint (keep as library). Consolidate detect-shots route to use the TS worker endpoint.
+**Confidence**: 0.87
 
-### Shot Boundary Detection (shot-boundary-detection)
-**Question**: What are the best tools for shot boundary detection -- accuracy, speed, API ergonomics?
-**Finding**: PySceneDetect with AdaptiveDetector is the pragmatic choice: CPU-only, pip-installable, clean Python API, F1 ~0.75-0.80. TransNetV2 is more accurate (F1 ~0.93) but requires TF2 manual setup. For scene-level grouping beyond shot cuts, LLM vision (Gemini/Claude) on keyframes is recommended for small datasets.
-**Recommendation**: Use PySceneDetect for shot boundary detection. Accept the lower F1 given human review is already in the pipeline. If accuracy is problematic on specific films, consider TransNetV2 as a targeted upgrade.
-**Confidence**: 0.75
+### 3. RAG Chunking Strategy
+**Question**: What chunking, embedding, and retrieval strategy works for hierarchical film metadata + long-form cinematography knowledge corpus?
+**Finding**: 512-token recursive splits with 10-20% overlap won benchmarks at 69% accuracy vs. semantic chunking at 54%. Contextual enrichment (prepending LLM-generated context per chunk) reduces failed retrievals by 49%. Multi-granularity embeddings (shot + scene + film levels) with parent-child retrieval yield +20-35% relevance on structured data. Hybrid BM25+pgvector with Reciprocal Rank Fusion raises precision from ~62% to ~84%.
+**Recommendation**: Three-layer retrieval: (1) enriched shot-level vector search, (2) new corpus_chunks table at 512-token splits with contextual enrichment, (3) hybrid BM25+pgvector with RRF fusion. Upgrade corpus embeddings to voyage-3 or text-embedding-3-large; keep text-embedding-3-small for shot-level volume.
+**Confidence**: 0.82
 
-### Script Data Sourcing (script-data-sourcing)
-**Question**: What APIs and databases exist for sourcing film scripts and metadata for alignment with detected shots?
-**Finding**: TMDB API is the primary source for film metadata (free tier, comprehensive). For screenplays: IMSDB (~1,200 scripts, scrapeable), Script Slug, Daily Script. No clean structured API for screenplay text exists -- scraping is standard. For 50-100 seed shots, manual curation is likely faster than automated alignment.
-**Recommendation**: Use TMDB API for film metadata (cast, crew, release dates). Defer automated script alignment to post-v1. For seed data, manually associate script excerpts where relevant.
-**Confidence**: 0.70
+### 4. Chat Visual Rendering
+**Question**: How should the chat interface render visual output (D3 charts, shotlists, reference decks) inline from LLM responses?
+**Finding**: The tool-call-to-component (Generative UI) pattern is the industry standard: LLM tools return typed JSON, client maps to pre-registered React components. MetroVision already has ~70% of the infrastructure -- SSE streaming with tool_call/tool_result events, a Gemini function-calling loop, and six standalone D3 components with typed props. The gap: the client currently discards tool_result payloads instead of mounting visualizations. LLM-generated D3 code (eval/sandbox approach) produces working output only 40-60% of the time -- avoid.
+**Recommendation**: Add "viz tools" (render_rhythm_stream, render_shotlist, render_comparison_table, etc.) that return typed data payloads. Switch tool_result handler in chat-interface.tsx to mount matching D3/list components inline. Complete tool result JSON fully before mounting (D3 needs complete datasets). Text streams in parallel.
+**Confidence**: 0.88
 
-### Metadata Overlay Visualization (metadata-overlay-viz)
-**Question**: What are the best approaches for rendering real-time metadata overlays on HTML5 video playback?
-**Finding**: HTML5 Canvas overlay synchronized to video currentTime via requestAnimationFrame is the standard approach. Canvas positioned absolutely over the video element in a React component. SVG overlaid for vector graphics (trajectory arrows, motion paths). Framer Motion (already in the recommended stack) handles animated transitions. CSS mix-blend-mode for cinematic overlay aesthetics. Libraries: vidstack or react-player for video control, custom canvas for overlay rendering.
-**Recommendation**: Use a layered approach: react-player or vidstack for video control, absolutely-positioned canvas for real-time overlay rendering, SVG for motion path visualizations. Leverage Framer Motion for overlay state transitions.
-**Confidence**: 0.75
+### 5. ComfyUI Node Integration
+**Question**: What is the API contract for ComfyUI custom nodes, and how should MetroVision integrate with ComfyUI, Krea.ai, and Higgsfield?
+**Finding**: ComfyUI V1 nodes require INPUT_TYPES (classmethod), RETURN_TYPES (tuple), FUNCTION (string), CATEGORY (string), registered via NODE_CLASS_MAPPINGS. V3 adds typed io.Schema with pinnable API versions. For external API queries, synchronous HTTP inside FUNCTION is the standard pattern. IS_CHANGED must return float("NaN") to force re-execution (returning True is silently ignored). Krea.ai and Higgsfield expose REST APIs only -- no Python node SDKs exist.
+**Recommendation**: Build a small Python node package targeting V1 (widest compatibility) with V3 upgrade path. SceneQuery node: string inputs (film, shot type, movement filter), HTTP GET to MetroVision API, STRING+INT outputs. Use IS_CHANGED returning float("NaN"). For Krea.ai and Higgsfield, target their REST APIs via webhook/HTTP -- no custom integration needed.
+**Confidence**: 0.82
 
 ## Discovered Constraints
 
-1. **No off-the-shelf camera motion classifier exists.** This was assumed possible in the vision (OQ-1). The classification must come from either a vision LLM (Gemini) or a custom-built RAFT pipeline. This is the single biggest architectural implication.
-2. **CamCloneMaster is not usable for classification.** It is a camera motion generation/transfer tool, not a classification API. References to it in the vision should be treated as inspiration, not implementation option.
-3. **Banana.dev is defunct.** Remove from cloud GPU consideration.
-4. **No structured screenplay API exists.** Script alignment for Tier 2 metadata will require scraping or manual curation, not a clean API integration.
+- **Gemini Batch API video support needs prototype validation.** Batch API is documented for text/image payloads; video-via-File-API-reference in batch mode is less explicitly documented. A small prototype test is needed before committing to this as the bulk path.
+- **Neon free tier storage limit (0.5GB).** At 768-dim vectors (3KB/shot), ~166K shots fit. Sufficient for the 500-film seed but will need monitoring as the corpus grows toward 5,000 films with multi-granularity embeddings.
+- **ComfyUI V3 is still stabilizing.** V1 should be the launch target; V3 migration is a post-launch concern.
+- **IS_CHANGED = float("NaN") is a critical gotcha.** Using True (the intuitive choice) silently caches stale results. This must be documented prominently in the node package.
 
 ## Open Items
 
-1. **Gemini 2.0 Flash accuracy for camera motion classification is untested.** The recommendation to use it is based on capability and cost, not validated accuracy. First 10-20 clips will serve as the accuracy test. If accuracy is poor, the RAFT fallback adds days of engineering.
-2. **Maximum shot length for accurate analysis (OQ-6) remains partially unresolved.** Gemini's context window handles long clips easily, but accuracy may degrade on complex compound movements in long takes. Empirical testing needed during pipeline build.
-3. **Optimal threshold tuning for PySceneDetect's AdaptiveDetector.** Default thresholds may need per-film adjustment for art house cinema with unconventional editing patterns (e.g., Lynch).
+- **Optimal chunk size for cinematography corpus.** Benchmarks point to 512 tokens, but the actual corpus (textbooks, dense technical prose) may perform better at 400 or 600. Empirical A/B testing on the real corpus is needed during build.
+- **Voyage-3 vs. text-embedding-3-large cost-benefit.** Voyage-3 outperforms by ~5-10% on benchmarks, but cost and latency tradeoffs for the specific cinematography domain are unknown without testing.
+- **Storyboard output format (OQ-8).** Not covered in this research round. Needs investigation during build: what structured format do AI generation tools (Runway, Kling) actually consume?
+- **Classification accuracy feedback loops (OQ-6).** HITL review pipeline exists but the feedback loop from corrections back to prompt engineering/few-shot examples is not yet designed.
+- **BM25 extension choice for Neon.** ParadeDB's pg_bm25 is the best option but may not be available on Neon. Native tsvector/ts_rank is weaker but zero-dependency. Needs Neon compatibility check.
+
+---
+
+## Historical: Round 1 Findings (2026-03-15)
+
+The following findings from the initial research round are retained for context. They cover foundational stack decisions that are now locked.
+
+### CV Model for Camera Motion
+Gemini 2.0 Flash adopted for classification (no off-the-shelf classifier exists). RAFT optical flow pipeline on Modal as accuracy fallback. Confidence: 0.72.
+
+### Cloud GPU Service
+Two-tier: Gemini API first (zero GPU), Modal for custom CV if needed. Banana.dev defunct. Confidence: 0.72.
+
+### Camera Movement Taxonomy
+21 movement types, 15 directions, 7 speeds, compound notation, 15 shot sizes, 15 angles, 6 durations. Adopted as-is. Confidence: 0.85.
+
+### Frontend Framework
+Next.js 15 + Vercel + shadcn/ui + Neon + Drizzle. Locked. Confidence: 0.85.
+
+### Shot Boundary Detection
+PySceneDetect with AdaptiveDetector (CPU-only, F1 ~0.75-0.80). TransNetV2 as targeted upgrade if needed. Confidence: 0.75.
+
+### Script Data Sourcing
+TMDB API for metadata. Screenplay alignment deferred to post-v1. Confidence: 0.70.
+
+### Metadata Overlay Visualization
+HTML5 Canvas + requestAnimationFrame over video element. SVG for motion paths. Framer Motion for transitions. Confidence: 0.75.

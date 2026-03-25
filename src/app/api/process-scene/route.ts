@@ -4,7 +4,6 @@ import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { put } from "@vercel/blob";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -15,6 +14,7 @@ import {
   detectObjectsMultiFrame,
   replaceShotObjects,
 } from "@/lib/object-detection";
+import { uploadToS3, getPresignedUrl } from "@/lib/s3";
 import { searchTmdbMovieId } from "@/lib/tmdb";
 import type { ShotWithDetails } from "@/lib/types";
 
@@ -95,20 +95,6 @@ function sanitizePathSegment(value: string) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "untitled";
-}
-
-function resolveBlobToken() {
-  const token =
-    process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
-    process.env.VERCEL_BLOB_READ_WRITE_TOKEN?.trim();
-
-  if (!token) {
-    throw new Error(
-      "BLOB_READ_WRITE_TOKEN or VERCEL_BLOB_READ_WRITE_TOKEN must be set.",
-    );
-  }
-
-  return token;
 }
 
 function runProcess(command: string, args: string[], cwd = process.cwd()) {
@@ -318,19 +304,12 @@ async function classifyClip(clipPath: string) {
 
 async function uploadAsset(
   filePath: string,
-  pathname: string,
+  key: string,
   contentType: string,
-  token: string,
 ) {
   const body = await readFile(filePath);
-  const result = await put(pathname, body, {
-    access: "private",
-    addRandomSuffix: true,
-    contentType,
-    token,
-  });
-
-  return result.url;
+  await uploadToS3(key, body, contentType);
+  return getPresignedUrl(key);
 }
 
 function buildSearchText(film: {
@@ -441,7 +420,6 @@ export async function POST(request: Request) {
     await access(payload.videoPath, constants.R_OK);
 
     tempDir = await mkdtemp(path.join(tmpdir(), "scenedeck-process-"));
-    const blobToken = resolveBlobToken();
     const sourceFile = path.basename(payload.videoPath);
     const filmSlug = `${sanitizePathSegment(payload.filmTitle)}-${payload.year}`;
     const tmdbId = await searchTmdbMovieId(payload.filmTitle, payload.year);
@@ -466,13 +444,11 @@ export async function POST(request: Request) {
         assets.clipPath,
         `films/${filmSlug}/clips/${shotSlug}.mp4`,
         "video/mp4",
-        blobToken,
       );
       const thumbnailUrl = await uploadAsset(
         assets.thumbnailPath,
         `films/${filmSlug}/thumbnails/${shotSlug}.jpg`,
         "image/jpeg",
-        blobToken,
       );
 
       extractedShots.push({
@@ -608,7 +584,7 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error
         ? error.message
-        : "Scene processing failed. Confirm ffmpeg, Python, Gemini, Replicate, Blob, OpenAI, and database access are configured.";
+        : "Scene processing failed. Confirm ffmpeg, Python, Gemini, Replicate, S3, OpenAI, and database access are configured.";
     const status =
       error instanceof Error &&
       (message.includes("required") ||

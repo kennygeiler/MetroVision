@@ -1,39 +1,57 @@
-# Vision Notes — Clio's Observations
+# Vision Notes — Brainstorm Session Summary
+
+## Session Details
+
+- **Date:** 2026-03-24
+- **Depth:** Standard (idea floor: 30, progressive flow)
+- **Ideas generated:** 41
+- **Techniques used:** 5 (Framing, Diverge, Reframe, Converge, Stress-test)
+- **Facilitator:** da-vinci
 
 ## Themes That Emerged
 
-1. **Camera motion as the missing primitive.** The entire vision orbits one insight: existing tools catalog cinema as stills, but filmmaking is motion. SceneDeck fills the gap between static reference (ShotDeck) and controllable AI generation (Runway/Kling). This is a genuinely underserved niche.
+1. **The dataset IS the product.** The single most important insight from this session. The operator articulated that the film database represents 90-100% of the product value. Every product surface — web app, chat, API, integrations — is just a lens on the dataset. This completely reordered priorities: training infrastructure and scale come before any user-facing surface.
 
-2. **Portfolio piece with production ambitions.** The operator is building a hiring artifact, but the vision is written with the depth and rigor of a real product. The "portfolio evaluator" user type makes the dual purpose explicit — the demo IS the product for v1.
+2. **Three-part architecture.** The platform cleanly separates into (1) training infrastructure for ingestion and classification at scale, (2) an intelligence layer using RAG-augmented foundation models, and (3) product surfaces. Each part has distinct timelines, risks, and success criteria. This separation prevents the common trap of building UI before the data foundation is solid.
 
-3. **AI-built-by-AI as a meta-narrative.** Goal 6 (zero manual coding) and Goal 9 (article series) reveal that the process of building SceneDeck is as important as the artifact itself. The operator is demonstrating a workflow, not just shipping software.
+3. **Informed users, not beginners.** The operator made a decisive call: SceneDeck is for people who already know what a dolly is, what coverage means, what pacing implies. This narrows the audience but dramatically sharpens the product. No onboarding tutorials, no "what kind of movie do you want to make" wizards.
 
-4. **Human QA as feature, not overhead.** The verification system (0-5 accuracy rating) is positioned as a demonstrable feature for evaluators, not just internal quality control. This is a smart reframing — QA becomes part of the user experience.
+4. **Visual output, not text output.** The chat interface was reframed from "chatbot" to "prompt-input, visual-output." The operator wants D3 charts, reference images, structured shotlists, and storyboards — not paragraphs of text. This is the key differentiator from generic ChatGPT wrappers.
 
-5. **Contribution as ethos, not role.** The operator explicitly rejected a separate "contributor" user type in favor of treating contribution as a natural extension of use. This signals a community-first design philosophy even in a solo v1.
+5. **Scale compounds value.** Unlike most products where features drive value, SceneDeck's value grows with every film classified. 500 films is useful. 5,000 films is powerful. 50,000 films would be unprecedented. The training infrastructure must be built for scale from day one.
 
-## Tensions and Trade-offs Navigated
+## Key Pivots During Session
 
-- **Scope vs. timeline:** 50-100 shots in 1-2 weeks is ambitious. The operator resolved this by prioritizing frontend over pipeline — humans can correct bad metadata, but the UI must be impressive on first visit.
-- **Research vs. execution:** The camera motion CV model is TBD (OQ-1), which is the highest-risk unknown. The operator accepted this uncertainty rather than prematurely committing to a tool.
-- **Budget flexibility vs. solo constraints:** "Willing to invest what it takes" paired with "solo developer" creates tension around GPU compute costs and operational complexity. The managed services strategy (Replicate/Modal) is the resolution.
-- **Educational use vs. licensing:** The operator explicitly scoped this as educational/not-for-profit to sidestep licensing concerns for hosted video content. This is a pragmatic choice for a portfolio piece.
+- **From portfolio piece to platform:** The original VISION.md framed SceneDeck as a 50-100 shot portfolio demo deployable in 1-2 weeks. This session reframed it as a genuine platform with 5,000+ film ambitions and a 500-film launch gate.
+- **From "anyone" to "experts":** User persona shifted from broad accessibility to domain-knowledgeable users. This simplified UX decisions and raised the quality bar for output.
+- **From text-first to visual-first:** Chat output reframed from conversational text to structured visual data.
 
-## Areas of Strength
+## Decisions Made During Session
 
-- The tiered metadata schema (Tier 1/2/3) is well-structured and provides a clear progression path
-- Success criteria are concrete and measurable — no ambiguity about what "done" means
-- The user personas are grounded in real workflows (ComfyUI nodes, CSV export for researchers)
-- Key decisions are crisp and defensible — each one closes a door that could have caused scope creep
+1. 500 films classified before any product surface launches publicly
+2. 85% accuracy baseline with HITL review for lower-confidence output
+3. RAG-augmented foundation models (NOT custom-trained)
+4. Priority ranking: P1 data/training/scale, P2 visual-first UI, P3 intelligence + integrations
+5. ComfyUI as primary integration target
+6. Users must have domain knowledge — no beginner onboarding
+7. Chat = prompt input, visual output (not text-dominant)
+8. Knowledge corpus includes textbooks, research papers, critical analysis
 
-## Areas to Watch
+## Tensions and Trade-offs
 
-- The camera motion CV model selection (OQ-1) is a critical-path unknown that could reshape the entire pipeline architecture
-- "Visually striking" UI with no design team and AI-generated code is high-aspiration — the visual direction section helps but is light on specifics
-- The 12-section vision is comprehensive but the elicitation log (section 11) is sparse — downstream planners will not have access to the full brainstorm reasoning
-- MCP plugin is listed as a data export format but could be a significant engineering effort for a 1-2 week timeline
+- **Scale ambition vs. solo operator:** 5,000+ films is massive for a solo developer with AI agents. The training infrastructure must be highly automated to be feasible.
+- **Quality gate vs. momentum:** The 500-film minimum before launch means a long period of invisible infrastructure work before any public-facing progress. The operator accepted this trade-off because dataset quality is existential.
+- **RAG vs. fine-tuning:** The operator chose RAG over custom model training. This is faster and cheaper but means the intelligence layer is bounded by corpus quality and retrieval accuracy.
+- **Integration breadth vs. depth:** Four integration targets (ComfyUI, Krea.ai, FLORA, Higsfield) risk spreading effort thin. Mitigated by API-first design and ComfyUI prioritization.
 
-## Context Notes
+## Existing Infrastructure Leveraged
 
-- Greenfield project — no existing codebase, decisions, or technical debt to navigate
-- No onboarding artifacts were present; this vision was built from scratch
+The session built on significant existing work (Part 1 already built):
+- Next.js 15 + React 19 + TypeScript frontend
+- Drizzle ORM + Neon Postgres + pgvector database
+- Dual pipeline (TS + Python) for shot detection
+- Gemini 2.5 Flash classification
+- S3 media storage, D3 visualizations, OpenAI embeddings
+- TMDB integration, Replicate/Grounding-DINO, verification workflow
+
+This existing infrastructure de-risks the training pipeline significantly — the question is scale, not feasibility.

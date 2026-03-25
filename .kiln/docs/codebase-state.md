@@ -2,134 +2,98 @@
 # Codebase State
 
 ## TL;DR
-Current milestone: Database, Browse & Search (M3). 0/15 M3 deliverables complete. Key files: src/lib/taxonomy.ts, src/components/video/metadata-overlay.tsx, src/lib/mock/shots.ts. Last change: M2 hero overlay implemented with MetadataOverlay, ShotPlayer, ShotCard, ShotBrowser, and shot detail page using mock data (3 hardcoded shots).
+Current milestone: M1 (Foundation Repair). 0/11 deliverables complete. Key files: src/db/schema.ts, package.json, worker/src/ingest.ts.
+Last change: MetroVision rebrand + S3 pipeline + D3 visualizations + AI agent + batch processing routes added.
 
-## Milestone: Foundation & Design System (M1)
-Status: complete
-
-### Deliverables
-- [x] Next.js 15 App Router project initialized (TypeScript, Tailwind CSS 4, shadcn/ui, Framer Motion) -- project root
-- [x] Shared camera movement taxonomy constants (TypeScript) -- src/lib/taxonomy.ts (21 movement types, 15 directions, 7 speeds, 15 shot sizes, 6 vertical angles, 5 horizontal angles, 4 special angles, 6 duration categories)
-- [x] Python pipeline directory (`/pipeline`) with dependencies -- pipeline/ (taxonomy.py, requirements.txt, __init__.py)
-- [x] Matching taxonomy constants (Python) -- pipeline/taxonomy.py
-- [x] Design tokens file (tokens.css) with color palette, typography, spacing -- src/styles/tokens.css (OKLCH color space, cyan accent hue 200, cool neutrals hue 260)
-- [x] Component style guide (markdown + token references) -- .kiln/design/tokens.css + tokens.json
-- [x] Site shell: root layout with header, navigation, dark cinematic theme -- src/components/layout/site-shell.tsx, site-header.tsx, src/app/layout.tsx
-- [ ] Vercel project configured for deployment from GitHub -- not yet configured
-
-## Milestone: Hero Feature -- Video Metadata Overlay (M2)
-Status: complete
+## Milestone: M1 — Foundation Repair
+Status: not started
 
 ### Deliverables
-- [x] `VideoOverlay` / `MetadataOverlay` component with direction arrows, motion visualization -- src/components/video/metadata-overlay.tsx (SVG-based DirectionVector for all 15 directions, movement type label, shot size badge, speed indicator, compound notation)
-- [x] SVG layer renders vector annotations: direction arrows for all direction types (linear, circular, in/out, none) -- embedded in metadata-overlay.tsx
-- [x] Framer Motion transitions for overlay state changes -- containerVariants/itemVariants with staggered reveal
-- [x] Overlay toggle controls: show/hide overlay -- src/components/video/shot-player.tsx (Eye/EyeOff toggle button)
-- [x] Overlay legend explaining visual language -- shot-player.tsx (4 color channels: motion vector, shot scale, speed telemetry, badge system)
-- [x] Shot detail page (`/shot/[id]`) with video player + overlay + metadata panel -- src/app/shot/[id]/page.tsx (structured metadata grid, film info, compound movement display)
-- [x] Seed data: 3 manually created shot records with hardcoded mock data -- src/lib/mock/shots.ts (2001, Whiplash, The Shining)
-- [x] ShotCard component -- src/components/shots/shot-card.tsx (thumbnail placeholder, movement badge, shot size badge, film title, director, duration)
-- [x] Browse page with basic movement type filter -- src/app/browse/page.tsx + src/components/shots/shot-browser.tsx
-- [x] Landing page with taxonomy stats and featured movements -- src/app/page.tsx
-- [x] Display helpers for taxonomy values -- src/lib/shot-display.ts (getMovementDisplayName, formatShotDuration, getCompoundNotation, SPEED_PROGRESS map)
-- [ ] Canvas layer renders per-frame overlays synced to video.currentTime via requestAnimationFrame -- deferred (currently uses Framer Motion animation on static plate, not real video sync)
-- [ ] Responsive layout verified on tablet -- not explicitly verified
-- [ ] Screen-recordable quality verified -- not explicitly verified
+- [ ] bullmq and ioredis removed from package.json — currently in package.json (bullmq ^5.71.0, ioredis ^5.10.1)
+- [ ] Vercel Blob references removed — @vercel/blob ^2.3.1 still in package.json; src/app/api/blob/[...path]/route.ts and pipeline/upload_blob.py exist
+- [ ] Worker directory migrated from npm to pnpm workspace — worker/ has its own package.json with npm lockfile; pnpm-workspace.yaml exists at root but worker not yet integrated
+- [ ] AWS SDK version aligned between root and worker — root: ^3.1015.0, worker: ^3.700.0
+- [ ] TensorFlow.js/COCO-SSD evaluated and removed if not actively used — @tensorflow/tfjs ^4.22.0 and @tensorflow-models/coco-ssd ^2.2.3 in root package.json; used by src/components/video/realtime-object-overlay.tsx and src/hooks/use-realtime-detection.ts
+- [ ] Token-bucket rate limiter in TS worker for Gemini calls — not implemented
+- [ ] Asyncio rate limiter in Python pipeline — not implemented
+- [ ] detect-shots API route consolidated — src/app/api/detect-shots/route.ts still exists (shells to Python)
+- [ ] review-splits page moved inside (site) route group — src/app/review-splits/page.tsx exists outside (site) group
+- [ ] Package name updated from "scenedeck" to "metrovision" — package.json still says "scenedeck", worker says "scenedeck-worker"
+- [ ] Taxonomy slug assertion in Python pipeline — not implemented in pipeline/
 
 ### Notes
-- Video playback uses a synthetic placeholder plate (no real video files yet). The overlay renders on a gradient background with grid lines.
-- The browse page currently reads from mockShots array (3 shots). No URL search params for filters yet.
-- Placeholder routes exist for /verify and /export (stub pages, no functionality).
+- DB schema has 8 tables: films, scenes, shots, shotMetadata, shotSemantic, verifications, shotEmbeddings, shotObjects, pipelineJobs
+- Architecture doc mentions 5 tables (films, scenes, shots, shot_embeddings, verifications) but schema has evolved to 9 tables
+- drizzle-orm pinned at ^0.45.1 (arch-constraints say ~0.38.x — version drift)
+- src/lib/queue.ts and src/lib/queue-workers.ts exist (may contain BullMQ usage)
+- Batch API routes exist: src/app/api/batch/{source,submit,status,review}/route.ts
 
-## Milestone: Database, Browse & Search (M3)
+## Milestone: M2 — Batch Pipeline Infrastructure
 Status: not started
 
-### Deliverables (from master-plan.md)
-- [ ] Neon PostgreSQL database provisioned with pgvector extension
-- [ ] Drizzle ORM configured with schema (films, shots, shot_metadata, shot_semantic, verifications, shot_embeddings)
-- [ ] Drizzle migration generated and applied to Neon
-- [ ] Seed script that inserts development data into Neon
-- [ ] Shot detail page refactored to query from Neon instead of mock data
-- [ ] Browse page with grid/list view of shot cards (currently exists with mock data, needs DB query)
-- [ ] ShotCard component (exists, needs DB-backed data)
-- [ ] FilterSidebar component: faceted filters for film, director, movement type, shot size, angle, speed
-- [ ] Filter state managed via URL search params (shareable filter URLs)
-- [ ] SearchBar component: natural language search input
-- [ ] /api/search route handler (embedding generation, pgvector similarity search)
-- [ ] /api/shots route handler (filter parameters, paginated shot list)
-- [ ] Embedding generation utility for shot_embeddings table
-- [ ] Landing page with hero visual, featured shots carousel, prominent search bar (landing page exists, needs featured shots from DB + search bar)
-- [ ] Empty states and no-match states for browse and search (no-match state exists for browse filters)
+### Deliverables
+- [ ] batch_jobs table in Postgres — pipelineJobs table exists but is not the batch_jobs spec from master plan
+- [ ] Gemini Batch API prototype (AC-24 gate)
+- [ ] Python batch worker with SKIP LOCKED
+- [ ] Multi-process orchestration at film level
+- [ ] Graceful shutdown and resume
+- [ ] Job submission endpoint
+- [ ] Admin panel for batch jobs — src/app/(site)/admin/page.tsx exists (partial)
+- [ ] Two-lane architecture documented (AC-20)
 
-## Milestone: QA Verification (M4)
+## Milestone: M3 — Dataset Scale to 500 Films
 Status: not started
 
-## Milestone: Pipeline (M5)
+### Deliverables
+- [ ] 500+ films sourced and queued
+- [ ] Batch worker run against 500-film queue
+- [ ] HITL review pipeline hardened
+- [ ] 85% classification accuracy achieved
+- [ ] Embeddings for all classified shots
+
+## Milestone: M4 — Web Application and Hero Features
+Status: not started (some UI already exists from prior work)
+
+### Deliverables
+- [ ] Film browse landing page — src/app/(site)/browse/page.tsx exists (partial, uses mock data)
+- [ ] Film detail page — src/app/(site)/film/[id]/page.tsx exists (partial)
+- [ ] Scene detail page — not yet
+- [ ] Shot detail page — src/app/(site)/shot/[id]/page.tsx exists (partial)
+- [ ] Metadata overlay hero feature — src/components/video/metadata-overlay.tsx exists (SVG-based, partial)
+- [ ] Semantic search — src/app/api/search/route.ts exists (partial)
+- [ ] URL param filter state — not verified
+- [ ] Data export — src/app/(site)/export/page.tsx and src/components/export/ exist (partial)
+- [ ] Reference deck creation
+- [ ] D3 visualizations — 6 components exist: rhythm-stream, hierarchy-sunburst, pacing-heatmap, chord-diagram, composition-scatter, director-radar
+
+## Milestone: M5 — RAG Intelligence Layer
 Status: not started
 
-## Milestone: Export (M6)
+## Milestone: M6 — Chat Interface with Generative UI
+Status: not started (partial infrastructure exists)
+
+### Notes
+- AI agent exists: src/app/(site)/agent/page.tsx, src/components/agent/chat-interface.tsx, src/app/api/agent/chat/route.ts
+- Agent system prompt and tools: src/lib/agent-system-prompt.ts, src/lib/agent-tools.ts
+
+## Milestone: M7 — API Portal and ComfyUI Integration
 Status: not started
 
-## Milestone: Polish & Deploy (M7)
-Status: not started
+## Module Inventory
 
-## Project Structure (Current)
+### Next.js App (src/)
+- **Pages**: layout.tsx, page.tsx (home), browse/, film/[id]/, shot/[id]/, verify/, verify/[shotId]/, export/, visualize/, agent/, ingest/, admin/, review-splits/ (outside route group)
+- **API Routes**: detect-shots, detect-split, detect-objects, export, search, shots, verifications, process-scene, group-scenes, s3, blob/[...path], upload-video, ingest-film, ingest-film/stream, agent/chat, upload-to-s3, batch/{source,submit,status,review}
+- **Components**: video/ (shot-player, metadata-overlay, object-overlay, realtime-object-overlay), shots/ (shot-card, shot-browser, detect-objects-button), films/ (film-card, film-header, film-coverage-stats, film-timeline, scene-card, film-browser), visualize/ (6 D3 charts + viz-dashboard), agent/ (chat-interface, message-cards), export/ (export-button, export-panel), verify/ (verification-panel, verification-history), review/ (review-splits-workspace), layout/ (site-shell, site-header), home/ (home-hero), ingest/ (pipeline-viz), ui/ (button, loading-skeleton)
+- **Lib**: taxonomy.ts, types.ts, utils.ts, shot-display.ts, tmdb.ts, s3.ts, export.ts, archive-org.ts, object-detection.ts, timeline-colors.ts, verification.ts, validation-rules.ts, ingest-pipeline.ts, agent-system-prompt.ts, agent-tools.ts, queue.ts, queue-workers.ts, mock/shots.ts
+- **DB**: schema.ts (9 tables), index.ts, queries.ts, embeddings.ts, generate-embeddings.ts, seed.ts, load-env.ts
 
-```
-/Users/kenny.geiler/Documents/Coverage/Claude/
-  .kiln/                           -- Kiln pipeline state and docs
-    docs/                          -- Architecture, constraints, decisions, research, codebase-state
-    design/                        -- tokens.css, tokens.json
-    plans/                         -- Build plans
-    master-plan.md                 -- 7-milestone master plan
-  src/
-    app/
-      layout.tsx                   -- Root layout (Inter + JetBrains Mono fonts, dark theme, SiteShell)
-      page.tsx                     -- Landing page (taxonomy stats, featured movements hero)
-      browse/page.tsx              -- Browse page (ShotBrowser with mock data)
-      shot/[id]/page.tsx           -- Shot detail page (ShotPlayer + metadata panel)
-      verify/page.tsx              -- Placeholder route
-      export/page.tsx              -- Placeholder route
-    components/
-      layout/
-        site-header.tsx            -- Fixed header with nav (Browse, Verify, Export) + search icon
-        site-shell.tsx             -- Root shell with ambient gradients, header, footer
-      shots/
-        shot-browser.tsx           -- Client component: movement type filter pills + shot card grid
-        shot-card.tsx              -- Shot card with movement/size badges, film info, duration
-      ui/
-        button.tsx                 -- shadcn/ui Button (CVA variants)
-      video/
-        metadata-overlay.tsx       -- Hero overlay: SVG direction vectors, movement/speed/angle badges, Framer Motion
-        shot-player.tsx            -- Video player wrapper with overlay toggle + legend
-    lib/
-      mock/
-        shots.ts                   -- 3 mock shots (2001, Whiplash, The Shining) with full taxonomy metadata
-      shot-display.ts              -- Display name helpers, duration formatter, compound notation, speed progress map
-      taxonomy.ts                  -- Full camera movement taxonomy constants + TypeScript types
-      utils.ts                     -- cn() utility (clsx + tailwind-merge)
-    styles/
-      globals.css                  -- Tailwind imports, shadcn theme bridge, base styles
-      tokens.css                   -- OKLCH design tokens (colors, typography, spacing, shadows)
-  pipeline/
-    __init__.py                    -- Empty init
-    taxonomy.py                    -- Python taxonomy constants (mirrors TypeScript)
-    requirements.txt               -- Python dependencies
-  package.json                     -- Next.js 15.5.12, React 19.2.3, Framer Motion, shadcn, lucide-react
-  tsconfig.json                    -- TypeScript config with @/ path alias
-  components.json                  -- shadcn/ui config
-  eslint.config.mjs                -- ESLint config
-  next.config.ts                   -- Next.js config
-  postcss.config.mjs               -- PostCSS config (Tailwind)
-```
+### TS Ingest Worker (worker/)
+- server.ts (Express), ingest.ts (pipeline logic), s3.ts, db.ts, schema.ts
+- Has own package.json with npm (not pnpm workspace)
 
-## Dependencies Not Yet Installed
-- drizzle-orm, @neondatabase/serverless -- needed for M3
-- drizzle-kit -- needed for M3 (dev dependency)
-- @vercel/blob -- needed for M5/M7
+### Python Pipeline (pipeline/)
+- main.py, classify.py, config.py, detect_region.py, extract_clips.py, shot_detect.py, taxonomy.py, upload_blob.py, validate_gemini.py, write_db.py, requirements.txt
 
-## Known Issues
-- No real video files exist; overlay renders on synthetic gradient plate
-- Browse page filters are client-side only (no URL search params)
-- No database connection; all data from mock/shots.ts
-- Vercel deployment not yet configured
+### Config
+- drizzle.config.ts, next.config.ts, eslint.config.mjs, postcss.config.mjs, pnpm-workspace.yaml, components.json

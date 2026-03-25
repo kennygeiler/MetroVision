@@ -17,25 +17,15 @@ except ImportError:
 
 try:
     from .extract_clips import extract_clips
-    from .upload_blob import upload_to_blob
     from .write_db import write_to_db
 except ImportError:
     from extract_clips import extract_clips
-    from upload_blob import upload_to_blob
     from write_db import write_to_db
 
 
 def _slug_part(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower().strip())
     return slug.strip("-") or "untitled"
-
-
-def _build_blob_filename(
-    film_title: str, video_stem: str, shot_index: int, extension: str
-) -> str:
-    safe_title = _slug_part(film_title)
-    safe_stem = _slug_part(video_stem)
-    return f"films/{safe_title}/{safe_stem}/shot-{shot_index:04d}.{extension}"
 
 
 def _load_reviewed_shots(
@@ -88,20 +78,20 @@ def run_pipeline(
     output_dir = CLIPS_OUTPUT_DIR / source_path.stem
 
     if splits_path:
-        print("Step 1/5: Loading reviewed splits")
+        print("Step 1/4: Loading reviewed splits")
         shots = _load_reviewed_shots(splits_path, source_path)
     else:
-        print("Step 1/5: Detecting shots")
+        print("Step 1/4: Detecting shots")
         shots = detect_shots(str(source_path))
 
     if not shots:
         print("No shots detected; nothing to process.")
         return
 
-    print("Step 2/5: Extracting clips and thumbnails")
+    print("Step 2/4: Extracting clips and thumbnails")
     extract_clips(str(source_path), shots, str(output_dir))
 
-    print("Step 3/5: Classifying clips with Gemini")
+    print("Step 3/4: Classifying clips with Gemini")
     enriched_shots: list[dict[str, Any]] = []
     for shot in shots:
         clip_path = shot["clip_path"]
@@ -111,29 +101,19 @@ def run_pipeline(
         classification = classify_shot(clip_path)
         classification["classification_source"] = "gemini"
 
-        print(f"Step 4/5: Uploading assets for shot {shot_index}/{len(shots)}")
-        clip_url = upload_to_blob(
-            clip_path,
-            _build_blob_filename(film_title, source_path.stem, shot_index, "mp4"),
-        )
-        thumbnail_url = upload_to_blob(
-            thumbnail_path,
-            _build_blob_filename(film_title, source_path.stem, shot_index, "jpg"),
-        )
-
         enriched_shots.append(
             {
                 **shot,
                 **classification,
                 "source_file": str(source_path),
-                "video_url": clip_url,
-                "thumbnail_url": thumbnail_url,
+                "video_url": clip_path,
+                "thumbnail_url": thumbnail_path,
                 "subjects": [],
                 "technique_notes": None,
             }
         )
 
-    print("Step 5/5: Writing records to Neon")
+    print("Step 4/4: Writing records to Neon")
     write_to_db(
         {
             "title": film_title,

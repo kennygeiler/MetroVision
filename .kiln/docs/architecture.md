@@ -1,227 +1,174 @@
 <!-- status: complete -->
-# SceneDeck Architecture
+# Architecture
 
-## Overview
+## System Overview
 
-SceneDeck is a searchable database of iconic cinema shots tagged with structured camera motion metadata. It consists of three subsystems: a data ingestion pipeline (Python), a web application (Next.js), and external AI/GPU services. The system is a portfolio demo serving 50-100 curated shots, not a production-scale product.
-
-## System Boundary Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        VERCEL (Hosting)                         │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Next.js 15 App (App Router)                 │   │
-│  │                                                          │   │
-│  │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐   │   │
-│  │  │  Browse UI   │  │  Search UI   │  │  Overlay UI   │   │   │
-│  │  │  (filters,   │  │  (semantic    │  │  (video +     │   │   │
-│  │  │   directory) │  │   NL query)  │  │   metadata)   │   │   │
-│  │  └─────────────┘  └──────────────┘  └───────────────┘   │   │
-│  │  ┌─────────────┐  ┌──────────────┐                       │   │
-│  │  │  QA/Verify   │  │  Export API  │                       │   │
-│  │  │  (0-5 rating)│  │  (JSON/CSV)  │                       │   │
-│  │  └─────────────┘  └──────────────┘                       │   │
-│  │                                                          │   │
-│  │  ┌──────────────────────────────────────────────────┐    │   │
-│  │  │           API Routes (Route Handlers)            │    │   │
-│  │  │  /api/shots, /api/search, /api/verify, /api/export│   │   │
-│  │  └──────────────────────────────────────────────────┘    │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌─────────────────┐   ┌─────────────────┐                     │
-│  │  Vercel Blob    │   │  Neon Postgres   │                     │
-│  │  (video files)  │   │  (metadata DB)   │                     │
-│  └─────────────────┘   └─────────────────┘                     │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                  DATA PIPELINE (Python, local/CI)               │
-│                                                                 │
-│  ┌──────────┐   ┌───────────┐   ┌───────────┐   ┌──────────┐  │
-│  │  Ingest  │──▶│  Shot     │──▶│  Camera   │──▶│  Upload  │  │
-│  │  (FFmpeg)│   │  Detect   │   │  Classify │   │  to DB + │  │
-│  │          │   │(PyScene-  │   │(Gemini    │   │  Blob    │  │
-│  │          │   │ Detect)   │   │ Flash)    │   │          │  │
-│  └──────────┘   └───────────┘   └───────────┘   └──────────┘  │
-│                                       │                         │
-│                                       ▼ (fallback)             │
-│                              ┌───────────────┐                  │
-│                              │  RAFT on Modal│                  │
-│                              │  (GPU, custom │                  │
-│                              │   pipeline)   │                  │
-│                              └───────────────┘                  │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                     EXTERNAL SERVICES                           │
-│  ┌───────────────┐  ┌──────────────┐  ┌───────────────────┐    │
-│  │ Gemini 2.0    │  │ Modal (GPU)  │  │ Gemini/Claude     │    │
-│  │ Flash (camera │  │ RAFT fallback│  │ (scene grouping,  │    │
-│  │ classify)     │  │              │  │  semantic metadata)│    │
-│  └───────────────┘  └──────────────┘  └───────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
-```
+MetroVision (SceneDeck) is a three-part platform for structured camera movement analysis at cinematic scale. The architecture separates into: (1) a training infrastructure that ingests films, detects shots, and classifies camera movements; (2) an intelligence layer that augments foundation models with cinematographic knowledge via RAG; and (3) product surfaces that serve academics, AI filmmakers, and integrations.
 
 ## Components
 
-### 1. Web Application (Next.js 15)
+### 1. Training Infrastructure (Ingest + Classify)
 
-The monolithic Next.js app handles all frontend and backend concerns for the web experience.
+#### 1a. Interactive Ingest Pipeline (TypeScript Worker)
+- **Runtime**: Node.js Express service (`worker/src/ingest.ts`)
+- **Purpose**: Single-film ingestion triggered from the web UI with real-time SSE progress streaming
+- **Flow**: Upload video -> PySceneDetect (shelled out via CLI) -> frame extraction (ffmpeg) -> Gemini 2.5 Flash classification (inline base64, rate-limited) -> TMDB metadata enrichment -> OpenAI embedding generation -> S3 asset upload -> Postgres write via Drizzle ORM
+- **Rate limiting**: Token-bucket at 130 RPM with `concurrency = min(tier_limit * 0.85, 50)` concurrent calls
+- **Output**: SSE events per shot (progress, classification result, completion)
 
-**Pages / Routes:**
-- `/` -- Landing page with hero visual, featured shots, search bar
-- `/browse` -- Directory view with filters (film, director, movement type, shot size, angle)
-- `/shot/[id]` -- Shot detail page with video playback + metadata overlay
-- `/verify` -- QA verification interface (0-5 accuracy rating per shot)
-- `/api/shots` -- CRUD for shot metadata
-- `/api/search` -- Semantic search endpoint
-- `/api/verify` -- Submit/update verification ratings
-- `/api/export` -- JSON/CSV export of shot metadata
+#### 1b. Batch Ingest Pipeline (Python Batch Worker) [NEW]
+- **Runtime**: Python async worker (`pipeline/batch_worker.py`)
+- **Purpose**: Bulk catalogue ingestion for the 5,000-film goal
+- **Flow**: Poll Postgres jobs table (`SELECT ... FOR UPDATE SKIP LOCKED`) -> PySceneDetect via Python API (AdaptiveDetector, per-film threshold) -> frame extraction -> Gemini Batch API (JSONL manifest, 200K requests/job, 24h turnaround, 50% cost savings) -> result parsing -> Postgres write via asyncpg
+- **Queue**: Postgres SKIP LOCKED (no Redis/BullMQ dependency)
+- **Parallelism**: Multi-process orchestration at the film level (one worker process per film; PySceneDetect is single-threaded per video)
 
-**Key UI Components:**
-- `VideoOverlay` -- The hero component. HTML5 `<video>` element with absolutely-positioned canvas/SVG layers rendering camera motion metadata (movement type, direction arrows, trajectory paths, shot size, speed) synchronized to `currentTime` via `requestAnimationFrame`.
-- `SearchBar` -- Natural language search input with typeahead
-- `FilterSidebar` -- Faceted filters mapped to taxonomy values
-- `ShotCard` -- Thumbnail + metadata summary for browse/search results
-- `VerificationPanel` -- 0-5 star rating UI with per-field accuracy toggles
-- `ExportDialog` -- Format selection and download trigger
+#### 1c. HITL Review System
+- **Runtime**: Next.js pages + API routes
+- **Purpose**: Human-in-the-loop verification of lower-confidence classifications
+- **Flow**: Classifications below confidence threshold -> review queue -> operator reviews with 0-5 rating -> corrections written back to shots table
+- **Feedback loop**: Corrections feed into prompt engineering improvements for classification prompts
 
-**Data Flow (read path):**
-1. User visits `/browse` or searches
-2. Server component queries Neon via Drizzle ORM
-3. Results rendered as shot cards with thumbnails
-4. User clicks shot -> `/shot/[id]` loads metadata + video URL
-5. `VideoOverlay` renders metadata on top of video playback
+### 2. Intelligence Layer (RAG)
 
-**Data Flow (verify path):**
-1. User visits `/verify` or clicks "Verify" on a shot
-2. Current AI-generated metadata displayed alongside video
-3. User rates each metadata field (0-5) and optionally corrects values
-4. POST to `/api/verify` updates the shot record in Neon
+#### 2a. Knowledge Corpus Ingestion [NEW]
+- **Sources**: Cinematography textbooks, research papers, critical analysis articles
+- **Chunking**: 512-token recursive character splits with 10-20% overlap
+- **Enrichment**: Contextual Retrieval -- LLM-generated context statement prepended to each chunk before embedding (reduces failed retrievals by 49%)
+- **Storage**: New `corpus_chunks` table in Neon Postgres with `vector(1536)` column
+- **Embedding model**: `text-embedding-3-large` (1536 dims) for corpus; `text-embedding-3-small` (768 dims) retained for shot-level volume
 
-### 2. Data Pipeline (Python)
+#### 2b. Multi-Granularity Film Embeddings [NEW]
+- **Levels**: Shot (existing `shot_embeddings`), Scene (new `scene_embeddings`), Film (new `film_embeddings`)
+- **Shot-level**: Enriched searchText including scene context
+- **Scene-level**: Scene title + description + aggregated shot summary
+- **Film-level**: Overview + genre + director + aggregate coverage stats
+- **Retrieval**: Parent-child expansion -- search at shot level, expand to scene context for LLM grounding
 
-A standalone Python pipeline that processes source video files into tagged shots. Runs locally or in CI, not on Vercel. Outputs go to Neon (metadata) and Vercel Blob (video clips).
+#### 2c. Hybrid Retrieval Engine [NEW]
+- **Vector search**: pgvector cosine similarity on shot/scene/corpus embeddings
+- **Full-text search**: PostgreSQL tsvector/ts_rank (BM25-approximate; ParadeDB pg_bm25 if available on Neon)
+- **Fusion**: Reciprocal Rank Fusion (RRF) -- `score = 1/(60 + rank_vector) + 1/(60 + rank_bm25)`, fetch 20 candidates from each source
+- **Query routing**: Long natural-language queries -> corpus + scene-level search; Short specific queries -> shot-level metadata filtering + vector similarity
 
-**Pipeline Stages:**
+#### 2d. Foundation Model Integration
+- **Models**: Claude (Anthropic) and/or Gemini as reasoning engine
+- **Pattern**: RAG-augmented prompts -- retrieved chunks injected as context alongside the user query
+- **Tool calling**: LLM selects visualization tools and returns typed JSON payloads
 
-1. **Ingest**: Accept a source video file (scene from a film). Store source metadata (film title, director, year, source timecodes). Validate format with FFmpeg/ffprobe.
+### 3. Product Surfaces
 
-2. **Shot Boundary Detection**: Run PySceneDetect `AdaptiveDetector` on the source video. Output: list of `(start_timecode, end_timecode)` per detected shot. Extract individual shot clips via FFmpeg.
+#### 3a. Web Application (Primary Surface)
+- **Framework**: Next.js 15 App Router + React 19
+- **UI**: shadcn/ui components
+- **Features**: Film -> scene -> shot browsing hierarchy, semantic search, D3 data visualizations, reference deck creation, metadata overlay on video playback (hero visual), data export (CSV, Excel, JSON)
+- **Routing**: URL-param-based filter state (not useState) for shareable URLs
+- **Visualizations**: 6 D3 chart types (RhythmStream, HierarchySunburst, PacingHeatmap, ChordDiagram, CompositionScatter, DirectorRadar)
 
-3. **Camera Motion Classification**: For each shot clip:
-   - **Primary (Gemini 2.0 Flash)**: Upload clip to Google Files API, call Gemini with structured prompt requesting JSON output conforming to the taxonomy schema (movement type, direction, speed, shot size, angle, compound movements). Cost: under $5 for 100 clips.
-   - **Fallback (RAFT on Modal)**: If Gemini accuracy is below threshold on QA review, deploy RAFT optical flow pipeline on Modal. Extract dense optical flow, decompose homography, classify via rule-based system. Output same taxonomy JSON.
+#### 3b. Chat Interface
+- **Pattern**: Prompt-input, visual-output (Generative UI)
+- **Rendering**: Tool-call-to-component pattern -- LLM tool calls return typed JSON payloads, client maps to pre-registered React/D3 components inline in message thread
+- **Tools**: `render_rhythm_stream`, `render_pacing_heatmap`, `render_director_radar`, `render_shotlist`, `render_reference_deck`, `render_comparison_table`
+- **Streaming**: SSE with hybrid text + structured parts; D3 components mount after complete JSON payload; text streams in parallel
+- **Existing infra**: SSE streaming with tool_call/tool_result events already in place; gap is mounting components from tool results instead of discarding them
 
-4. **Scene Grouping (optional)**: Send keyframes from consecutive shots to Gemini/Claude vision to identify scene boundaries (which shots belong to the same narrative scene). For 50-100 shots this is a single LLM call.
+#### 3c. API Portal [NEW]
+- **Purpose**: Programmatic access to the film dataset
+- **Protocol**: REST JSON API
+- **Endpoints**: Films, scenes, shots, search (semantic + metadata filtering), taxonomy reference
+- **Auth**: API key-based (simple, defer OAuth/user accounts)
 
-5. **Semantic Metadata (Tier 2)**: For each shot, call Gemini/Claude with the clip + prompt to extract: scene description, subjects/characters, mood/atmosphere, lighting description, notable techniques. This is Tier 2 metadata -- nice-to-have for search enrichment.
+#### 3d. ComfyUI Node Package [NEW]
+- **Target**: V1 contract (widest compatibility), V3 upgrade path later
+- **Node**: `SceneQuery` -- string inputs (film, shot type, movement filter), HTTP GET to MetroVision API, STRING + INT outputs
+- **Caching**: `IS_CHANGED` returns `float("NaN")` to force re-execution (returning True is silently ignored)
+- **Registration**: `NODE_CLASS_MAPPINGS` in `__init__.py`
 
-6. **Upload**: Write shot metadata to Neon (via Drizzle or direct SQL). Upload shot video clips to Vercel Blob. Store blob URLs in the database.
+### 4. Data Layer
 
-### 3. Database Schema (Neon PostgreSQL)
+#### 4a. Database
+- **Engine**: Neon PostgreSQL with pgvector extension
+- **ORM**: Drizzle ORM (TypeScript side); asyncpg (Python batch worker)
+- **Tables (existing)**: films, scenes, shots, shot_embeddings, verifications
+- **Tables (new)**: corpus_chunks, scene_embeddings, film_embeddings, batch_jobs
+- **Connection**: `@neondatabase/serverless` HTTP driver (connection-stateless, avoids pool exhaustion)
 
-Core tables:
+#### 4b. Object Storage
+- **Service**: AWS S3
+- **Content**: Video clips, keyframes, thumbnails
+- **Access**: Pre-signed URLs for client-side playback
+
+#### 4c. External Services
+- **Gemini 2.5 Flash**: Shot classification (interactive + batch)
+- **OpenAI**: text-embedding-3-small (shot embeddings), text-embedding-3-large (corpus embeddings)
+- **TMDB API**: Film metadata (title, director, cast, year, genre)
+- **Claude/Gemini**: Foundation model for RAG reasoning engine + chat
+
+### 5. Taxonomy System
+- **Definition**: Fixed hardcoded taxonomy -- 21 movement types, 15 directions, 7 speeds, 15 shot sizes, 15 angles, 6 durations, compound notation
+- **Source of truth**: Defined in both `src/lib/taxonomy.ts` (TS) and `pipeline/taxonomy.py` (Python) -- must stay in sync (see PF-001)
+- **Principle**: A dolly is always a dolly. Consistency across the entire dataset.
+
+## Data Flow
 
 ```
-films
-  id            UUID PK
-  title         TEXT NOT NULL
-  director      TEXT NOT NULL
-  year          INT
-  tmdb_id       INT (optional, for TMDB enrichment)
-  created_at    TIMESTAMPTZ
-
-shots
-  id            UUID PK
-  film_id       UUID FK -> films.id
-  source_file   TEXT (original filename/path reference)
-  start_tc      FLOAT (seconds)
-  end_tc        FLOAT (seconds)
-  duration      FLOAT (seconds)
-  video_url     TEXT (Vercel Blob URL)
-  thumbnail_url TEXT (Vercel Blob URL)
-  created_at    TIMESTAMPTZ
-
--- Tier 1: Camera Motion Metadata
-shot_metadata
-  id              UUID PK
-  shot_id         UUID FK -> shots.id UNIQUE
-  movement_type   TEXT NOT NULL (enum: 21 taxonomy values)
-  direction       TEXT (enum: 15 taxonomy values)
-  speed           TEXT (enum: 7 taxonomy values)
-  shot_size       TEXT (enum: 15 taxonomy values)
-  angle_vertical  TEXT (enum: 6 values)
-  angle_horizontal TEXT (enum: 5 values)
-  angle_special   TEXT (enum: 4 values, nullable)
-  duration_cat    TEXT (enum: 6 values)
-  is_compound     BOOLEAN DEFAULT FALSE
-  compound_parts  JSONB (array of {type, direction} objects)
-  classification_source TEXT ('gemini' | 'raft' | 'manual')
-
--- Tier 2: Semantic Metadata (optional)
-shot_semantic
-  id              UUID PK
-  shot_id         UUID FK -> shots.id UNIQUE
-  description     TEXT
-  subjects        TEXT[]
-  mood            TEXT
-  lighting        TEXT
-  technique_notes TEXT
-
--- QA Verification
-verifications
-  id              UUID PK
-  shot_id         UUID FK -> shots.id
-  overall_rating  INT CHECK (0-5)
-  field_ratings   JSONB ({movement_type: 5, direction: 4, ...})
-  corrections     JSONB (optional corrected values)
-  verified_at     TIMESTAMPTZ
-
--- Search support
-shot_embeddings
-  shot_id         UUID FK -> shots.id UNIQUE
-  embedding       VECTOR(768) (pgvector, for semantic search)
-  search_text     TEXT (concatenated searchable metadata)
+[Video Source]
+    |
+    v
+[Interactive Path]              [Batch Path]
+TS Worker (SSE)                 Python Batch Worker
+    |                               |
+    v                               v
+PySceneDetect CLI               PySceneDetect API
+    |                               |
+    v                               v
+Gemini 2.5 Flash (real-time)    Gemini Batch API (JSONL, 24h)
+    |                               |
+    v                               v
+    +-------> Neon Postgres <-------+
+              (shots, scenes, films, embeddings)
+                    |
+                    v
+              [Intelligence Layer]
+              Hybrid Retrieval (vector + BM25 + RRF)
+              + Knowledge Corpus
+                    |
+                    v
+              [Foundation Model] (Claude / Gemini)
+              RAG-augmented reasoning
+                    |
+                    v
+              [Product Surfaces]
+              Web App | Chat | API | ComfyUI
 ```
-
-**Search Strategy**: Use pgvector extension on Neon for semantic search. Generate embeddings from concatenated metadata text (movement type + direction + speed + description + film + director) using an embedding model (e.g., `text-embedding-3-small`). Also support keyword/filter search via standard SQL WHERE clauses on taxonomy enum fields.
-
-### 4. Video Storage (Vercel Blob)
-
-- Shot clips stored as MP4 files on Vercel Blob (CDN-backed, global distribution)
-- Thumbnail images (JPG) extracted at shot midpoint, also on Vercel Blob
-- For 50-100 shots at ~10-30 seconds each, total storage is well under 1GB
-- Videos served directly from Blob CDN URLs to the HTML5 `<video>` element
-
-### 5. External Service Integration
-
-| Service | Purpose | Interface | Cost Estimate |
-|---------|---------|-----------|---------------|
-| Gemini 2.0 Flash | Camera motion classification (primary) | Google AI API, video input | < $5 for 100 clips |
-| Gemini/Claude | Scene grouping, semantic metadata | Google AI / Anthropic API | < $10 for 100 clips |
-| Modal | RAFT optical flow (fallback only) | Python SDK, serverless GPU | < $1 for 100 clips |
-| OpenAI | Text embeddings for search | Embeddings API | < $1 for 100 shots |
-| TMDB | Film metadata enrichment | REST API (free tier) | Free |
 
 ## Deployment Model
 
-- **Web app**: Vercel (connect GitHub repo, auto-deploy on push). Free hobby tier sufficient for demo traffic.
-- **Database**: Neon PostgreSQL via Vercel Marketplace. Free tier: 0.5 GB storage, 100 hours compute/month.
-- **Video storage**: Vercel Blob. Pay-as-you-go, negligible cost at this scale.
-- **Data pipeline**: Runs locally on operator's machine or in a GitHub Action. Not deployed as a service.
-- **External APIs**: Gemini, Modal, OpenAI accessed via API keys stored in Vercel environment variables.
+| Component | Host | Notes |
+|-----------|------|-------|
+| Next.js web app | Vercel | App Router, serverless functions (60s timeout) |
+| TS ingest worker | Local / Docker | Long-running, not serverless |
+| Python batch worker | Local / Docker | Long-running, polls Postgres |
+| Neon Postgres | Neon Cloud | Free tier (0.5GB), pgvector enabled |
+| S3 media | AWS S3 | Video clips, keyframes |
+| ComfyUI nodes | pip package | Installed into user's ComfyUI |
+
+## Module Boundaries (Canonical)
+
+1. **Next.js App** (`src/`) -- Web UI, API routes, server components
+2. **TS Ingest Worker** (`worker/`) -- Interactive single-film pipeline with SSE
+3. **Python Pipeline Library** (`pipeline/`) -- PySceneDetect, classification, batch worker
+4. **D3 Visualizations** (`src/components/visualize/`) -- 6 standalone chart components
+5. **Chat/Agent** (`src/components/agent/`, `src/app/api/agent/`) -- Generative UI chat
+6. **Data Layer** (`src/db/`) -- Drizzle schema, queries, embeddings
+7. **Taxonomy** (`src/lib/taxonomy.ts`, `pipeline/taxonomy.py`) -- Shared constants
+8. **ComfyUI Package** (`comfyui-metrovision/`) -- Python node package [NEW]
 
 ## Key Architectural Decisions
 
-1. **Monolithic Next.js app** -- No separate backend service. API routes in Next.js handle all server-side logic. Simplifies deployment and vibe-coding.
-2. **Pipeline as offline batch process** -- Not a real-time ingestion service. Run locally, upload results to cloud DB/storage. Appropriate for 50-100 seed shots.
-3. **Gemini-first classification** -- Eliminates GPU infrastructure from critical path. Human QA catches errors.
-4. **pgvector for search** -- Keeps everything in one database. No separate search service (Elasticsearch, Typesense) needed at this scale.
-5. **Taxonomy as code constants** -- The 21 movement types, 15 directions, etc. are hardcoded enums in both TypeScript (web app) and Python (pipeline). Single source of truth in a shared taxonomy file.
-
-## Visual Direction Note
-
-VISION.md Section 12 defines the visual direction: "Technical precision meets cinematic elegance." Visual references include object detection annotation UIs (elevated), ShotDeck, CamCloneMaster, Spotify. The hero moment is the metadata overlay on video playback. Anti-goals: bland dashboards, generic SaaS templates, academic/raw aesthetics. **Planners should generate design artifacts (color palette, typography, component mockups) based on this direction.**
+- **Two-lane pipeline**: TS for interactive (SSE streaming), Python for batch (Gemini Batch API + SKIP LOCKED). Both are canonical; neither replaces the other.
+- **Postgres as universal backbone**: ORM store + vector index + job queue (SKIP LOCKED). No Redis, no BullMQ.
+- **RAG not fine-tuning**: Foundation models augmented with retrieved knowledge, not custom-trained.
+- **Generative UI for chat**: Tool-call-to-component pattern. LLM returns typed JSON, client mounts D3 components. No LLM-generated code execution.
+- **Hybrid retrieval**: Vector + BM25 + RRF fusion for highest precision (~84% vs ~62% pure vector).
+- **Multi-granularity embeddings**: Shot + scene + film levels for hierarchical retrieval.
