@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getShotById } from "@/db/queries";
+import { AddToDeckButton } from "@/components/decks/add-to-deck-button";
 import { DetectObjectsButton } from "@/components/shots/detect-objects-button";
 import { ShotPlayer } from "@/components/video/shot-player";
 import {
@@ -137,6 +138,7 @@ export default async function ShotDetailPage({ params }: ShotDetailPageProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <AddToDeckButton shot={shot} />
           <DetectObjectsButton shotId={shot.id} hasObjects={shot.objects.length > 0} />
           <Link
             href={`/verify/${shot.id}`}
