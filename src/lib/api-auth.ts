@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 
 import { db, schema } from "@/db";

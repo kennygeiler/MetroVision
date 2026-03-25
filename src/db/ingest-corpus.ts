@@ -10,7 +10,6 @@
 import { readFile } from "node:fs/promises";
 
 import OpenAI from "openai";
-import { sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { loadLocalEnv } from "@/db/load-env";

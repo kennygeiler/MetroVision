@@ -10,8 +10,6 @@ import { db, schema } from "@/db";
 import {
   generateTextEmbedding,
   toVectorLiteral,
-  SHOT_EMBEDDING_MODEL,
-  SHOT_EMBEDDING_DIMENSIONS,
 } from "@/db/embeddings";
 
 // ---------------------------------------------------------------------------
@@ -107,12 +105,12 @@ async function retrieveCorpusChunks(
     LIMIT ${limit}
   `);
 
-  return (rows.rows as any[]).map((row) => ({
-    id: row.id,
-    sourceTitle: row.source_title,
-    sourceType: row.source_type,
-    content: row.content,
-    contextStatement: row.context_statement,
+  return (rows.rows as Record<string, unknown>[]).map((row) => ({
+    id: row.id as string,
+    sourceTitle: row.source_title as string,
+    sourceType: row.source_type as string,
+    content: row.content as string,
+    contextStatement: row.context_statement as string | null,
     score: Number(row.rrf_score),
   }));
 }
@@ -145,13 +143,13 @@ async function retrieveShots(
     LIMIT ${limit}
   `);
 
-  return (rows.rows as any[]).map((row) => ({
-    shotId: row.shot_id,
-    filmTitle: row.film_title,
-    director: row.director,
-    movementType: row.movement_type,
-    shotSize: row.shot_size,
-    description: row.description,
+  return (rows.rows as Record<string, unknown>[]).map((row) => ({
+    shotId: row.shot_id as string,
+    filmTitle: row.film_title as string,
+    director: row.director as string,
+    movementType: row.movement_type as string,
+    shotSize: row.shot_size as string,
+    description: row.description as string | null,
     score: Number(row.score),
   }));
 }
@@ -180,11 +178,11 @@ async function retrieveScenes(
     LIMIT ${limit}
   `);
 
-  return (rows.rows as any[]).map((row) => ({
-    sceneId: row.scene_id,
-    filmTitle: row.film_title,
-    title: row.title,
-    searchText: row.search_text,
+  return (rows.rows as Record<string, unknown>[]).map((row) => ({
+    sceneId: row.scene_id as string,
+    filmTitle: row.film_title as string,
+    title: row.title as string | null,
+    searchText: row.search_text as string | null,
     score: Number(row.score),
   }));
 }
