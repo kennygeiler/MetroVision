@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const UPLOAD_DIR = path.join(tmpdir(), "metrovision-uploads");
 

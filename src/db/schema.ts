@@ -52,6 +52,7 @@ const vector = customType<{
     return `vector(${config?.dimensions ?? 768})`;
   },
   toDriver(value) {
+    if (!Array.isArray(value)) return "[]";
     return `[${value.join(",")}]`;
   },
   fromDriver(value) {

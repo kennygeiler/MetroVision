@@ -167,7 +167,7 @@ export async function POST(request: Request) {
       await db.insert(schema.shotSemantic).values({
         shotId: insertedShot.id,
         description: classification.description || null,
-        subjects: classification.subjects ?? [],
+        subjects: Array.isArray(classification.subjects) ? classification.subjects : [],
         mood: classification.mood || null,
         lighting: classification.lighting || null,
       });

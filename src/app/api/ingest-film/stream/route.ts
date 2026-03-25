@@ -212,7 +212,7 @@ export async function POST(request: Request) {
             }),
             db.insert(schema.shotSemantic).values({
               shotId: insertedShot.id, description: classification.description || null,
-              subjects: classification.subjects ?? [], mood: classification.mood || null,
+              subjects: Array.isArray(classification.subjects) ? classification.subjects : [], mood: classification.mood || null,
               lighting: classification.lighting || null,
             }),
             ...(embeddings[i] ? [db.insert(schema.shotEmbeddings).values({
