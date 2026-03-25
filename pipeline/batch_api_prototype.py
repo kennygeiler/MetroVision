@@ -107,17 +107,29 @@ def create_batch_jsonl(uploaded_files: list[Any], output_path: str) -> str:
     return output_path
 
 
-def submit_batch(client: genai.Client, jsonl_path: str) -> Any:
-    """Submit batch job to Gemini Batch API."""
-    print("  Submitting batch job...")
+def submit_batch(client: genai.Client, uploaded_files: list[Any]) -> Any:
+    """Submit batch job to Gemini Batch API using InlinedRequest objects."""
+    print("  Submitting batch job with inline requests...")
 
-    # Note: The exact Batch API interface may vary.
-    # This uses the pattern from Google's documentation.
-    # If this fails, AC-24 gate is NOT passed.
+    inline_requests = []
+    for i, f in enumerate(uploaded_files):
+        request = types.InlinedRequest(
+            contents=[f, CLASSIFICATION_PROMPT],
+            config=types.GenerateContentConfig(
+                temperature=0.1,
+                response_mime_type="application/json",
+            ),
+            metadata={"clip_index": str(i)},
+        )
+        inline_requests.append(request)
+
     try:
         batch = client.batches.create(
             model=f"models/{GEMINI_MODEL_NAME}",
-            src=jsonl_path,
+            src=inline_requests,
+            config=types.CreateBatchJobConfig(
+                display_name="metrovision-ac24-prototype",
+            ),
         )
         print(f"  ✓ Batch submitted: {batch.name}")
         return batch
@@ -213,7 +225,7 @@ def run_prototype(clip_paths: list[str]) -> None:
         create_batch_jsonl(uploaded, jsonl_path)
 
         print("\n[3/5] Submitting batch job...")
-        batch = submit_batch(client, jsonl_path)
+        batch = submit_batch(client, uploaded)
 
         print("\n[4/5] Polling for completion...")
         result = poll_batch(client, batch.name)
