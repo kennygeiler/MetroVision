@@ -120,3 +120,37 @@ CAMERA_ANGLES: Final[dict[str, dict[str, TaxonomyEntry]]] = {
     "horizontal": HORIZONTAL_ANGLES,
     "special": SPECIAL_ANGLES,
 }
+
+
+# ---------------------------------------------------------------------------
+# Slug validation (AC-02: taxonomy sync TS ↔ Python)
+# ---------------------------------------------------------------------------
+
+_ALL_VALID_SLUGS: dict[str, set[str]] = {
+    "movement_type": set(MOVEMENT_TYPES.keys()),
+    "direction": set(DIRECTIONS.keys()),
+    "speed": set(SPEEDS.keys()),
+    "shot_size": set(SHOT_SIZES.keys()),
+    "angle_vertical": set(VERTICAL_ANGLES.keys()),
+    "angle_horizontal": set(HORIZONTAL_ANGLES.keys()),
+    "angle_special": set(SPECIAL_ANGLES.keys()),
+    "duration_cat": set(DURATION_CATEGORIES.keys()),
+}
+
+
+def validate_taxonomy_slug(field: str, value: str | None) -> None:
+    """Assert that a taxonomy value belongs to the canonical slug set.
+
+    Raises ValueError if the slug is not valid for the given field.
+    None is allowed for nullable fields (e.g. angle_special).
+    """
+    if value is None:
+        return
+    valid = _ALL_VALID_SLUGS.get(field)
+    if valid is None:
+        raise ValueError(f"Unknown taxonomy field: {field}")
+    if value not in valid:
+        raise ValueError(
+            f"Invalid {field} slug: '{value}'. "
+            f"Valid values: {sorted(valid)}"
+        )

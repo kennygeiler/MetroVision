@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { uploadToS3, buildS3Key } from "@/lib/s3";
+import { acquireToken } from "@/lib/rate-limiter";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -313,6 +314,7 @@ TC: ${formatTimecode(split.start)}-${formatTimecode(split.end)} (${(split.end - 
 Return JSON: {"movement_type","direction","speed","shot_size","angle_vertical","angle_horizontal","angle_special","duration_cat","is_compound","compound_parts","description","mood","lighting","subjects","scene_title","scene_description","location","interior_exterior","time_of_day"}
 Valid values - movement_type: static/pan/tilt/dolly/truck/pedestal/crane/boom/zoom/dolly_zoom/handheld/steadicam/drone/aerial/arc/whip_pan/whip_tilt/rack_focus/follow/reveal/reframe. direction: left/right/up/down/in/out/clockwise/counter_clockwise/forward/backward/lateral_left/lateral_right/diagonal/circular/none. speed: freeze/imperceptible/slow/moderate/fast/very_fast/snap. shot_size: extreme_wide/wide/full/medium_wide/medium/medium_close/close/extreme_close/insert/two_shot/three_shot/group/ots/pov/reaction. Only valid JSON.`;
 
+    await acquireToken();
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {

@@ -7,8 +7,10 @@ from psycopg2.extras import Json
 
 try:
     from .config import DATABASE_URL, require_env
+    from .taxonomy import validate_taxonomy_slug
 except ImportError:
     from config import DATABASE_URL, require_env
+    from taxonomy import validate_taxonomy_slug
 
 
 def _upsert_film(cursor: Any, film_data: dict[str, Any]) -> str:
@@ -54,6 +56,14 @@ def write_to_db(film_data: dict[str, Any], shots_data: list[dict[str, Any]]) -> 
             inserted_semantic = 0
 
             for shot in shots_data:
+                # AC-02: Validate taxonomy slugs before DB write
+                for field in (
+                    "movement_type", "direction", "speed", "shot_size",
+                    "angle_vertical", "angle_horizontal", "duration_cat",
+                ):
+                    validate_taxonomy_slug(field, shot.get(field))
+                validate_taxonomy_slug("angle_special", shot.get("angle_special"))
+
                 cursor.execute(
                     """
                     INSERT INTO shots (

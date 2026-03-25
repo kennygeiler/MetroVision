@@ -220,8 +220,14 @@ def classify_shot(clip_path: str) -> dict[str, Any]:
         clip_duration=clip_duration,
     )
 
+    try:
+        from .rate_limiter import acquire_token
+    except ImportError:
+        from rate_limiter import acquire_token
+
     last_error: Optional[Exception] = None
     for attempt in range(1, 4):
+        acquire_token()
         uploaded = None
         try:
             uploaded = client.files.upload(file=clip_path)
