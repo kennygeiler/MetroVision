@@ -1,23 +1,27 @@
 import type {
-  CompoundPart,
   ShotObjectAttributes,
   ShotObjectKeyframe,
   ShotSceneContext,
 } from "@/db/schema";
 import type {
-  DirectionSlug,
+  BlockingTypeSlug,
+  ColorTemperatureSlug,
+  DepthTypeSlug,
+  DominantLineSlug,
   DurationCategorySlug,
+  FramingSlug,
   HorizontalAngleSlug,
-  MovementTypeSlug,
+  LightingDirectionSlug,
+  LightingQualitySlug,
   ShotSizeSlug,
-  SpeedSlug,
+  SymmetryTypeSlug,
   VerticalAngleSlug,
 } from "@/lib/taxonomy";
 
 export type VerificationFieldKey =
-  | "movementType"
-  | "direction"
-  | "speed"
+  | "framing"
+  | "depth"
+  | "blocking"
   | "shotSize"
   | "angleVertical"
   | "angleHorizontal";
@@ -44,16 +48,20 @@ export type ShotWithDetails = {
   metadata: {
     id: string | null;
     shotId: string | null;
-    movementType: MovementTypeSlug;
-    direction: DirectionSlug;
-    speed: SpeedSlug;
+    framing: FramingSlug;
+    depth: DepthTypeSlug;
+    blocking: BlockingTypeSlug;
+    symmetry: SymmetryTypeSlug;
+    dominantLines: DominantLineSlug;
+    lightingDirection: LightingDirectionSlug;
+    lightingQuality: LightingQualitySlug;
+    colorTemperature: ColorTemperatureSlug;
+    foregroundElements: string[];
+    backgroundElements: string[];
     shotSize: ShotSizeSlug;
     angleVertical: VerticalAngleSlug;
     angleHorizontal: HorizontalAngleSlug;
-    angleSpecial: string | null;
     durationCategory: DurationCategorySlug;
-    isCompound: boolean;
-    compoundParts?: CompoundPart[];
     classificationSource: string | null;
   };
   semantic: {
@@ -103,17 +111,18 @@ export type ExportShotRecord = {
   duration: number;
   videoUrl: string | null;
   thumbnailUrl: string | null;
-  movementType: MovementTypeSlug;
-  direction: DirectionSlug;
-  speed: SpeedSlug;
+  framing: FramingSlug;
+  depth: DepthTypeSlug;
+  blocking: BlockingTypeSlug;
+  symmetry: SymmetryTypeSlug;
+  dominantLines: DominantLineSlug;
+  lightingDirection: LightingDirectionSlug;
+  lightingQuality: LightingQualitySlug;
+  colorTemperature: ColorTemperatureSlug;
   shotSize: ShotSizeSlug;
   angleVertical: VerticalAngleSlug;
   angleHorizontal: HorizontalAngleSlug;
-  angleSpecial: string | null;
   durationCategory: DurationCategorySlug;
-  isCompound: boolean;
-  compoundParts: string | null;
-  compoundNotation: string | null;
   classificationSource: string | null;
   description: string | null;
   subjects: string;
@@ -196,7 +205,7 @@ export type FilmCard = {
 
 export type FilmCoverageStats = {
   shotSizeDistribution: Record<string, number>;
-  movementTypeFrequency: Record<string, number>;
+  framingFrequency: Record<string, number>;
   averageShotLength: number;
   shotCount: number;
   sceneCount: number;
@@ -211,9 +220,9 @@ export type VizShot = {
   sceneTitle: string | null;
   sceneNumber: number | null;
   shotIndex: number;
-  movementType: string;
-  direction: string;
-  speed: string;
+  framing: string;
+  depth: string;
+  blocking: string;
   shotSize: string;
   angleVertical: string;
   duration: number;

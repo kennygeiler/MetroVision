@@ -1,10 +1,15 @@
 import type {
-  DirectionSlug,
+  BlockingTypeSlug,
+  ColorTemperatureSlug,
+  DepthTypeSlug,
+  DominantLineSlug,
   DurationCategorySlug,
+  FramingSlug,
   HorizontalAngleSlug,
-  MovementTypeSlug,
+  LightingDirectionSlug,
+  LightingQualitySlug,
   ShotSizeSlug,
-  SpeedSlug,
+  SymmetryTypeSlug,
   VerticalAngleSlug,
 } from "../lib/taxonomy";
 import {
@@ -19,10 +24,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export type CompoundPart = {
-  type: MovementTypeSlug;
-  direction: DirectionSlug;
-};
+export type ForegroundElement = string;
+export type BackgroundElement = string;
 
 export type VerificationFieldRatings = Record<string, number | null>;
 export type VerificationCorrections = Record<string, string | null>;
@@ -119,20 +122,25 @@ export const shotMetadata = pgTable("shot_metadata", {
     .references(() => shots.id, { onDelete: "cascade" })
     .notNull()
     .unique(),
-  movementType: text("movement_type").$type<MovementTypeSlug>().notNull(),
-  direction: text("direction").$type<DirectionSlug>(),
-  speed: text("speed").$type<SpeedSlug>(),
+  // Composition fields (replaces camera movement taxonomy)
+  framing: text("framing").$type<FramingSlug>().notNull(),
+  depth: text("depth").$type<DepthTypeSlug>(),
+  blocking: text("blocking").$type<BlockingTypeSlug>(),
+  symmetry: text("symmetry").$type<SymmetryTypeSlug>(),
+  dominantLines: text("dominant_lines").$type<DominantLineSlug>(),
+  lightingDirection: text("lighting_direction").$type<LightingDirectionSlug>(),
+  lightingQuality: text("lighting_quality").$type<LightingQualitySlug>(),
+  colorTemperature: text("color_temperature").$type<ColorTemperatureSlug>(),
+  foregroundElements: text("foreground_elements").array(),
+  backgroundElements: text("background_elements").array(),
+  // Kept from original
   shotSize: text("shot_size").$type<ShotSizeSlug>(),
   angleVertical: text("angle_vertical").$type<VerticalAngleSlug>(),
   angleHorizontal: text("angle_horizontal").$type<HorizontalAngleSlug>(),
-  angleSpecial: text("angle_special"),
   durationCat: text("duration_cat").$type<DurationCategorySlug>(),
-  isCompound: boolean("is_compound").default(false),
-  compoundParts: jsonb("compound_parts").$type<CompoundPart[]>(),
   classificationSource: text("classification_source").default("manual"),
   confidence: real("confidence"),
   reviewStatus: text("review_status").default("unreviewed"),
-  validationFlags: text("validation_flags").array(),
 });
 
 export const shotSemantic = pgTable("shot_semantic", {

@@ -1,17 +1,27 @@
 import {
-  DIRECTIONS,
+  BLOCKING_TYPES,
+  COLOR_TEMPERATURES,
+  DEPTH_TYPES,
+  DOMINANT_LINES,
   DURATION_CATEGORIES,
+  FRAMINGS,
   HORIZONTAL_ANGLES,
-  MOVEMENT_TYPES,
+  LIGHTING_DIRECTIONS,
+  LIGHTING_QUALITIES,
   SHOT_SIZES,
-  SPEEDS,
+  SYMMETRY_TYPES,
   VERTICAL_ANGLES,
-  type DirectionSlug,
+  type BlockingTypeSlug,
+  type ColorTemperatureSlug,
+  type DepthTypeSlug,
+  type DominantLineSlug,
   type DurationCategorySlug,
+  type FramingSlug,
   type HorizontalAngleSlug,
-  type MovementTypeSlug,
+  type LightingDirectionSlug,
+  type LightingQualitySlug,
   type ShotSizeSlug,
-  type SpeedSlug,
+  type SymmetryTypeSlug,
   type VerticalAngleSlug,
 } from "@/lib/taxonomy";
 
@@ -25,16 +35,36 @@ function getDisplayName<T extends Record<string, { displayName: string }>>(
   return dictionary[slug as keyof T]?.displayName ?? formatFallbackLabel(slug);
 }
 
-export function getMovementDisplayName(slug: MovementTypeSlug) {
-  return getDisplayName(MOVEMENT_TYPES, slug);
+export function getFramingDisplayName(slug: FramingSlug) {
+  return getDisplayName(FRAMINGS, slug);
 }
 
-export function getDirectionDisplayName(slug: DirectionSlug) {
-  return getDisplayName(DIRECTIONS, slug);
+export function getDepthDisplayName(slug: DepthTypeSlug) {
+  return getDisplayName(DEPTH_TYPES, slug);
 }
 
-export function getSpeedDisplayName(slug: SpeedSlug) {
-  return getDisplayName(SPEEDS, slug);
+export function getBlockingDisplayName(slug: BlockingTypeSlug) {
+  return getDisplayName(BLOCKING_TYPES, slug);
+}
+
+export function getSymmetryDisplayName(slug: SymmetryTypeSlug) {
+  return getDisplayName(SYMMETRY_TYPES, slug);
+}
+
+export function getDominantLineDisplayName(slug: DominantLineSlug) {
+  return getDisplayName(DOMINANT_LINES, slug);
+}
+
+export function getLightingDirectionDisplayName(slug: LightingDirectionSlug) {
+  return getDisplayName(LIGHTING_DIRECTIONS, slug);
+}
+
+export function getLightingQualityDisplayName(slug: LightingQualitySlug) {
+  return getDisplayName(LIGHTING_QUALITIES, slug);
+}
+
+export function getColorTemperatureDisplayName(slug: ColorTemperatureSlug) {
+  return getDisplayName(COLOR_TEMPERATURES, slug);
 }
 
 export function getShotSizeDisplayName(slug: ShotSizeSlug) {
@@ -56,19 +86,3 @@ export function getDurationCategoryDisplayName(slug: DurationCategorySlug) {
 export function formatShotDuration(duration: number) {
   return `${duration.toFixed(1)}s`;
 }
-
-export function getCompoundNotation(
-  compoundParts: Array<{ type: MovementTypeSlug; direction: DirectionSlug }>,
-) {
-  return compoundParts.map((part) => `${part.type}:${part.direction}`).join(" + ");
-}
-
-export const SPEED_PROGRESS: Record<SpeedSlug, number> = {
-  freeze: 0.04,
-  imperceptible: 0.12,
-  slow: 0.32,
-  moderate: 0.54,
-  fast: 0.74,
-  very_fast: 0.88,
-  snap: 1,
-};
