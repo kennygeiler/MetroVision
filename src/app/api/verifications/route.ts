@@ -5,12 +5,18 @@ import { db, schema } from "@/db";
 import { getVerificationStats, submitVerification } from "@/db/queries";
 
 const verifiableFields = new Set([
-  "movementType",
-  "direction",
-  "speed",
+  // shotMetadata columns
+  "framing",
+  "depth",
+  "blocking",
   "shotSize",
   "angleVertical",
   "angleHorizontal",
+  "durationCat",
+  // shotSemantic columns
+  "description",
+  "mood",
+  "lighting",
 ]);
 
 function isValidRating(value: unknown) {
@@ -105,6 +111,60 @@ export async function POST(request: NextRequest) {
       corrections: normalizedCorrections,
       notes,
     });
+
+    // Determine whether any field was rated below threshold
+    const hasLowRatedField = Object.values(normalizedFieldRatings).some(
+      (r) => r < 3,
+    );
+
+    // Write corrections back to shot_metadata / shot_semantic
+    if (hasLowRatedField && Object.keys(normalizedCorrections).length > 0) {
+      const metadataFields = [
+        "framing",
+        "depth",
+        "blocking",
+        "shotSize",
+        "angleVertical",
+        "angleHorizontal",
+        "durationCat",
+      ] as const;
+
+      const semanticFields = ["description", "mood", "lighting"] as const;
+
+      const metadataUpdate: Record<string, unknown> = {
+        reviewStatus: "human_corrected",
+      };
+      for (const field of metadataFields) {
+        if (normalizedCorrections[field]) {
+          metadataUpdate[field] = normalizedCorrections[field];
+        }
+      }
+
+      await db
+        .update(schema.shotMetadata)
+        .set(metadataUpdate)
+        .where(eq(schema.shotMetadata.shotId, shotId));
+
+      const semanticUpdate: Record<string, unknown> = {};
+      for (const field of semanticFields) {
+        if (normalizedCorrections[field]) {
+          semanticUpdate[field] = normalizedCorrections[field];
+        }
+      }
+
+      if (Object.keys(semanticUpdate).length > 0) {
+        await db
+          .update(schema.shotSemantic)
+          .set(semanticUpdate)
+          .where(eq(schema.shotSemantic.shotId, shotId));
+      }
+    } else {
+      // All fields rated >= 3 — mark as verified
+      await db
+        .update(schema.shotMetadata)
+        .set({ reviewStatus: "human_verified" })
+        .where(eq(schema.shotMetadata.shotId, shotId));
+    }
 
     return Response.json(verification, { status: 201 });
   } catch (error) {
