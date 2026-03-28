@@ -39,12 +39,20 @@ export default async function VerifyPage() {
           </p>
         </div>
 
-        <Link
-          href="/browse"
-          className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-transparent px-4 text-[0.8rem] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
-        >
-          Browse archive
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/verify/batch"
+            className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-accent-base)] bg-transparent px-4 text-[0.8rem] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-tertiary)]"
+          >
+            Batch review
+          </Link>
+          <Link
+            href="/browse"
+            className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-transparent px-4 text-[0.8rem] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
+          >
+            Browse archive
+          </Link>
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">

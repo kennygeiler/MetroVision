@@ -1,24 +1,65 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { eq } from "drizzle-orm";
+import { and, eq, gte, lte, count, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db, schema } from "@/db";
 
 // ---------------------------------------------------------------------------
-// GET: Fetch next batch of shots needing review
+// GET: Fetch batch of shots for review with filters & pagination
 // ---------------------------------------------------------------------------
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") ?? "20", 10) || 20;
+    const limit = Math.min(parseInt(searchParams.get("limit") ?? "40", 10) || 40, 200);
+    const offset = parseInt(searchParams.get("offset") ?? "0", 10) || 0;
+    const filmId = searchParams.get("filmId");
+    const reviewStatus = searchParams.get("reviewStatus");
+    const confidenceMin = searchParams.get("confidenceMin");
+    const confidenceMax = searchParams.get("confidenceMax");
 
+    // Build WHERE conditions
+    const conditions = [];
+
+    // Default: show needs_review unless a specific status is requested
+    if (reviewStatus) {
+      conditions.push(eq(schema.shotMetadata.reviewStatus, reviewStatus));
+    } else {
+      conditions.push(eq(schema.shotMetadata.reviewStatus, "needs_review"));
+    }
+
+    if (filmId) {
+      conditions.push(eq(schema.shots.filmId, filmId));
+    }
+
+    if (confidenceMin) {
+      const min = parseFloat(confidenceMin);
+      if (!isNaN(min)) conditions.push(gte(schema.shotMetadata.confidence, min));
+    }
+
+    if (confidenceMax) {
+      const max = parseFloat(confidenceMax);
+      if (!isNaN(max)) conditions.push(lte(schema.shotMetadata.confidence, max));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Count total matching rows for pagination
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(schema.shotMetadata)
+      .innerJoin(schema.shots, eq(schema.shots.id, schema.shotMetadata.shotId))
+      .where(whereClause);
+
+    // Fetch the page of shots
     const rows = await db
       .select({
         shotId: schema.shots.id,
         filmId: schema.shots.filmId,
+        filmTitle: schema.films.title,
+        filmDirector: schema.films.director,
         startTc: schema.shots.startTc,
         endTc: schema.shots.endTc,
         duration: schema.shots.duration,
@@ -39,15 +80,28 @@ export async function GET(request: Request) {
       })
       .from(schema.shotMetadata)
       .innerJoin(schema.shots, eq(schema.shots.id, schema.shotMetadata.shotId))
+      .innerJoin(schema.films, eq(schema.films.id, schema.shots.filmId))
       .leftJoin(
         schema.shotSemantic,
         eq(schema.shotSemantic.shotId, schema.shotMetadata.shotId),
       )
-      .where(eq(schema.shotMetadata.reviewStatus, "needs_review"))
-      .orderBy(schema.shots.createdAt)
-      .limit(limit);
+      .where(whereClause)
+      .orderBy(schema.shotMetadata.confidence)
+      .limit(limit)
+      .offset(offset);
 
-    return NextResponse.json(rows);
+    // Also return distinct films for the filter dropdown
+    const films = await db
+      .selectDistinct({
+        id: schema.films.id,
+        title: schema.films.title,
+      })
+      .from(schema.films)
+      .innerJoin(schema.shots, eq(schema.shots.filmId, schema.films.id))
+      .innerJoin(schema.shotMetadata, eq(schema.shotMetadata.shotId, schema.shots.id))
+      .orderBy(schema.films.title);
+
+    return NextResponse.json({ rows, total, films });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch review queue";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -55,11 +109,12 @@ export async function GET(request: Request) {
 }
 
 // ---------------------------------------------------------------------------
-// POST: Submit a review decision
+// POST: Submit review decisions (single or bulk)
 // ---------------------------------------------------------------------------
 
 type ReviewRequest = {
-  shotId: string;
+  shotId?: string;
+  shotIds?: string[];
   action: "approve" | "correct";
   corrections?: Record<string, string>;
 };
@@ -68,9 +123,12 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ReviewRequest;
 
-    if (!body.shotId || !body.action) {
+    // Support both single shotId and bulk shotIds
+    const shotIds = body.shotIds ?? (body.shotId ? [body.shotId] : []);
+
+    if (shotIds.length === 0 || !body.action) {
       return NextResponse.json(
-        { error: "shotId and action are required." },
+        { error: "shotId/shotIds and action are required." },
         { status: 400 },
       );
     }
@@ -79,15 +137,20 @@ export async function POST(request: Request) {
       await db
         .update(schema.shotMetadata)
         .set({ reviewStatus: "human_verified" })
-        .where(eq(schema.shotMetadata.shotId, body.shotId));
+        .where(inArray(schema.shotMetadata.shotId, shotIds));
 
-      return NextResponse.json({ ok: true, status: "human_verified" });
+      return NextResponse.json({ ok: true, status: "human_verified", count: shotIds.length });
     }
 
     if (body.action === "correct") {
-      const corrections = body.corrections ?? {};
+      if (shotIds.length > 1) {
+        return NextResponse.json(
+          { error: "Corrections can only be applied to a single shot." },
+          { status: 400 },
+        );
+      }
 
-      // Build the update payload from allowed correction fields
+      const corrections = body.corrections ?? {};
       const metadataUpdate: Record<string, unknown> = {
         reviewStatus: "human_corrected",
       };
@@ -111,9 +174,8 @@ export async function POST(request: Request) {
       await db
         .update(schema.shotMetadata)
         .set(metadataUpdate)
-        .where(eq(schema.shotMetadata.shotId, body.shotId));
+        .where(eq(schema.shotMetadata.shotId, shotIds[0]));
 
-      // Also update semantic fields if provided
       const semanticUpdate: Record<string, unknown> = {};
       const allowedSemanticFields = [
         "description",
@@ -131,10 +193,10 @@ export async function POST(request: Request) {
         await db
           .update(schema.shotSemantic)
           .set(semanticUpdate)
-          .where(eq(schema.shotSemantic.shotId, body.shotId));
+          .where(eq(schema.shotSemantic.shotId, shotIds[0]));
       }
 
-      return NextResponse.json({ ok: true, status: "human_corrected" });
+      return NextResponse.json({ ok: true, status: "human_corrected", count: 1 });
     }
 
     return NextResponse.json(
