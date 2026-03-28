@@ -862,6 +862,182 @@ export async function getAccuracyStats(): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Correction Pattern Aggregation (prompt-tuning insights)
+// ---------------------------------------------------------------------------
+
+export async function getCorrectionPatterns(): Promise<
+  import("@/lib/types").CorrectionPatterns
+> {
+  // Fetch all verifications joined with shot metadata (for confidence) and film
+  const rows = await db
+    .select({
+      shotId: schema.verifications.shotId,
+      fieldRatings: schema.verifications.fieldRatings,
+      corrections: schema.verifications.corrections,
+      confidence: schema.shotMetadata.confidence,
+      filmTitle: schema.films.title,
+    })
+    .from(schema.verifications)
+    .innerJoin(
+      schema.shotMetadata,
+      eq(schema.verifications.shotId, schema.shotMetadata.shotId),
+    )
+    .innerJoin(schema.shots, eq(schema.verifications.shotId, schema.shots.id))
+    .innerJoin(schema.films, eq(schema.shots.filmId, schema.films.id));
+
+  if (rows.length === 0) {
+    return {
+      perFieldFrequency: {},
+      topTransitions: [],
+      perFilmCorrectionRates: {},
+      confidenceVsAccuracy: [],
+      totalVerifications: 0,
+    };
+  }
+
+  // --- 1. Per-field correction frequency ---
+  const fieldCorrections: Record<string, number> = {};
+  const fieldTotal: Record<string, number> = {};
+
+  // --- 2. Correction transitions (original → corrected) ---
+  // We need to look at the fieldRatings to see which fields were rated,
+  // and corrections to see what they were changed to.
+  // The "from" value is in shotMetadata (the AI value), but since corrections
+  // overwrite metadata, we need to derive from: the original AI value isn't stored
+  // post-correction. However, the corrections JSONB stores the NEW value, and
+  // the verification was done BEFORE the write-back. We'll track transitions as
+  // field → corrected value. To get the "from", we need the metadata value at
+  // time of review. Since write-back happens on submit, and we join shotMetadata
+  // (which now has the corrected value), for corrected shots the metadata IS the
+  // corrected value. For the original value, we'd need to look at uncorrected
+  // shots or accept we only have the correction target.
+  //
+  // Actually: the corrections JSONB in verifications stores the corrected value,
+  // and the shotMetadata for "human_corrected" shots has already been updated.
+  // But for "human_verified" shots, shotMetadata still has the AI value.
+  // We can use the fieldRatings to detect which fields were corrected (rating < 3
+  // and a correction value exists). The "from" is unknown per-verification since
+  // metadata was overwritten. We'll report transitions as "field: <corrected_to>"
+  // with counts — the key insight for prompt tuning is WHAT values the AI gets
+  // wrong and WHAT they should be.
+  const transitionCounts = new Map<string, number>();
+
+  // --- 3. Per-film correction rates ---
+  const filmCorrections: Record<string, number> = {};
+  const filmTotal: Record<string, number> = {};
+
+  // --- 4. Confidence buckets ---
+  type BucketAccum = { total: number; corrected: number };
+  const confidenceBuckets: Record<string, BucketAccum> = {
+    "0.0–0.2": { total: 0, corrected: 0 },
+    "0.2–0.4": { total: 0, corrected: 0 },
+    "0.4–0.6": { total: 0, corrected: 0 },
+    "0.6–0.8": { total: 0, corrected: 0 },
+    "0.8–1.0": { total: 0, corrected: 0 },
+    "no score": { total: 0, corrected: 0 },
+  };
+
+  function getBucket(confidence: number | null): string {
+    if (confidence == null) return "no score";
+    if (confidence < 0.2) return "0.0–0.2";
+    if (confidence < 0.4) return "0.2–0.4";
+    if (confidence < 0.6) return "0.4–0.6";
+    if (confidence < 0.8) return "0.6–0.8";
+    return "0.8–1.0";
+  }
+
+  for (const row of rows) {
+    const ratings = (row.fieldRatings ?? {}) as Record<string, number | null>;
+    const corrections = (row.corrections ?? {}) as Record<string, string | null>;
+    const film = row.filmTitle;
+    const bucket = getBucket(row.confidence);
+    let shotHadCorrection = false;
+
+    for (const field of ACCURACY_FIELDS) {
+      if (ratings[field] == null) continue;
+
+      fieldTotal[field] = (fieldTotal[field] ?? 0) + 1;
+      filmTotal[film] = (filmTotal[film] ?? 0) + 1;
+
+      const correctedTo = corrections[field];
+      const wasCorrected = correctedTo != null && correctedTo.trim().length > 0;
+
+      if (wasCorrected) {
+        fieldCorrections[field] = (fieldCorrections[field] ?? 0) + 1;
+        filmCorrections[film] = (filmCorrections[film] ?? 0) + 1;
+        shotHadCorrection = true;
+
+        // Track transition: "field: → correctedValue"
+        const key = `${field}:→ ${correctedTo.trim()}`;
+        transitionCounts.set(key, (transitionCounts.get(key) ?? 0) + 1);
+      }
+    }
+
+    confidenceBuckets[bucket].total++;
+    if (shotHadCorrection) {
+      confidenceBuckets[bucket].corrected++;
+    }
+  }
+
+  // Build per-field frequency
+  const perFieldFrequency: Record<
+    string,
+    { corrections: number; total: number; rate: number }
+  > = {};
+  for (const field of ACCURACY_FIELDS) {
+    const corr = fieldCorrections[field] ?? 0;
+    const tot = fieldTotal[field] ?? 0;
+    perFieldFrequency[field] = {
+      corrections: corr,
+      total: tot,
+      rate: tot > 0 ? Math.round((corr / tot) * 1000) / 10 : 0,
+    };
+  }
+
+  // Build top transitions sorted by count desc
+  const topTransitions = Array.from(transitionCounts.entries())
+    .map(([key, count]) => {
+      const [field, toValue] = key.split(":→ ");
+      return { field, from: "(AI value)", to: toValue, count };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 50);
+
+  // Build per-film correction rates
+  const perFilmCorrectionRates: Record<
+    string,
+    { corrections: number; total: number; rate: number }
+  > = {};
+  for (const film of Object.keys(filmTotal)) {
+    const corr = filmCorrections[film] ?? 0;
+    const tot = filmTotal[film];
+    perFilmCorrectionRates[film] = {
+      corrections: corr,
+      total: tot,
+      rate: tot > 0 ? Math.round((corr / tot) * 1000) / 10 : 0,
+    };
+  }
+
+  // Build confidence buckets
+  const confidenceVsAccuracy = Object.entries(confidenceBuckets)
+    .filter(([, v]) => v.total > 0)
+    .map(([bucket, v]) => ({
+      bucket,
+      totalShots: v.total,
+      correctedShots: v.corrected,
+      correctionRate: Math.round((v.corrected / v.total) * 1000) / 10,
+    }));
+
+  return {
+    perFieldFrequency,
+    topTransitions,
+    perFilmCorrectionRates,
+    confidenceVsAccuracy,
+    totalVerifications: rows.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Film & Scene Queries
 // ---------------------------------------------------------------------------
 

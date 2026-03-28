@@ -186,6 +186,28 @@ export type AccuracyStats = {
   totalCorrections: number;
 };
 
+export type CorrectionTransition = {
+  field: string;
+  from: string;
+  to: string;
+  count: number;
+};
+
+export type ConfidenceBucket = {
+  bucket: string;
+  totalShots: number;
+  correctedShots: number;
+  correctionRate: number;
+};
+
+export type CorrectionPatterns = {
+  perFieldFrequency: Record<string, { corrections: number; total: number; rate: number }>;
+  topTransitions: CorrectionTransition[];
+  perFilmCorrectionRates: Record<string, { corrections: number; total: number; rate: number }>;
+  confidenceVsAccuracy: ConfidenceBucket[];
+  totalVerifications: number;
+};
+
 export type ShotReviewQueueItem = ShotWithDetails & {
   verificationCount: number;
   averageOverallRating: number | null;

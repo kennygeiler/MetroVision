@@ -827,6 +827,12 @@ export default function AdminPage() {
         <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
           Batch pipeline management — source films, monitor processing, and review classifications.
         </p>
+        <Link
+          href="/admin/correction-patterns"
+          className="mt-3 inline-block font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-cyan-400 transition-colors hover:text-cyan-300"
+        >
+          View correction patterns &rarr;
+        </Link>
       </div>
 
       {/* Tabs */}
