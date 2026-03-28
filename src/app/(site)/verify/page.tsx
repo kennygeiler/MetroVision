@@ -210,7 +210,27 @@ export default async function VerifyPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 px-5 py-5 sm:grid-cols-3">
+              <div className="grid gap-4 px-5 py-5 sm:grid-cols-4">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                    Confidence
+                  </p>
+                  <p
+                    className="mt-2 text-sm"
+                    style={{
+                      color:
+                        shot.metadata.confidence === null
+                          ? "var(--color-text-tertiary)"
+                          : shot.metadata.confidence < 0.5
+                            ? "var(--color-status-unverified)"
+                            : "var(--color-text-primary)",
+                    }}
+                  >
+                    {shot.metadata.confidence === null
+                      ? "N/A"
+                      : `${(shot.metadata.confidence * 100).toFixed(0)}%`}
+                  </p>
+                </div>
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
                     Avg rating

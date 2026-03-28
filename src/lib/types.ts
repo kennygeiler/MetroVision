@@ -89,6 +89,7 @@ export type ShotWithDetails = {
     angleHorizontal: HorizontalAngleSlug | null;
     durationCategory: DurationCategorySlug | null;
     classificationSource: string | null;
+    confidence: number | null;
   };
   semantic: {
     id: string | null;

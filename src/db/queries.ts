@@ -95,6 +95,7 @@ const shotSelection = {
   metadataAngleHorizontal: schema.shotMetadata.angleHorizontal,
   metadataDurationCat: schema.shotMetadata.durationCat,
   metadataClassificationSource: schema.shotMetadata.classificationSource,
+  metadataConfidence: schema.shotMetadata.confidence,
   semanticId: schema.shotSemantic.id,
   semanticShotId: schema.shotSemantic.shotId,
   semanticDescription: schema.shotSemantic.description,
@@ -166,6 +167,7 @@ function mapShotRow(row: ShotRow): ShotWithDetails {
       angleHorizontal: (row.metadataAngleHorizontal ?? "frontal") as HorizontalAngleSlug,
       durationCategory: (row.metadataDurationCat ?? "standard") as DurationCategorySlug,
       classificationSource: row.metadataClassificationSource ?? null,
+      confidence: row.metadataConfidence ?? null,
     },
     semantic: row.semanticId
       ? {
@@ -646,6 +648,15 @@ export async function getShotsForReview(): Promise<ShotReviewQueueItem[]> {
     .sort((left, right) => {
       if ((left.verificationCount === 0) !== (right.verificationCount === 0)) {
         return left.verificationCount === 0 ? -1 : 1;
+      }
+
+      // Within unverified shots, sort by confidence ascending (least confident first)
+      if (left.verificationCount === 0 && right.verificationCount === 0) {
+        const leftConf = left.metadata.confidence ?? Number.POSITIVE_INFINITY;
+        const rightConf = right.metadata.confidence ?? Number.POSITIVE_INFINITY;
+        if (leftConf !== rightConf) {
+          return leftConf - rightConf;
+        }
       }
 
       const leftRating = left.averageOverallRating ?? Number.POSITIVE_INFINITY;
