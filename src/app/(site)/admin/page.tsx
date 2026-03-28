@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -247,9 +248,11 @@ function SubmitTab() {
 
                 {/* Poster thumbnail */}
                 {film.posterUrl ? (
-                  <img
+                  <Image
                     src={film.posterUrl}
                     alt=""
+                    width={28}
+                    height={40}
                     className="h-10 w-7 shrink-0 rounded object-cover"
                   />
                 ) : (

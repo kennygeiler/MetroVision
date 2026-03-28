@@ -35,10 +35,15 @@ Open `http://localhost:3000`.
 Set the following values in `.env.local` for the Next.js app and `.env` for the Python pipeline:
 
 ```bash
-DATABASE_URL=
-GOOGLE_API_KEY=
-VERCEL_BLOB_READ_WRITE_TOKEN=
-OPENAI_API_KEY=
+DATABASE_URL=                # Neon PostgreSQL connection string
+GOOGLE_API_KEY=              # Gemini API key for classification
+OPENAI_API_KEY=              # OpenAI API key for embeddings / chat
+TMDB_API_KEY=                # TMDB API key for film metadata + posters
+AWS_ACCESS_KEY_ID=           # AWS credentials for S3 media storage
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_BUCKET=               # S3 bucket name
+AWS_REGION=                  # S3 region (e.g. us-east-1)
+SCENEDETECT_PATH=            # Path to scenedetect binary (pipeline)
 ```
 
 ## Pipeline Usage
@@ -55,7 +60,7 @@ From there, run the ingestion / classification / upload steps against your sourc
 - Scene detection via PySceneDetect
 - Camera-motion classification via Gemini
 - Database writes to Neon PostgreSQL
-- Clip and thumbnail upload to Vercel Blob
+- Clip and thumbnail upload to AWS S3
 
 ## Architecture Overview
 
@@ -79,7 +84,7 @@ Core product surfaces:
 - shadcn/ui + Radix primitives
 - Drizzle ORM
 - Neon PostgreSQL + pgvector
-- Vercel Blob
+- AWS S3
 - Gemini 2.0 Flash
 - OpenAI API
 - PySceneDetect

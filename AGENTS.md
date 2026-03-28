@@ -115,15 +115,6 @@ pnpm-workspace.yaml                   -- Workspace config (worker not yet integr
 .kiln/docs/codebase-state.md          -- Living inventory (rakim)
 ```
 
-## Known Issues (M1 Blockers)
+## Known Issues
 
-- bullmq (^5.71.0) and ioredis (^5.10.1) are dead dependencies in package.json
-- @vercel/blob (^2.3.1) still in package.json; blob route and upload_blob.py exist
-- @tensorflow/tfjs and @tensorflow-models/coco-ssd add bundle bloat (evaluate removal)
-- AWS SDK version mismatch: root ^3.1015.0 vs worker ^3.700.0
-- drizzle-orm at ^0.45.1 but arch-constraints say ~0.38.x
-- detect-shots API route shells to Python (should use TS worker)
-- review-splits page outside (site) route group
-- Package name still "scenedeck" (should be "metrovision")
-- No rate limiting on Gemini calls in either language
-- src/lib/queue.ts and queue-workers.ts may contain BullMQ references
+- drizzle-orm at ^0.45.1 but arch-constraints say ~0.38.x (intentional upgrade — constraint doc may need updating)
