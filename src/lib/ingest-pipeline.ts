@@ -99,7 +99,7 @@ export async function processInParallel<T, R>(
 
 export async function detectShots(
   videoPath: string,
-  detector: "content" | "adaptive" = "content",
+  detector: "content" | "adaptive" = "adaptive",
 ): Promise<DetectedSplit[]> {
   const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-detect-"));
   const csvPath = path.join(tempDir, "shots.csv");

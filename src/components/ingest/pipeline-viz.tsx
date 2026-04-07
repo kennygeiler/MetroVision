@@ -314,13 +314,13 @@ type PipelineVizProps = {
   director: string;
   year: number;
   concurrency: number;
-  detector?: "content" | "adaptive";
+  detector?: "content" | "adaptive"; // default adaptive (see ingest page)
   workerUrl?: string;
   onComplete?: (result: { filmId: string; shotCount: number; sceneCount: number }) => void;
   onError?: (error: string) => void;
 };
 
-export function PipelineViz({ videoPath, filmTitle, director, year, concurrency, detector = "content", workerUrl = "", onComplete, onError }: PipelineVizProps) {
+export function PipelineViz({ videoPath, filmTitle, director, year, concurrency, detector = "adaptive", workerUrl = "", onComplete, onError }: PipelineVizProps) {
   const [state, setState] = useState<PipelineState>({
     steps: STEP_DEFS.map((s) => ({ ...s, status: "pending" as const })),
     frames: [],

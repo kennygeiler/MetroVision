@@ -22,6 +22,7 @@ import {
   fetchTmdbCast,
 } from "../../src/lib/tmdb.js";
 import { generateTextEmbedding } from "../../src/lib/openai-embedding.js";
+import { planContiguousScenesByNormalizedTitle } from "../../src/lib/scene-grouping.js";
 
 async function resolveVideo(videoUrl: string): Promise<string> {
   if (!videoUrl.startsWith("http")) {
@@ -79,14 +80,15 @@ export async function ingestFilmHandler(req: Request, res: Response) {
   try {
     const concurrency = body.concurrency ?? 5;
     const detector: "content" | "adaptive" =
-      body.detector === "adaptive" ? "adaptive" : "content";
+      body.detector === "content" ? "content" : "adaptive";
     const filmSlug = `${sanitize(body.filmTitle)}-${body.year}`;
 
     emit({ type: "step", step: "detect", status: "active", message: "Preparing video..." });
     const videoPath = await resolveVideo(body.videoPath ?? body.videoUrl);
     console.log(`[worker] Video resolved: ${videoPath}`);
 
-    const detLabel = detector === "adaptive" ? "Adaptive (thorough)" : "Content (fast)";
+    const detLabel =
+      detector === "adaptive" ? "Adaptive (default, research)" : "Content (faster, hard cuts)";
     emit({
       type: "step",
       step: "detect",
@@ -250,43 +252,39 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       filmId = ins.id;
     }
 
-    const sceneGroups = new Map<string, number[]>();
-    for (let i = 0; i < classifications.length; i++) {
-      const title = classifications[i].scene_title || "Untitled Scene";
-      const g = sceneGroups.get(title) ?? [];
-      g.push(i);
-      sceneGroups.set(title, g);
-    }
-
-    const sceneIdByTitle = new Map<string, string>();
+    const scenePlans = planContiguousScenesByNormalizedTitle(classifications);
+    const sceneIdByShotIndex = new Map<number, string>();
     let sceneNum = 0;
-    for (const [title, indices] of sceneGroups) {
+    for (const plan of scenePlans) {
       sceneNum++;
-      const first = classifications[indices[0]];
+      const firstIdx = plan.shotIndices[0]!;
+      const lastIdx = plan.shotIndices[plan.shotIndices.length - 1]!;
+      const first = classifications[firstIdx]!;
       const [ins] = await db
         .insert(schema.scenes)
         .values({
           filmId,
           sceneNumber: sceneNum,
-          title,
+          title: plan.displayTitle,
           description: first.scene_description || null,
           location: first.location || null,
           interiorExterior: first.interior_exterior || null,
           timeOfDay: first.time_of_day || null,
-          startTc: splits[indices[0]].start,
-          endTc: splits[indices[indices.length - 1]].end,
-          totalDuration:
-            splits[indices[indices.length - 1]].end - splits[indices[0]].start,
+          startTc: splits[firstIdx]!.start,
+          endTc: splits[lastIdx]!.end,
+          totalDuration: splits[lastIdx]!.end - splits[firstIdx]!.start,
         })
         .returning({ id: schema.scenes.id });
-      sceneIdByTitle.set(title, ins.id);
+      for (const idx of plan.shotIndices) {
+        sceneIdByShotIndex.set(idx, ins.id);
+      }
     }
 
     emit({
       type: "step",
       step: "group",
       status: "complete",
-      message: `${sceneGroups.size} scenes`,
+      message: `${scenePlans.length} scenes`,
       duration: (Date.now() - t4) / 1000,
     });
 
@@ -333,8 +331,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       const split = splits[i];
       const asset = uploadedAssets[i];
       const cls = classifications[i];
-      const sceneTitle = cls.scene_title || "Untitled Scene";
-      const sceneId = sceneIdByTitle.get(sceneTitle) ?? null;
+      const sceneId = sceneIdByShotIndex.get(i) ?? null;
 
       const videoUrl = `/api/s3?key=${encodeURIComponent(asset.clipKey)}`;
       const thumbnailUrl = `/api/s3?key=${encodeURIComponent(asset.thumbnailKey)}`;
@@ -422,7 +419,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       filmId,
       filmTitle: body.filmTitle,
       shotCount,
-      sceneCount: sceneGroups.size,
+      sceneCount: scenePlans.length,
     });
   } catch (error) {
     emit({ type: "error", message: (error as Error).message || "Pipeline failed" });

@@ -12,7 +12,7 @@ export default function IngestPage() {
   const [director, setDirector] = useState("");
   const [year, setYear] = useState("");
   const [concurrency, setConcurrency] = useState(5);
-  const [detector, setDetector] = useState<"content" | "adaptive">("content");
+  const [detector, setDetector] = useState<"content" | "adaptive">("adaptive");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -234,7 +234,8 @@ export default function IngestPage() {
               >
                 <p className="text-sm font-semibold text-[var(--color-text-primary)]">Content Detector</p>
                 <p className="mt-1 font-mono text-[10px] text-[var(--color-text-tertiary)]">
-                  Fast — ~1-3 min for a full film. Good for most films. Detects hard cuts reliably.
+                  Faster — histogram on downscaled frames (same recipe as ingest CLI content mode, -d 4). Best when cuts are crisp;
+                  weaker on busy motion.
                 </p>
               </button>
               <button
@@ -248,9 +249,12 @@ export default function IngestPage() {
                   backgroundColor: detector === "adaptive" ? "rgba(214,160,92,0.06)" : "var(--color-surface-primary)",
                 }}
               >
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">Adaptive Detector</p>
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Adaptive Detector <span className="font-normal text-[var(--color-text-tertiary)]">(default)</span>
+                </p>
                 <p className="mt-1 font-mono text-[10px] text-[var(--color-text-tertiary)]">
-                  Slow — ~20-40 min. Better for dissolves, fades, and complex transitions. Use on a server.
+                  Recommended for research — rolling-window cut detection; slower but usually better when camera movement or grading
+                  fights plain content mode. Run on a worker or beefy machine.
                 </p>
               </button>
             </div>

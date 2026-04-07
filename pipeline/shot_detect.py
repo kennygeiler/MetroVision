@@ -1,18 +1,31 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
 from scenedetect import SceneManager, open_video
-from scenedetect.detectors import AdaptiveDetector
+from scenedetect.detectors import AdaptiveDetector, ContentDetector
 
 try:
     from .config import REVIEW_OUTPUT_DIR
 except ImportError:
     from config import REVIEW_OUTPUT_DIR
+
+# Match TS ingest (`src/lib/ingest-pipeline.ts`):
+# - content: detect-content -t 27 -d 4
+# - adaptive: detect-adaptive -t 3 (no fixed downscale; SceneManager auto_downscale default)
+_DEFAULT_DETECTOR = "adaptive"
+
+
+def _effective_detector() -> str:
+    raw = os.environ.get("METROVISION_SHOT_DETECTOR", _DEFAULT_DETECTOR).strip().lower()
+    if raw in ("content", "adaptive"):
+        return raw
+    return _DEFAULT_DETECTOR
 
 
 def _run_ffmpeg(command: list[str]) -> None:
@@ -67,9 +80,18 @@ def _export_review_thumbnail(video_path: str, output_path: Path, timestamp: floa
 
 
 def detect_shots(video_path: str) -> list[dict[str, Any]]:
+    """Detect shots using the same detector family as the Node ingest CLI."""
+    detector = _effective_detector()
     video = open_video(video_path)
     scene_manager = SceneManager()
-    scene_manager.add_detector(AdaptiveDetector())
+
+    if detector == "content":
+        scene_manager.auto_downscale = False
+        scene_manager.downscale = 4
+        scene_manager.add_detector(ContentDetector(threshold=27.0))
+    else:
+        scene_manager.add_detector(AdaptiveDetector(adaptive_threshold=3.0))
+
     scene_manager.detect_scenes(video=video)
 
     shots: list[dict[str, Any]] = []
@@ -88,7 +110,19 @@ def detect_shots(video_path: str) -> list[dict[str, Any]]:
             }
         )
 
-    print(f"Detected {len(shots)} shots in {video_path}")
+    if not shots:
+        duration, _fps = _probe_video(video_path)
+        print(f"No cuts from PySceneDetect ({detector}); using single segment ({duration:.1f}s)")
+        return [
+            {
+                "index": 1,
+                "start_time": 0.0,
+                "end_time": duration,
+                "duration": duration,
+            }
+        ]
+
+    print(f"Detected {len(shots)} shots ({detector}) in {video_path}")
     return shots
 
 
