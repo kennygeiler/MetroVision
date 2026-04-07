@@ -58,7 +58,7 @@ Hard constraints that planners and builders must respect. Violating any of these
 - **Consequence of violation**: Classification fails with 404 on expired file reference (PF-007)
 
 ### AC-14: Drizzle ORM Version Pin
-- **Constraint**: Pin `drizzle-orm` to `~0.38.x`. AI agents may generate deprecated API patterns from older versions. Prefer `db.select().from().where()` builder API over `db.query.*` for stability.
+- **Constraint**: Pin `drizzle-orm` to `^0.45.1` in root and worker `package.json` (single line; verify with `pnpm why drizzle-orm`). Earlier docs targeted `~0.38.x`; the project standard is now 0.45.x. Prefer `db.select().from().where()` builder API over `db.query.*` for stability.
 - **Consequence of violation**: TypeScript compilation errors, runtime query failures (PF-010)
 
 ### AC-15: NEXT_PUBLIC_ Prefix for Client Env Vars
@@ -93,8 +93,8 @@ Hard constraints that planners and builders must respect. Violating any of these
 - **Constraint**: Video playback with metadata overlay (movement type, direction arrows, trajectory, shot size, speed) must receive the most design and engineering attention. Must be visually striking, screen-recordable, and synchronized to video currentTime via requestAnimationFrame.
 - **Architecture**: HTML5 Canvas (per-frame rendering) + SVG (vector graphics) + Framer Motion (transitions) layered over video element
 
-### AC-23: Consolidate detect-shots Route
-- **Constraint**: The Next.js API route `src/app/api/detect-shots/route.ts` (which shells out to Python) must be consolidated. Interactive shot detection should hit the TS worker's `/api/ingest-film/stream` endpoint, not bypass it via a separate Next.js shell.
+### AC-23: No Next.js detect-shots Shell-Out (Retired Route)
+- **Constraint**: The legacy Next.js route `src/app/api/detect-shots/route.ts` **must not exist** (it previously shelled out to Python). Interactive single-film ingest must go through `src/app/api/ingest-film/stream` and the TS worker (`worker/src/ingest.ts`); do not reintroduce a parallel Next.js shot-detection shell.
 - **Consequence of violation**: Side channel bypasses worker, inconsistent pipeline behavior
 
 ### AC-24: Gemini Batch API Video Support Needs Validation

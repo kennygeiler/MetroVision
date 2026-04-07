@@ -32,7 +32,7 @@ Key gaps: No batch pipeline, no RAG, dead dependencies (bullmq/ioredis), dual pa
 - [ ] bullmq and ioredis removed from package.json dependencies
 - [ ] Worker directory migrated from npm to pnpm workspace
 - [ ] Token-bucket rate limiter implemented in TS worker for Gemini calls (130 RPM Tier 1 target)
-- [ ] detect-shots API route consolidated to use TS worker endpoint (AC-23)
+- [x] AC-23: Legacy detect-shots route absent; ingest via TS worker + `ingest-film/stream`
 - [ ] TensorFlow.js/COCO-SSD evaluated and removed if not actively used (PF from codebase-snapshot)
 - [ ] AWS SDK version aligned between root and worker
 - [ ] MetroVision branding consistent across package.json and layout
@@ -41,7 +41,7 @@ Key gaps: No batch pipeline, no RAG, dead dependencies (bullmq/ioredis), dual pa
 - `pnpm install` succeeds from root with no npm lockfiles anywhere in the tree
 - No bullmq, ioredis, or Vercel Blob imports exist in the codebase
 - TS worker can ingest a single film at 130 RPM without 429 errors
-- `src/app/api/detect-shots/` route removed or redirects to worker
+- `src/app/api/detect-shots/` remains absent; no redirect path needed
 - Application starts and renders without TF.js bundle if removed
 
 **Status:** [ ]
@@ -287,7 +287,7 @@ M1 (Pipeline Consolidation)
 | Classification accuracy below 85% at scale | High | High | HITL review pipeline, prompt engineering iteration, few-shot examples |
 | Neon free tier storage exhaustion at scale | Medium | Medium | Monitor in M3. Upgrade to paid tier before 5,000-film milestone |
 | Metadata overlay performance on complex scenes | Low | Medium | Progressive enhancement: text first, then arrows, then trajectories |
-| Drizzle ORM API changes break queries | Medium | Medium | Pin to ~0.38.x (AC-14), prefer builder API over db.query |
+| Drizzle ORM API changes break queries | Medium | Medium | Pin to ^0.45.1 (AC-14), prefer builder API over db.query |
 | PySceneDetect threshold inadequate for art house cinema | Medium | Medium | Per-film threshold parameter (PF-009), operator review |
 
 ## Scope Estimates
@@ -313,7 +313,7 @@ The following pitfalls from pitfalls.md are baked into milestone acceptance crit
 - **PF-005 (RAF cleanup):** M5 audits all requestAnimationFrame loops.
 - **PF-006 (Neon connection pool):** All milestones use single db import from src/db/index.ts.
 - **PF-009 (PySceneDetect threshold):** M2 exposes per-film threshold parameter.
-- **PF-010 (Drizzle version):** All milestones pin ~0.38.x, prefer builder API.
+- **PF-010 (Drizzle version):** Pin ^0.45.1 (AC-14), prefer builder API.
 - **PF-011 (Filter state):** M5 migrates to URL params.
 - **PF-012 (pgvector cosine syntax):** M3/M4 use cosineDistance helper or tested raw SQL.
 - **PF-013 (Zero tests):** Not addressed as a dedicated milestone; smoke tests added opportunistically.

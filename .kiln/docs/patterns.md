@@ -43,7 +43,7 @@ Key patterns: App Router Server Components only (no Pages Router), single `db` i
 
 ### P-003: Drizzle Builder API (Not db.query.*)
 - **Category**: data-flow
-- **Rule**: Prefer the `db.select().from().where()` builder pattern over `db.query.*` relational API. The builder API is more stable across Drizzle minor versions (pin `~0.38.x` per PF-010).
+- **Rule**: Prefer the `db.select().from().where()` builder pattern over `db.query.*` relational API. The builder API is more stable across Drizzle versions (pin `^0.45.1` per AC-14 / PF-010).
 - **Example**:
   ```ts
   // CORRECT

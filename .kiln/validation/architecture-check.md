@@ -183,7 +183,7 @@ The SceneDeck codebase is substantially ahead of what `.kiln/docs/codebase-state
 - **shadcn/ui**: PRESENT (`shadcn@^4.0.8` + `components.json`)
 - **Radix UI**: DIFFERENT — `@base-ui/react@^1.3.0` is used instead of `@radix-ui/*` packages. `@base-ui/react` is the successor to Radix UI (same team), functionally equivalent but a different package name.
 - **Framer Motion 11.x**: DIFFERENT VERSION — `framer-motion@^12.36.0` (spec says 11.x, implementation is 12.x)
-- **Drizzle ORM 0.38.x+**: PRESENT (`drizzle-orm@^0.45.1`, satisfies 0.38.x+ requirement)
+- **Drizzle ORM (AC-14)**: PRESENT (`drizzle-orm@^0.45.1`, documented pin in arch-constraints)
 - **pgvector (via Drizzle)**: PRESENT in schema (custom type); NOT used in queries
 - **vidstack or react-player**: ABSENT — video is rendered with a plain HTML5 `<video>` element in `shot-player.tsx` (line 59-68), no dedicated video control library
 - **Python 3.11+**: PRESENT (declared via requirements.txt context)

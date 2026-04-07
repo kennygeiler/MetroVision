@@ -26,8 +26,8 @@ Both languages are canonical and long-term. This is not technical debt -- it is 
 | Dependency | Version | Rationale |
 |------------|---------|-----------|
 | Next.js API Routes | 15 | Serverless API handlers co-located with frontend |
-| Express (worker) | ^4 | TS ingest worker HTTP server with SSE streaming |
-| Drizzle ORM | ~0.38.x | Type-safe ORM, pgvector support, active development (pin minor version per PF-010) |
+| Express (worker) | ^5 | TS ingest worker HTTP server with SSE streaming |
+| Drizzle ORM | ^0.45.1 | Type-safe ORM, pgvector support; Neon via `@neondatabase/serverless`; `drizzle-kit` ^0.31.x (AC-14, PF-010) |
 | @neondatabase/serverless | latest | HTTP driver for Neon, connection-stateless (avoids pool exhaustion per PF-006) |
 
 ## Database
@@ -114,5 +114,5 @@ Both languages are canonical and long-term. This is not technical debt -- it is 
 ## Version Pinning Policy
 
 - Pin major versions only (e.g., `next@15`, not `next@15.2.1`). Let minor/patch float for security fixes.
-- Exception: Drizzle ORM -- pin minor version (`~0.38.x`) due to active API changes (PF-010).
+- Exception: Drizzle ORM — pin `^0.45.1` in app and worker (AC-14, PF-010).
 - Lock files (pnpm-lock.yaml, requirements.txt) committed to source control.

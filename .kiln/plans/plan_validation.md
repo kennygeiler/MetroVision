@@ -79,7 +79,7 @@ All 24 architectural constraints verified against plan milestones:
 
 | Constraint | Plan Coverage | Status |
 |-----------|--------------|--------|
-| AC-01: No video in serverless | M2 uses Python worker; M1 retires detect-shots | Compliant |
+| AC-01: No video in serverless | M2 uses Python worker; legacy detect-shots route absent | Compliant |
 | AC-02: Taxonomy sync | M1 adds slug assertion | Compliant |
 | AC-03: pgvector before migration | M5 explicitly references | Compliant |
 | AC-04: Single db import | Not contradicted | Compliant |
@@ -101,7 +101,7 @@ All 24 architectural constraints verified against plan milestones:
 | AC-20: Two-lane pipeline | M2 documents both lanes | Compliant |
 | AC-21: No auth v1 | M7 uses API keys only | Compliant |
 | AC-22: Metadata overlay hero | M4 prioritizes with detailed AC | Compliant |
-| AC-23: Consolidate detect-shots | M1 handles consolidation | Compliant |
+| AC-23: No detect-shots shell-out | Route retired; ingest via worker + ingest-film/stream | Compliant |
 | AC-24: Batch API validation | M2 has explicit risk gate | Compliant |
 
 ---

@@ -2,30 +2,30 @@
 # Codebase State
 
 ## TL;DR
-Current milestone: M1 (Foundation Repair). 0/11 deliverables complete. Key files: src/db/schema.ts, package.json, worker/src/ingest.ts.
-Last change: MetroVision rebrand + S3 pipeline + D3 visualizations + AI agent + batch processing routes added.
+Current milestone: M1 (Foundation Repair). Doc alignment pass 2026-04 — Kiln inventory matches live `src/app/api/**` and package.json; legacy `detect-shots` Next route absent (AC-23). Key files: `src/db/schema.ts`, `package.json`, `worker/src/ingest.ts`.
+Last change: Phase 01 documentation & constraint alignment.
 
 ## Milestone: M1 — Foundation Repair
 Status: not started
 
 ### Deliverables
-- [ ] bullmq and ioredis removed from package.json — currently in package.json (bullmq ^5.71.0, ioredis ^5.10.1)
-- [ ] Vercel Blob references removed — @vercel/blob ^2.3.1 still in package.json; src/app/api/blob/[...path]/route.ts and pipeline/upload_blob.py exist
+- [x] bullmq and ioredis removed from package.json — not present in root `package.json` (verified)
+- [x] Vercel Blob references removed from root app — `@vercel/blob` not in `package.json`; no `src/app/api/blob/` route (legacy path retired)
 - [ ] Worker directory migrated from npm to pnpm workspace — worker/ has its own package.json with npm lockfile; pnpm-workspace.yaml exists at root but worker not yet integrated
-- [ ] AWS SDK version aligned between root and worker — root: ^3.1015.0, worker: ^3.700.0
+- [x] AWS SDK version aligned between root and worker — both use `@aws-sdk/client-s3` / presigner `^3.1015.0` (verified 2026-04)
 - [ ] TensorFlow.js/COCO-SSD evaluated and removed if not actively used — @tensorflow/tfjs ^4.22.0 and @tensorflow-models/coco-ssd ^2.2.3 in root package.json; used by src/components/video/realtime-object-overlay.tsx and src/hooks/use-realtime-detection.ts
 - [ ] Token-bucket rate limiter in TS worker for Gemini calls — not implemented
 - [ ] Asyncio rate limiter in Python pipeline — not implemented
-- [ ] detect-shots API route consolidated — src/app/api/detect-shots/route.ts still exists (shells to Python)
+- [x] AC-23 (legacy detect-shots): `src/app/api/detect-shots/route.ts` is **absent**; interactive single-film ingest uses `src/app/api/ingest-film/stream` and the TS worker — do not reintroduce the Next.js shell-out route
 - [ ] review-splits page moved inside (site) route group — src/app/review-splits/page.tsx exists outside (site) group
-- [ ] Package name updated from "scenedeck" to "metrovision" — package.json still says "scenedeck", worker says "scenedeck-worker"
+- [x] Package name: root `package.json` `name` is `metrovision`; worker `package.json` `name` is `metrovision-worker`
 - [ ] Taxonomy slug assertion in Python pipeline — not implemented in pipeline/
 
 ### Notes
-- DB schema has 8 tables: films, scenes, shots, shotMetadata, shotSemantic, verifications, shotEmbeddings, shotObjects, pipelineJobs
-- Architecture doc mentions 5 tables (films, scenes, shots, shot_embeddings, verifications) but schema has evolved to 9 tables
-- drizzle-orm pinned at ^0.45.1 (arch-constraints say ~0.38.x — version drift)
-- src/lib/queue.ts and src/lib/queue-workers.ts exist (may contain BullMQ usage)
+- DB schema has 9 tables: films, scenes, shots, shotMetadata, shotSemantic, verifications, shotEmbeddings, shotObjects, pipelineJobs
+- Architecture doc may mention older table counts; schema is source of truth in `src/db/schema.ts`
+- drizzle-orm `^0.45.1` — AC-14 updated to match (Phase 01)
+- src/lib/queue.ts and src/lib/queue-workers.ts exist (verify BullMQ usage vs AC-06)
 - Batch API routes exist: src/app/api/batch/{source,submit,status,review}/route.ts
 
 ## Milestone: M2 — Batch Pipeline Infrastructure
@@ -83,10 +83,10 @@ Status: not started
 
 ### Next.js App (src/)
 - **Pages**: layout.tsx, page.tsx (home), browse/, film/[id]/, shot/[id]/, verify/, verify/[shotId]/, export/, visualize/, agent/, ingest/, admin/, review-splits/ (outside route group)
-- **API Routes**: detect-shots, detect-split, detect-objects, export, search, shots, verifications, process-scene, group-scenes, s3, blob/[...path], upload-video, ingest-film, ingest-film/stream, agent/chat, upload-to-s3, batch/{source,submit,status,review}
+- **API Routes**: `admin/accuracy`, `admin/correction-patterns`, `agent/chat`, `batch/{source,submit,status,review}`, `detect-objects`, `export`, `group-scenes`, `ingest-film`, `ingest-film/stream`, `process-scene`, `rag`, `s3`, `search`, `shots`, `upload-to-s3`, `upload-video`, `verifications`, `verifications/[shotId]`, `v1/films`, `v1/search`, `v1/shots`, `v1/taxonomy` (no `detect-shots`, no `blob/[...path]`)
 - **Components**: video/ (shot-player, metadata-overlay, object-overlay, realtime-object-overlay), shots/ (shot-card, shot-browser, detect-objects-button), films/ (film-card, film-header, film-coverage-stats, film-timeline, scene-card, film-browser), visualize/ (6 D3 charts + viz-dashboard), agent/ (chat-interface, message-cards), export/ (export-button, export-panel), verify/ (verification-panel, verification-history), review/ (review-splits-workspace), layout/ (site-shell, site-header), home/ (home-hero), ingest/ (pipeline-viz), ui/ (button, loading-skeleton)
 - **Lib**: taxonomy.ts, types.ts, utils.ts, shot-display.ts, tmdb.ts, s3.ts, export.ts, archive-org.ts, object-detection.ts, timeline-colors.ts, verification.ts, validation-rules.ts, ingest-pipeline.ts, agent-system-prompt.ts, agent-tools.ts, queue.ts, queue-workers.ts, mock/shots.ts
-- **DB**: schema.ts (9 tables), index.ts, queries.ts, embeddings.ts, generate-embeddings.ts, seed.ts, load-env.ts
+- **DB**: schema.ts (9 tables), index.ts, queries.ts, generate-embeddings.ts, generate-scene-embeddings.ts, ingest-corpus.ts, seed.ts, load-env.ts
 
 ### TS Ingest Worker (worker/)
 - server.ts (Express), ingest.ts (pipeline logic), s3.ts, db.ts, schema.ts

@@ -16,7 +16,7 @@ Trustworthy shot metadata and search—taxonomy, ingest, and APIs stay aligned s
 
 ### Active
 
-- [ ] **REQ-DOC-01** — Kiln/architecture docs and `AGENTS.md` match the live repo (no phantom routes or scripts).
+- [x] **REQ-DOC-01** — Kiln/architecture docs and `AGENTS.md` match the live repo (no phantom routes or scripts). *(Phase 1, 2026-04-07)*
 - [ ] **REQ-SCHEMA-01** — App and worker database shapes cannot drift silently.
 - [ ] **REQ-SEC-01** — Public LLM-heavy endpoints have an explicit abuse/cost posture; local-only routes are not deployable by mistake.
 - [ ] **REQ-RL-01** — All Gemini (and comparable) outbound calls respect the same rate-limiting policy (AC-07).
@@ -41,8 +41,8 @@ Phased delivery is driven by `.planning/codebase/CONCERNS.md` (audit 2026-04-07)
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Roadmap sourced from CONCERNS.md | Structured remediation beats ad-hoc fixes | Pending |
-| Drizzle version | Keep 0.45.x vs align docs vs downgrade—decide in Phase 1 | Pending |
+| Roadmap sourced from CONCERNS.md | Structured remediation beats ad-hoc fixes | ✓ Good |
+| Drizzle version | Document `^0.45.1` as standard (AC-14) | ✓ Good |
 
 ---
-*Last updated: 2026-04-07 after creating concerns-driven roadmap*
+*Last updated: 2026-04-07 after Phase 1 execution*

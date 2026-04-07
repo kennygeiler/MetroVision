@@ -28,7 +28,7 @@
 - Rate limiting in both TS worker and Python pipeline (currently absent — highest-urgency gap)
 - Dead dependency removal: bullmq, ioredis, Vercel Blob references
 - pnpm standardization across root + worker (migrate worker from npm)
-- Pipeline consolidation: retire detect-shots Next.js route; canonicalize two-lane architecture
+- Pipeline: legacy detect-shots route stays absent; two-lane architecture (AC-20, AC-23)
 - corpus_chunks, scene_embeddings, film_embeddings, batch_jobs Postgres tables
 - Knowledge corpus ingestion pipeline (chunking, contextual enrichment, embedding)
 - Hybrid retrieval engine (BM25 tsvector + pgvector + RRF fusion)
@@ -63,9 +63,9 @@
 - [ ] Evaluate TF.js/COCO-SSD bundle impact; remove if not actively used in any shipped feature
 - [ ] Add token-bucket rate limiting to TS worker (130 RPM target, Tier 1; concurrency = min(tier * 0.85, 50))
 - [ ] Add asyncio.Semaphore + token-bucket rate limiting to Python pipeline (130 RPM Tier 1)
-- [ ] Consolidate detect-shots Next.js API route: redirect to TS worker /api/ingest-film/stream endpoint; delete the route shell-out (AC-23)
+- [x] AC-23: Legacy detect-shots Next.js route absent; interactive ingest via `ingest-film/stream` + TS worker
 - [ ] Move review-splits page into the (site) route group
-- [ ] Update package.json name from "scenedeck" to "metrovision" to complete rebrand
+- [x] Package names: root `metrovision`, worker `metrovision-worker`
 - [ ] Verify taxonomy slugs are identical in src/lib/taxonomy.ts and pipeline/taxonomy.py; add assertion in classify.py
 
 **Acceptance Criteria**:
@@ -74,7 +74,7 @@
 - TS worker processes 10 rapid-fire single-film classifications without a 429 error
 - Python pipeline processes a test batch without rate-limit errors
 - taxonomy.py assertion movement_type in MOVEMENT_TYPES passes on all existing shots in DB
-- detect-shots route is gone; interactive ingest flows exclusively through TS worker SSE endpoint
+- Legacy detect-shots route absent; interactive ingest through TS worker SSE + `ingest-film/stream`
 
 **Risk Areas**:
 - pnpm migration may expose latent version conflicts
@@ -446,7 +446,7 @@ Builders must respect these across every milestone. Violations cause build failu
 - AC-11: Monitor Neon storage; plan tier upgrade before 5,000-film milestone
 - AC-12: ComfyUI IS_CHANGED must return float("NaN") — not True
 - AC-13: Never persist Gemini File API IDs to DB — re-upload on each classification run
-- AC-14: Pin drizzle-orm to ~0.38.x; use builder API over db.query.*
+- AC-14: Pin drizzle-orm to ^0.45.1; use builder API over db.query.*
 - AC-15: NEXT_PUBLIC_ prefix for any client-accessible env vars
 - AC-16: Every requestAnimationFrame loop must have cancelAnimationFrame cleanup
 - AC-17: pnpm across the entire project (after M0 migration)

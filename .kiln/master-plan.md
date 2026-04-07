@@ -52,7 +52,7 @@ Priority order: P1 (training infrastructure / scale) > P2 (visual-first UI) > P3
 - [ ] TensorFlow.js/COCO-SSD evaluated and removed if not actively used
 - [ ] Token-bucket rate limiter in TS worker for Gemini calls (130 RPM Tier 1 target)
 - [ ] Asyncio rate limiter in Python pipeline (Semaphore + token bucket, 130 RPM Tier 1)
-- [ ] detect-shots Next.js API route consolidated: interactive ingest flows exclusively through TS worker SSE endpoint (AC-23)
+- [x] AC-23: Legacy `src/app/api/detect-shots/route.ts` absent; interactive ingest uses `ingest-film/stream` + TS worker (do not reintroduce shell-out route)
 - [ ] review-splits page moved inside (site) route group
 - [ ] Package name updated from "scenedeck" to "metrovision" to complete rebrand
 - [ ] Taxonomy slug assertion added in Python pipeline: validate movement_type against canonical taxonomy before DB write (AC-02)
@@ -64,7 +64,7 @@ Priority order: P1 (training infrastructure / scale) > P2 (visual-first UI) > P3
 - No bullmq, ioredis, or Vercel Blob imports remain in active code paths
 - TS worker processes 10 rapid-fire single-film classifications without a 429 error
 - Python pipeline processes a test batch without rate-limit errors
-- detect-shots route is gone; all interactive ingest flows through TS worker
+- Legacy detect-shots Next route is absent; interactive ingest flows through TS worker + `ingest-film/stream`
 - Application starts and renders without TF.js bundle if removed
 - Taxonomy slug assertion passes on all existing shots in DB
 
@@ -321,7 +321,7 @@ All milestones must respect these. Violations cause build failures, data corrupt
 - AC-11: Monitor Neon storage; plan tier upgrade before 5K films
 - AC-12: ComfyUI IS_CHANGED = float("NaN"), not True
 - AC-13: Never persist Gemini File API IDs to DB
-- AC-14: Pin drizzle-orm to ~0.38.x; prefer builder API
+- AC-14: Pin drizzle-orm to ^0.45.1; prefer builder API
 - AC-16: cancelAnimationFrame cleanup in every RAF loop
 - AC-17: pnpm exclusively (after M1 migration)
 - AC-19: 500-film gate before any product surface

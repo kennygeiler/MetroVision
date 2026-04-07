@@ -29,8 +29,8 @@ The 5,000-film classification goal is feasible but requires a two-lane pipeline 
 
 ### 2. Pipeline Canonicalization
 **Question**: How should the three overlapping pipeline implementations (Python CLI, TS worker, Next.js route) be consolidated?
-**Finding**: The TS worker is more capable (SSE streaming, TMDB, embeddings, S3, concurrency) but the Python pipeline has genuine strengths (PySceneDetect API access, Python ML ecosystem). bullmq and ioredis are installed with zero implementation -- dead weight. The Next.js detect-shots route is a side channel that bypasses the worker.
-**Recommendation**: Two-lane architecture -- TS worker for interactive single-film SSE streaming, new Python batch worker for bulk catalogue using PySceneDetect API + Gemini Batch API + Postgres SKIP LOCKED queue. Remove bullmq/ioredis. Retire the Python CLI entrypoint (keep as library). Consolidate detect-shots route to use the TS worker endpoint.
+**Finding**: The TS worker is more capable (SSE streaming, TMDB, embeddings, S3, concurrency) but the Python pipeline has genuine strengths (PySceneDetect API access, Python ML ecosystem). bullmq/ioredis were legacy dead weight (removed from root `package.json` as of 2026-04 inventory). The legacy Next.js `detect-shots` shell-out route is retired — it must not return (AC-23).
+**Recommendation**: Two-lane architecture -- TS worker for interactive single-film SSE streaming, new Python batch worker for bulk catalogue using PySceneDetect API + Gemini Batch API + Postgres SKIP LOCKED queue. Retire the Python CLI entrypoint (keep as library). Keep interactive shot detection on `ingest-film/stream` + worker only.
 **Confidence**: 0.87
 
 ### 3. RAG Chunking Strategy

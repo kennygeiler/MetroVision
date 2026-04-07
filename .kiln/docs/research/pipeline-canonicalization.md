@@ -2,7 +2,7 @@
 
 ## Finding
 
-MetroVision currently has three overlapping pipeline implementations: (1) `pipeline/` — a Python CLI using PySceneDetect + psycopg2 writes directly to Neon, with serial Gemini classification via the File API; (2) `worker/` — a TypeScript Express service with SSE streaming, S3 asset storage, Drizzle ORM, TMDB integration, OpenAI embeddings, and a `processInParallel` helper for concurrent Gemini calls using inline base64; (3) `src/app/api/detect-shots/` — a Next.js API route that shells out to Python for shot detection only. The root `package.json` also contains installed but entirely unused `bullmq@^5.71.0` and `ioredis@^5.10.1` dependencies, indicating an abandoned BullMQ/Redis job queue design.
+MetroVision has overlapping pipeline implementations: (1) `pipeline/` — a Python CLI using PySceneDetect + writes to Neon, with Gemini classification; (2) `worker/` — a TypeScript Express service with SSE streaming, S3 asset storage, Drizzle ORM, TMDB integration, OpenAI embeddings, and concurrent Gemini calls. **Historical (retired):** a Next.js `detect-shots` route that shelled to Python — this path was removed; AC-23 forbids reintroducing it. **As of 2026-04 inventory:** `bullmq` / `ioredis` are not in root `package.json` (Postgres SKIP LOCKED is the queue pattern per AC-06).
 
 **The TypeScript worker (`worker/src/ingest.ts`) is the more capable and production-oriented pipeline.** It has: SSE streaming progress (critical for UX on long film ingestions), TMDB metadata enrichment, OpenAI vector embeddings, S3 asset storage, scene grouping logic, and partial concurrency for Gemini calls. The Python pipeline, while well-structured, lacks all of these features and writes to Vercel Blob (deprecated in favor of S3 in the worker). It also uses psycopg2 for direct DB writes vs Drizzle ORM, creating dual write paths for the same tables.
 
@@ -15,7 +15,7 @@ MetroVision currently has three overlapping pipeline implementations: (1) `pipel
 - The TS worker (`worker/`) becomes the interactive ingest API (single-film SSE streaming). It stays TypeScript because SSE streaming, TMDB calls, and S3 uploads are I/O-bound operations where Node.js async is a natural fit.
 - Add a Python batch worker (`pipeline/batch_worker.py`) that: polls a Postgres jobs table using `SKIP LOCKED`, calls PySceneDetect directly (not via CLI), submits Gemini Batch API jobs for classification, and writes results via psycopg2 or asyncpg. This handles the 5,000-film bulk catalogue.
 - Remove `bullmq` and `ioredis` from `package.json`. Drop the `worker/` Redis dependency path entirely.
-- The Next.js API route `detect-shots` (which shells to Python) should be consolidated — shot detection for interactive use should hit the TS worker's `/api/ingest-film/stream` endpoint, not bypass it via a separate Next.js shell.
+- Interactive shot detection must use `src/app/api/ingest-film/stream` and the TS worker — the legacy `detect-shots` Next route stays removed (AC-23).
 
 **Why not Python-only?** The TS worker has production UX features (SSE streaming, real-time shot-level progress events) that would require significant re-implementation in Python. FastAPI + SSE is feasible but the TS worker is already deployed and working. The risk of rewriting working streaming infrastructure outweighs the benefit of language unification.
 
@@ -29,13 +29,13 @@ Adopt a two-lane architecture: keep the TS worker for interactive single-film in
 
 - TS worker (`worker/src/ingest.ts`): 443 lines, SSE streaming, TMDB + OpenAI embeddings, S3 storage, `processInParallel` with up to 15 Gemini workers
 - Python pipeline (`pipeline/main.py`): serial processing, Vercel Blob storage, psycopg2 direct writes, no TMDB/embeddings
-- `package.json` declares `bullmq@^5.71.0` and `ioredis@^5.10.1`; no BullMQ queue implementation exists anywhere in `src/` or `worker/src/`
+- Root `package.json` no longer declares bullmq/ioredis (2026-04); no BullMQ queue implementation in `src/` or `worker/src/`
 - TS worker shells to `scenedetect` CLI binary; Python pipeline uses PySceneDetect Python API directly (more configurable)
 - Both pipelines write to the same Neon Postgres tables via different ORMs (psycopg2 vs Drizzle), creating dual write paths
 - PySceneDetect single-video parallelism is not effective; multi-film parallelism must be done at orchestration level (multiple worker processes)
 - Postgres `SELECT FOR UPDATE SKIP LOCKED` is a proven pattern for DB-backed job queues, eliminating Redis as a dependency
 - Celery (Python) is the dominant distributed task queue for Python ML pipelines; ARQ (asyncio-native, lighter) is a viable alternative for lower complexity
-- Next.js route `src/app/api/detect-shots/route.ts` spawns a Python subprocess — this is a side channel bypassing the worker and should be consolidated
+- Legacy `src/app/api/detect-shots/route.ts` is absent in the current tree; it must not be re-added (AC-23)
 - The TS worker's `classifyShot` uses inline base64 + REST API; the Python pipeline uses `client.files.upload` (File API) — the File API approach is more reliable for production but the TS worker's re-encoded small clip strategy is better for throughput
 
 ## Sources
@@ -49,7 +49,7 @@ Adopt a two-lane architecture: keep the TS worker for interactive single-film in
 - [Codebase: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/SceneDeck/worker/src/ingest.ts]
 - [Codebase: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/SceneDeck/pipeline/main.py]
 - [Codebase: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/SceneDeck/pipeline/classify.py]
-- [Codebase: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/SceneDeck/src/app/api/detect-shots/route.ts]
+- [Historical: retired path `src/app/api/detect-shots/` — removed per AC-23]
 
 ## Confidence
 

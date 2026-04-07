@@ -36,7 +36,7 @@ MetroVision (SceneDeck) is a platform for structured camera movement analysis at
 - **Framework**: Next.js 15 App Router only (no Pages Router). Server Components for data fetching, Client Components (`"use client"`) only for interactivity.
 - **Styling**: Tailwind CSS 4 utility classes. OKLCH design tokens in `src/styles/tokens.css`. Dark cinematic theme.
 - **Components**: shadcn/ui base library in `src/components/ui/`. Radix UI primitives underneath.
-- **Database**: Drizzle ORM with `@neondatabase/serverless` HTTP driver. Always import `db` from `src/db/index.ts` (AC-04). Pin drizzle-orm to ~0.38.x (AC-14). Prefer builder API `db.select().from().where()`.
+- **Database**: Drizzle ORM with `@neondatabase/serverless` HTTP driver. Always import `db` from `src/db/index.ts` (AC-04). Use drizzle-orm `^0.45.1` (AC-14). Prefer builder API `db.select().from().where()`.
 - **Taxonomy**: Fixed taxonomy in `src/lib/taxonomy.ts` (TS) and `pipeline/taxonomy.py` (Python). Must stay in sync (AC-02).
 - **File organization**: App Router conventions. Components in `src/components/` by domain. Route group `(site)` for public pages.
 - **Naming**: kebab-case files, PascalCase components, camelCase functions/variables.
@@ -101,8 +101,8 @@ pipeline/extract_clips.py             -- FFmpeg frame/clip extraction
 pipeline/write_db.py                  -- Postgres writes
 
 # Config
-package.json                          -- Root deps (still named "scenedeck")
-worker/package.json                   -- Worker deps (npm, not pnpm workspace)
+package.json                          -- Root deps (`name`: metrovision)
+worker/package.json                   -- Worker deps (`name`: metrovision-worker; npm, not pnpm workspace)
 drizzle.config.ts                     -- Drizzle Kit config
 pnpm-workspace.yaml                   -- Workspace config (worker not yet integrated)
 
@@ -117,4 +117,4 @@ pnpm-workspace.yaml                   -- Workspace config (worker not yet integr
 
 ## Known Issues
 
-- drizzle-orm at ^0.45.1 but arch-constraints say ~0.38.x (intentional upgrade — constraint doc may need updating)
+(None — Phase 01 aligned AC-14 and agent docs with `^0.45.1`.)

@@ -1,6 +1,6 @@
-# SceneDeck
+# MetroVision (SceneDeck)
 
-Searchable film-scene intelligence with structured camera motion metadata and playback-aware overlays.
+Searchable film-scene intelligence with structured camera motion metadata and playback-aware overlays. **MetroVision** is the product name; **SceneDeck** remains a common repo/codename.
 
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 ![React](https://img.shields.io/badge/React-19-1d9bf0)
@@ -22,9 +22,11 @@ Placeholder: `https://scenedeck-demo.vercel.app`
 
 ```bash
 git clone <your-repo-url>
-cd Claude
+cd <repo-root>
 pnpm install
 cp .env.example .env.local
+pnpm db:push    # apply schema to Neon (requires DATABASE_URL)
+pnpm db:seed    # optional dev seed row
 pnpm dev
 ```
 
@@ -64,7 +66,7 @@ From there, run the ingestion / classification / upload steps against your sourc
 
 ## Architecture Overview
 
-SceneDeck is a Next.js 15 App Router monolith deployed to Vercel. The web app renders a searchable archive of film shots backed by Neon PostgreSQL and Drizzle ORM, with a hero SVG metadata overlay layered over shot playback. Offline analysis lives in `/pipeline`, where source footage is segmented into shots, classified against a shared camera-motion taxonomy, and written back into the application database.
+MetroVision is a Next.js 15 App Router monolith deployed to Vercel. The web app renders a searchable archive of film shots backed by Neon PostgreSQL and Drizzle ORM, with a hero SVG metadata overlay layered over shot playback. Offline analysis lives in `/pipeline`, where source footage is segmented into shots, classified against a shared camera-motion taxonomy, and written back into the application database.
 
 Core product surfaces:
 

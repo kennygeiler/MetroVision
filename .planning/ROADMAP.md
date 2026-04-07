@@ -8,7 +8,7 @@ This milestone delivers phased hardening and alignment work traced to `.planning
 
 **Phase Numbering:** Integer phases are sequential. Decimal phases (e.g. 3.1) are reserved for urgent insertions if needed.
 
-- [ ] **Phase 1: Documentation & constraint alignment** — Kiln/AGENTS accuracy; Drizzle policy; onboarding scripts; naming
+- [x] **Phase 1: Documentation & constraint alignment** — Kiln/AGENTS accuracy; Drizzle policy; onboarding scripts; naming
 - [ ] **Phase 2: Correctness & schema integrity** — API auth crypto import; worker vs app Drizzle schema drift
 - [ ] **Phase 3: Security & exposure** — LLM route abuse; API key transport; `process-scene` exposure; image remote patterns
 - [ ] **Phase 4: Rate limits & heavy-work boundaries** — Worker/RAG/agent Gemini limiting; semantic search fallback; `process-scene` stance vs AC-01/AC-20
@@ -36,10 +36,10 @@ This milestone delivers phased hardening and alignment work traced to `.planning
 
 Plans:
 
-- [ ] 01-01: Reconcile `.kiln/docs/codebase-state.md`, `.kiln/master-plan.md`, and AC-23 checklists with live `src/app/api/**` tree
-- [ ] 01-02: Resolve Drizzle ORM version vs AC-14 / `AGENTS.md` (document chosen line + migration notes or pin and test)
-- [ ] 01-03: Add `pnpm db:seed` and `src/db/seed.ts` **or** remove seed references from `AGENTS.md` and other docs
-- [ ] 01-04: Align product/package naming across `AGENTS.md`, README, and `package.json`
+- [x] 01-01: Reconcile `.kiln/docs/codebase-state.md`, `.kiln/master-plan.md`, and AC-23 checklists with live `src/app/api/**` tree
+- [x] 01-02: Resolve Drizzle ORM version vs AC-14 / `AGENTS.md` (document chosen line + migration notes or pin and test)
+- [x] 01-03: Add `pnpm db:seed` and `src/db/seed.ts` **or** remove seed references from `AGENTS.md` and other docs
+- [x] 01-04: Align product/package naming across `AGENTS.md`, README, and `package.json`
 
 ---
 
@@ -169,7 +169,7 @@ Plans:
 
 | Phase | Name | Plans Complete | Status | Completed |
 |-------|------|----------------|--------|-----------|
-| 1 | Documentation & constraint alignment | 0/4 | Not started | — |
+| 1 | Documentation & constraint alignment | 4/4 | Complete | 2026-04-07 |
 | 2 | Correctness & schema integrity | 0/2 | Not started | — |
 | 3 | Security & exposure | 0/4 | Not started | — |
 | 4 | Rate limits & heavy-work boundaries | 0/4 | Not started | — |
