@@ -296,9 +296,21 @@ export type VizShot = {
   blocking: string;
   shotSize: string;
   angleVertical: string;
+  angleHorizontal: string;
+  symmetry: string;
+  dominantLines: string;
+  lightingDirection: string;
+  lightingQuality: string;
+  colorTemperature: string;
+  durationCategory: string;
+  foregroundCount: number;
+  backgroundCount: number;
   duration: number;
   objectCount: number;
   description: string | null;
+  confidence: number | null;
+  reviewStatus: string | null;
+  verificationCount: number;
 };
 
 export type VizFilm = {

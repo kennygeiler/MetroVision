@@ -3,35 +3,7 @@
 import * as d3 from "d3";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-type VizShot = {
-  id: string;
-  filmId: string;
-  filmTitle: string;
-  director: string;
-  sceneTitle: string | null;
-  sceneNumber: number | null;
-  shotIndex: number;
-  framing: string;
-  depth: string;
-  blocking: string;
-  shotSize: string;
-  angleVertical: string;
-  duration: number;
-  objectCount: number;
-  description: string | null;
-};
-
-type VizFilm = {
-  id: string;
-  title: string;
-  director: string;
-  shotCount: number;
-  sceneCount: number;
-};
+import type { VizFilm, VizShot } from "@/lib/types";
 
 type PacingHeatmapProps = {
   shots: VizShot[];

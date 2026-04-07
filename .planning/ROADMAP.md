@@ -4,6 +4,10 @@
 
 This milestone delivers phased hardening and alignment work traced to `.planning/codebase/CONCERNS.md` (2026-04-07). Early phases fix **truth in docs and constraints**, then **correctness and schema integrity**, **security boundaries**, **rate limits and platform fit**, **fragile modules**, and finally **tests plus observability** so regressions surface before production.
 
+**Related plans**
+
+- **[/visualize composition dashboard](VISUALIZE-COMPOSITION-PLAN.md)** — `VizShot` / trust filters / staging & lighting D3 views; Phases 0–5 implemented in-app; Phase 6 (embeddings UMAP, scene facets, etc.) remains backlog.
+
 ## Phases
 
 **Phase Numbering:** Integer phases are sequential. Decimal phases (e.g. 3.1) are reserved for urgent insertions if needed.

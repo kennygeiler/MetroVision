@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import type { VizShot } from "@/lib/types";
+import { SHOT_SIZES } from "@/lib/taxonomy";
+import { colorForFraming } from "@/lib/viz-colors";
 
 type Props = {
   shots: VizShot[];
@@ -10,51 +12,10 @@ type Props = {
 };
 
 // ---------------------------------------------------------------------------
-// Movement type colour palette
+// Shot size ordinal scale (taxonomy key order; wide → close, inserts at end)
 // ---------------------------------------------------------------------------
 
-const MOVEMENT_COLORS: Record<string, string> = {
-  static: "#4a4a5e",
-  pan: "#5cb8d6",
-  tilt: "#4dbaa8",
-  dolly: "#4dd68a",
-  truck: "#6dd64d",
-  pedestal: "#99cc44",
-  crane: "#d6b84d",
-  boom: "#d6994d",
-  zoom: "#aad64d",
-  dolly_zoom: "#d66a4d",
-  handheld: "#9966d6",
-  steadicam: "#4d6ad6",
-  drone: "#7744d6",
-  aerial: "#4d99d6",
-  arc: "#cc44d6",
-  whip_pan: "#d6445a",
-  whip_tilt: "#d64488",
-  rack_focus: "#44d6bb",
-  follow: "#44d699",
-  reveal: "#44d666",
-  reframe: "#6666aa",
-};
-
-function colorFor(type: string): string {
-  return MOVEMENT_COLORS[type] ?? "#666";
-}
-
-// ---------------------------------------------------------------------------
-// Shot size ordinal scale (top → bottom: extreme_wide → extreme_close)
-// ---------------------------------------------------------------------------
-
-const SHOT_SIZES = [
-  "extreme_wide",
-  "wide",
-  "full",
-  "medium_full",
-  "medium",
-  "medium_close",
-  "close",
-  "extreme_close",
-];
+const SHOT_SIZE_ORDER = Object.keys(SHOT_SIZES);
 
 function shotSizeLabel(s: string): string {
   return s.replace(/_/g, " ");
@@ -120,10 +81,17 @@ export function CompositionScatter({ shots, onSelectShot }: Props) {
     const x = d3.scaleLog().domain([xMin, xMax]).range([0, innerW]).nice();
 
     // Determine which shot sizes are present and keep ordinal order
-    const presentSizes = SHOT_SIZES.filter((s) =>
-      shots.some((sh) => sh.shotSize === s)
+    const presentOrdered = SHOT_SIZE_ORDER.filter((s) =>
+      shots.some((sh) => sh.shotSize === s),
     );
-    const allSizes = presentSizes.length > 0 ? presentSizes : SHOT_SIZES;
+    const extraSizes = [
+      ...new Set(shots.map((sh) => sh.shotSize)),
+    ].filter((s) => !SHOT_SIZE_ORDER.includes(s));
+    extraSizes.sort();
+    const allSizes =
+      presentOrdered.length > 0
+        ? [...presentOrdered, ...extraSizes]
+        : SHOT_SIZE_ORDER;
 
     const y = d3.scalePoint().domain(allSizes).range([0, innerH]).padding(0.5);
 
@@ -204,7 +172,7 @@ export function CompositionScatter({ shots, onSelectShot }: Props) {
       .attr("cx", (d) => x(Math.max(xMin, d.duration)))
       .attr("cy", (d) => y(d.shotSize) ?? innerH / 2)
       .attr("r", 0)
-      .attr("fill", (d) => colorFor(d.framing))
+      .attr("fill", (d) => colorForFraming(d.framing))
       .attr("fill-opacity", 0.7)
       .attr("stroke", "#0d0d12")
       .attr("stroke-width", 1)
@@ -233,7 +201,7 @@ export function CompositionScatter({ shots, onSelectShot }: Props) {
           .style("top", `${event.offsetY - 10}px`).html(`
             <div style="font-weight:600;color:#f5f5f7;margin-bottom:2px">${d.filmTitle}</div>
             <div style="color:#8e8e99;font-size:10px;margin-bottom:4px">${d.director}</div>
-            <div><span style="color:#55555e">movement</span> <span style="color:${colorFor(d.framing)}">${d.framing.replace(/_/g, " ")}</span></div>
+            <div><span style="color:#55555e">framing</span> <span style="color:${colorForFraming(d.framing)}">${d.framing.replace(/_/g, " ")}</span></div>
             <div><span style="color:#55555e">size</span> ${shotSizeLabel(d.shotSize)}</div>
             <div><span style="color:#55555e">duration</span> ${d.duration.toFixed(2)}s</div>
             <div><span style="color:#55555e">objects</span> ${d.objectCount}</div>

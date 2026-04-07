@@ -88,12 +88,20 @@ src/components/video/metadata-overlay.tsx -- SVG composition overlay (badges: fr
 src/components/video/shot-player.tsx   -- Video player with overlay toggle
 
 # Visualizations (D3)
-src/components/visualize/rhythm-stream.tsx
-src/components/visualize/hierarchy-sunburst.tsx
-src/components/visualize/pacing-heatmap.tsx
+src/lib/viz-colors.ts                     -- Stable hues for framing / category slugs (viz)
+src/lib/viz-shot-map.ts                   -- Row → VizShot defaults (shared with `getVisualizationData`)
+src/components/visualize/viz-dashboard.tsx -- Compose filters + section IA for `/visualize`
+src/components/visualize/staging-heatmap.tsx
+src/components/visualize/lighting-grid.tsx
+src/components/visualize/angle-profile.tsx
+src/components/visualize/duration-category-chart.tsx
+src/components/visualize/duration-ridgeline.tsx
 src/components/visualize/chord-diagram.tsx
 src/components/visualize/composition-scatter.tsx
 src/components/visualize/director-radar.tsx
+src/components/visualize/rhythm-stream.tsx
+src/components/visualize/hierarchy-sunburst.tsx
+src/components/visualize/pacing-heatmap.tsx
 
 # AI Agent
 src/lib/agent-system-prompt.ts        -- Agent system prompt

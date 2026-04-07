@@ -3,70 +3,13 @@
 import * as d3 from "d3";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-type VizShot = {
-  id: string;
-  filmId: string;
-  filmTitle: string;
-  director: string;
-  sceneTitle: string | null;
-  sceneNumber: number | null;
-  shotIndex: number;
-  framing: string;
-  depth: string;
-  blocking: string;
-  shotSize: string;
-  angleVertical: string;
-  duration: number;
-  objectCount: number;
-  description: string | null;
-};
-
-type VizFilm = {
-  id: string;
-  title: string;
-  director: string;
-  shotCount: number;
-  sceneCount: number;
-};
+import type { VizFilm, VizShot } from "@/lib/types";
+import { colorForFraming } from "@/lib/viz-colors";
 
 type HierarchySunburstProps = {
   shots: VizShot[];
   films: VizFilm[];
 };
-
-/* ------------------------------------------------------------------ */
-/*  Movement type colours                                              */
-/* ------------------------------------------------------------------ */
-
-const MOVEMENT_COLORS: Record<string, string> = {
-  static: "#4a4a5e",
-  pan: "#5cb8d6",
-  tilt: "#4dbaa8",
-  dolly: "#4dd68a",
-  truck: "#6dd64d",
-  pedestal: "#99cc44",
-  crane: "#d6b84d",
-  boom: "#d6994d",
-  zoom: "#aad64d",
-  dolly_zoom: "#d66a4d",
-  handheld: "#9966d6",
-  steadicam: "#4d6ad6",
-  drone: "#7744d6",
-  aerial: "#4d99d6",
-  arc: "#cc44d6",
-  whip_pan: "#d6445a",
-  whip_tilt: "#d64488",
-  rack_focus: "#44d6bb",
-  follow: "#44d699",
-  reveal: "#44d666",
-  reframe: "#6666aa",
-};
-
-const colorFor = (m: string) => MOVEMENT_COLORS[m] ?? "#55555e";
 
 /* ------------------------------------------------------------------ */
 /*  Theme                                                              */
@@ -203,7 +146,8 @@ export function HierarchySunburst({ shots, films }: HierarchySunburstProps) {
       if (kind === "root") return BG;
       if (kind === "film") return "#2a2a34";
       if (kind === "scene") return "#1e1e28";
-      if (kind === "shot") return colorFor(d.data.framing ?? "static");
+      if (kind === "shot")
+        return colorForFraming(d.data.framing ?? "centered");
       return TERTIARY;
     };
 

@@ -6,7 +6,7 @@ import { getVisualizationData } from "@/db/queries";
 export const metadata: Metadata = {
   title: "Visualize",
   description:
-    "Composition patterns across the MetroVision archive—e.g. framing vs depth scatter—for cinematography research.",
+    "Composition, staging, and lighting patterns across the MetroVision archive—framing adjacency, depth×blocking, and director fingerprints for research.",
 };
 
 export default async function VisualizePage() {

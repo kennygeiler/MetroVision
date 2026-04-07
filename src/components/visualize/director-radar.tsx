@@ -3,38 +3,11 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import * as d3 from "d3";
 import type { VizShot } from "@/lib/types";
+import { colorForFraming } from "@/lib/viz-colors";
 
 type Props = {
   shots: VizShot[];
   directors: string[];
-};
-
-// ---------------------------------------------------------------------------
-// Movement type colour palette
-// ---------------------------------------------------------------------------
-
-const MOVEMENT_COLORS: Record<string, string> = {
-  static: "#4a4a5e",
-  pan: "#5cb8d6",
-  tilt: "#4dbaa8",
-  dolly: "#4dd68a",
-  truck: "#6dd64d",
-  pedestal: "#99cc44",
-  crane: "#d6b84d",
-  boom: "#d6994d",
-  zoom: "#aad64d",
-  dolly_zoom: "#d66a4d",
-  handheld: "#9966d6",
-  steadicam: "#4d6ad6",
-  drone: "#7744d6",
-  aerial: "#4d99d6",
-  arc: "#cc44d6",
-  whip_pan: "#d6445a",
-  whip_tilt: "#d64488",
-  rack_focus: "#44d6bb",
-  follow: "#44d699",
-  reveal: "#44d666",
-  reframe: "#6666aa",
 };
 
 // Distinct palette for directors (different hue range)
@@ -79,17 +52,17 @@ export function DirectorRadar({ shots, directors }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // ---- Compute axes (top 8 movement types across all shots) ----
+  // ---- Compute axes (top 8 framing slugs across all shots) ----
   const axes = useMemo(() => {
     const counts = d3.rollup(
       shots,
       (v) => v.length,
-      (d) => d.framing
+      (d) => d.framing,
     );
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
-      .map(([type]) => type);
+      .map(([slug]) => slug);
   }, [shots]);
 
   // ---- Per-director percentages ----
@@ -200,7 +173,7 @@ export function DirectorRadar({ shots, directors }: Props) {
           if (Math.abs(Math.sin(angle)) < 0.1) return "middle";
           return Math.sin(angle) > 0 ? "hanging" : "auto";
         })
-        .attr("fill", MOVEMENT_COLORS[axes[i]] ?? "#8e8e99")
+        .attr("fill", colorForFraming(axes[i]))
         .attr("font-size", 9)
         .attr("font-family", "monospace")
         .text(axes[i].replace(/_/g, " "));
@@ -298,6 +271,9 @@ export function DirectorRadar({ shots, directors }: Props) {
         <h3 className="font-mono text-[10px] uppercase tracking-widest text-[#5cb8d6]">
           Director Signatures
         </h3>
+        <p className="mt-1 text-[11px] text-[#55555e]">
+          Share of top framings by director (percentage of each director&apos;s shots).
+        </p>
       </div>
       <svg
         ref={svgRef}

@@ -582,24 +582,42 @@ async function handleRenderPacingHeatmap(args: Record<string, unknown>) {
   const film = await getFilmById(match.id);
   if (!film) return { error: "Could not load film.", vizType: null };
 
+  let shotSeq = 0;
   const shots = film.scenes.flatMap((s) =>
-    s.shots.map((shot) => ({
-      id: shot.id,
-      filmTitle: film.title,
-      director: film.director,
-      sceneTitle: s.title,
-      sceneNumber: s.sceneNumber,
-      shotIndex: 0,
-      framing: shot.metadata.framing,
-      depth: shot.metadata.depth,
-      blocking: shot.metadata.blocking,
-      shotSize: shot.metadata.shotSize,
-      angleVertical: shot.metadata.angleVertical,
-      duration: shot.duration,
-      objectCount: 0,
-      description: shot.semantic?.description ?? null,
-      filmId: film.id,
-    })),
+    s.shots.map((shot) => {
+      const fg = shot.metadata.foregroundElements ?? [];
+      const bg = shot.metadata.backgroundElements ?? [];
+      const idx = shotSeq++;
+      return {
+        id: shot.id,
+        filmId: film.id,
+        filmTitle: film.title,
+        director: film.director,
+        sceneTitle: s.title,
+        sceneNumber: s.sceneNumber,
+        shotIndex: idx,
+        framing: shot.metadata.framing,
+        depth: shot.metadata.depth ?? "medium",
+        blocking: shot.metadata.blocking ?? "single",
+        shotSize: shot.metadata.shotSize ?? "medium",
+        angleVertical: shot.metadata.angleVertical ?? "eye_level",
+        angleHorizontal: shot.metadata.angleHorizontal ?? "frontal",
+        symmetry: shot.metadata.symmetry ?? "asymmetric",
+        dominantLines: shot.metadata.dominantLines ?? "none",
+        lightingDirection: shot.metadata.lightingDirection ?? "natural",
+        lightingQuality: shot.metadata.lightingQuality ?? "soft",
+        colorTemperature: shot.metadata.colorTemperature ?? "neutral",
+        durationCategory: shot.metadata.durationCategory ?? "standard",
+        foregroundCount: fg.length,
+        backgroundCount: bg.length,
+        duration: shot.duration,
+        objectCount: shot.objects?.length ?? 0,
+        description: shot.semantic?.description ?? null,
+        confidence: shot.metadata.confidence ?? null,
+        reviewStatus: shot.metadata.reviewStatus ?? null,
+        verificationCount: shot.trust?.verificationCount ?? 0,
+      };
+    }),
   );
 
   return {

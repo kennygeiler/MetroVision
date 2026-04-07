@@ -39,6 +39,7 @@ import type {
   VisualizationData,
   VizShot,
 } from "@/lib/types";
+import { mapRawVisualizationRowToVizShot } from "@/lib/viz-shot-map";
 import type {
   BlockingTypeSlug,
   ColorTemperatureSlug,
@@ -1320,6 +1321,17 @@ export async function getVisualizationData(): Promise<VisualizationData> {
       blocking: schema.shotMetadata.blocking,
       shotSize: schema.shotMetadata.shotSize,
       angleVertical: schema.shotMetadata.angleVertical,
+      angleHorizontal: schema.shotMetadata.angleHorizontal,
+      symmetry: schema.shotMetadata.symmetry,
+      dominantLines: schema.shotMetadata.dominantLines,
+      lightingDirection: schema.shotMetadata.lightingDirection,
+      lightingQuality: schema.shotMetadata.lightingQuality,
+      colorTemperature: schema.shotMetadata.colorTemperature,
+      durationCat: schema.shotMetadata.durationCat,
+      foregroundElements: schema.shotMetadata.foregroundElements,
+      backgroundElements: schema.shotMetadata.backgroundElements,
+      confidence: schema.shotMetadata.confidence,
+      reviewStatus: schema.shotMetadata.reviewStatus,
       duration: schema.shots.duration,
       startTc: schema.shots.startTc,
       description: schema.shotSemantic.description,
@@ -1330,6 +1342,18 @@ export async function getVisualizationData(): Promise<VisualizationData> {
     .leftJoin(schema.shotMetadata, eq(schema.shots.id, schema.shotMetadata.shotId))
     .leftJoin(schema.shotSemantic, eq(schema.shots.id, schema.shotSemantic.shotId))
     .orderBy(schema.films.title, schema.shots.startTc);
+
+  const verificationRows = await db
+    .select({
+      shotId: schema.verifications.shotId,
+      n: sql<number>`count(*)::int`.as("n"),
+    })
+    .from(schema.verifications)
+    .groupBy(schema.verifications.shotId);
+
+  const verificationCountMap = new Map(
+    verificationRows.map((r) => [r.shotId, Number(r.n)]),
+  );
 
   // Count objects per shot
   const objectCounts = await db
@@ -1347,23 +1371,7 @@ export async function getVisualizationData(): Promise<VisualizationData> {
   const shots: VizShot[] = rows.map((row) => {
     const idx = filmShotIndices.get(row.filmId) ?? 0;
     filmShotIndices.set(row.filmId, idx + 1);
-    return {
-      id: row.shotId,
-      filmId: row.filmId,
-      filmTitle: row.filmTitle,
-      director: row.director,
-      sceneTitle: row.sceneTitle ?? null,
-      sceneNumber: row.sceneNumber ?? null,
-      shotIndex: idx,
-      framing: row.framing ?? "centered",
-      depth: row.depth ?? "medium",
-      blocking: row.blocking ?? "single",
-      shotSize: row.shotSize ?? "medium",
-      angleVertical: row.angleVertical ?? "eye_level",
-      duration: row.duration ?? 0,
-      objectCount: objectCountMap.get(row.shotId) ?? 0,
-      description: row.description ?? null,
-    };
+    return mapRawVisualizationRowToVizShot(row, idx, objectCountMap.get(row.shotId) ?? 0, verificationCountMap.get(row.shotId) ?? 0);
   });
 
   // Film summaries

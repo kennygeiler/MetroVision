@@ -3,70 +3,13 @@
 import * as d3 from "d3";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-type VizShot = {
-  id: string;
-  filmId: string;
-  filmTitle: string;
-  director: string;
-  sceneTitle: string | null;
-  sceneNumber: number | null;
-  shotIndex: number;
-  framing: string;
-  depth: string;
-  blocking: string;
-  shotSize: string;
-  angleVertical: string;
-  duration: number;
-  objectCount: number;
-  description: string | null;
-};
-
-type VizFilm = {
-  id: string;
-  title: string;
-  director: string;
-  shotCount: number;
-  sceneCount: number;
-};
+import type { VizFilm, VizShot } from "@/lib/types";
+import { colorForFraming } from "@/lib/viz-colors";
 
 type RhythmStreamProps = {
   shots: VizShot[];
   films: VizFilm[];
 };
-
-/* ------------------------------------------------------------------ */
-/*  Movement type → colour map                                        */
-/* ------------------------------------------------------------------ */
-
-const MOVEMENT_COLORS: Record<string, string> = {
-  static: "#4a4a5e",
-  pan: "#5cb8d6",
-  tilt: "#4dbaa8",
-  dolly: "#4dd68a",
-  truck: "#6dd64d",
-  pedestal: "#99cc44",
-  crane: "#d6b84d",
-  boom: "#d6994d",
-  zoom: "#aad64d",
-  dolly_zoom: "#d66a4d",
-  handheld: "#9966d6",
-  steadicam: "#4d6ad6",
-  drone: "#7744d6",
-  aerial: "#4d99d6",
-  arc: "#cc44d6",
-  whip_pan: "#d6445a",
-  whip_tilt: "#d64488",
-  rack_focus: "#44d6bb",
-  follow: "#44d699",
-  reveal: "#44d666",
-  reframe: "#6666aa",
-};
-
-const colorFor = (m: string) => MOVEMENT_COLORS[m] ?? "#55555e";
 
 /* ------------------------------------------------------------------ */
 /*  Theme tokens                                                       */
@@ -101,7 +44,7 @@ export function RhythmStream({ shots, films }: RhythmStreamProps) {
     [shots, selectedFilmId],
   );
 
-  const movementKeys = useMemo(() => {
+  const framingKeys = useMemo(() => {
     const set = new Set<string>();
     filmShots.forEach((s) => set.add(s.framing));
     return Array.from(set).sort();
@@ -135,7 +78,7 @@ export function RhythmStream({ shots, films }: RhythmStreamProps) {
     /* Build tabular data: one row per shotIndex, one column per key */
     const tableData = filmShots.map((s, i) => {
       const row: Record<string, number> = { index: i };
-      movementKeys.forEach((k) => {
+      framingKeys.forEach((k) => {
         row[k] = s.framing === k ? s.duration : 0;
       });
       return row;
@@ -144,7 +87,7 @@ export function RhythmStream({ shots, films }: RhythmStreamProps) {
     /* Stack */
     const stack = d3
       .stack<Record<string, number>>()
-      .keys(movementKeys)
+      .keys(framingKeys)
       .order(d3.stackOrderInsideOut)
       .offset(d3.stackOffsetWiggle);
 
@@ -195,9 +138,9 @@ export function RhythmStream({ shots, films }: RhythmStreamProps) {
       .join("path")
       .attr("class", "stream-layer")
       .attr("d", area)
-      .attr("fill", (d) => colorFor(d.key))
+      .attr("fill", (d) => colorForFraming(d.key))
       .attr("fill-opacity", 0.72)
-      .attr("stroke", (d) => colorFor(d.key))
+      .attr("stroke", (d) => colorForFraming(d.key))
       .attr("stroke-width", 0.4)
       .attr("stroke-opacity", 0.4)
       .on("mouseenter", function () {
@@ -262,7 +205,7 @@ export function RhythmStream({ shots, films }: RhythmStreamProps) {
       .call((g) =>
         g.selectAll(".tick line").attr("stroke", TERTIARY).attr("opacity", 0.4),
       );
-  }, [filmShots, movementKeys, sceneBoundaries]);
+  }, [filmShots, framingKeys, sceneBoundaries]);
 
   /* Resize observer -------------------------------------------------- */
 
@@ -310,7 +253,7 @@ export function RhythmStream({ shots, films }: RhythmStreamProps) {
             color: CYAN,
           }}
         >
-          Film Rhythm
+          Framing over time
         </span>
 
         {/* Film selector */}

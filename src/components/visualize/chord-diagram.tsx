@@ -3,54 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import type { VizShot } from "@/lib/types";
+import { colorForFraming } from "@/lib/viz-colors";
 
 type Props = {
   shots: VizShot[];
-  onSelectMovement?: (type: string | null) => void;
+  onSelectFraming?: (slug: string | null) => void;
 };
 
-// ---------------------------------------------------------------------------
-// Movement type colour palette
-// ---------------------------------------------------------------------------
-
-const MOVEMENT_COLORS: Record<string, string> = {
-  static: "#4a4a5e",
-  pan: "#5cb8d6",
-  tilt: "#4dbaa8",
-  dolly: "#4dd68a",
-  truck: "#6dd64d",
-  pedestal: "#99cc44",
-  crane: "#d6b84d",
-  boom: "#d6994d",
-  zoom: "#aad64d",
-  dolly_zoom: "#d66a4d",
-  handheld: "#9966d6",
-  steadicam: "#4d6ad6",
-  drone: "#7744d6",
-  aerial: "#4d99d6",
-  arc: "#cc44d6",
-  whip_pan: "#d6445a",
-  whip_tilt: "#d64488",
-  rack_focus: "#44d6bb",
-  follow: "#44d699",
-  reveal: "#44d666",
-  reframe: "#6666aa",
-};
-
-function colorFor(type: string): string {
-  return MOVEMENT_COLORS[type] ?? "#666";
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
-export function ChordDiagram({ shots, onSelectMovement }: Props) {
+export function ChordDiagram({ shots, onSelectFraming }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 600, height: 600 });
 
-  // ---- Responsive sizing via ResizeObserver ----
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -67,7 +31,6 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // ---- Build transition matrix & render ----
   useEffect(() => {
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -80,11 +43,10 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
         .attr("text-anchor", "middle")
         .attr("fill", "#8e8e99")
         .attr("font-size", 12)
-        .text("Not enough shots for transitions");
+        .text("Not enough shots for framing adjacency");
       return;
     }
 
-    // Group shots by film, sort by shotIndex, build pairs
     const byFilm = d3.group(shots, (d) => d.filmId);
     const pairs: [string, string][] = [];
     for (const filmShots of byFilm.values()) {
@@ -94,7 +56,6 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
       }
     }
 
-    // Determine unique movement types present
     const typeSet = new Set<string>();
     for (const [a, b] of pairs) {
       typeSet.add(a);
@@ -106,15 +67,13 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
 
     const indexMap = new Map(types.map((t, i) => [t, i]));
 
-    // Build matrix
     const matrix: number[][] = Array.from({ length: n }, () =>
-      Array(n).fill(0)
+      Array(n).fill(0),
     );
     for (const [a, b] of pairs) {
       matrix[indexMap.get(a)!][indexMap.get(b)!] += 1;
     }
 
-    // Layout
     const { width, height } = dimensions;
     const outerRadius = Math.min(width, height) / 2 - 60;
     const innerRadius = outerRadius - 20;
@@ -125,7 +84,6 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
       .append("g")
       .attr("transform", `translate(${width / 2},${height / 2})`);
 
-    // Chord layout
     const chord = d3
       .chord()
       .padAngle(0.04)
@@ -135,7 +93,6 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
 
     const ribbon = d3.ribbon<d3.Chord, d3.ChordSubgroup>().radius(innerRadius);
 
-    // ---- Ribbons ----
     const ribbons = g
       .append("g")
       .attr("fill-opacity", 0.55)
@@ -143,11 +100,10 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
       .data(chord)
       .join("path")
       .attr("d", (d) => ribbon(d) ?? "")
-      .attr("fill", (d) => colorFor(types[d.source.index]))
+      .attr("fill", (d) => colorForFraming(types[d.source.index]))
       .attr("stroke", "none")
       .style("mix-blend-mode", "screen");
 
-    // Hover interactions for ribbons
     ribbons
       .on("mouseenter", function () {
         ribbons.attr("fill-opacity", 0.12);
@@ -157,7 +113,6 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
         ribbons.attr("fill-opacity", 0.55);
       });
 
-    // ---- Groups (outer arcs) ----
     const groups = g
       .append("g")
       .selectAll("g")
@@ -167,12 +122,12 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
     groups
       .append("path")
       .attr("d", (d) => arc(d) ?? "")
-      .attr("fill", (d) => colorFor(types[d.index]))
+      .attr("fill", (d) => colorForFraming(types[d.index]))
       .attr("stroke", "#0d0d12")
       .attr("stroke-width", 1.5)
       .style("cursor", "pointer")
       .on("click", (_e, d) => {
-        onSelectMovement?.(types[d.index]);
+        onSelectFraming?.(types[d.index]);
       })
       .on("mouseenter", function (_e, d) {
         ribbons.attr("fill-opacity", (r) =>
@@ -185,7 +140,6 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
         d3.select(this).attr("stroke", "#0d0d12").attr("stroke-width", 1.5);
       });
 
-    // ---- Labels ----
     groups
       .append("text")
       .attr("dy", "0.35em")
@@ -204,14 +158,13 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
       .attr("font-family", "monospace")
       .text((d) => types[d.index].replace(/_/g, " "));
 
-    // Entry animation
     ribbons
       .attr("opacity", 0)
       .transition()
       .duration(800)
       .delay((_d, i) => i * 15)
       .attr("opacity", 1);
-  }, [shots, dimensions, onSelectMovement]);
+  }, [shots, dimensions, onSelectFraming]);
 
   return (
     <div
@@ -220,8 +173,11 @@ export function ChordDiagram({ shots, onSelectMovement }: Props) {
     >
       <div className="px-4 pt-3 pb-1">
         <h3 className="font-mono text-[10px] uppercase tracking-widest text-[#5cb8d6]">
-          Movement Transitions
+          Framing adjacency
         </h3>
+        <p className="mt-1 text-[11px] text-[#55555e]">
+          Cut-to-cut framing transitions within each film.
+        </p>
       </div>
       <svg
         ref={svgRef}
