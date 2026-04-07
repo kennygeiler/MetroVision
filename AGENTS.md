@@ -17,6 +17,7 @@ pnpm db:embeddings    # Generate shot embeddings (tsx src/db/generate-embeddings
 pnpm db:studio        # Open Drizzle Studio
 pnpm check:schema-drift  # App vs worker Drizzle columns for shared tables (see scripts/check-schema-drift.ts)
 pnpm check:taxonomy      # src/lib/taxonomy.ts vs pipeline/taxonomy.py (AC-02)
+pnpm test                # Vitest (unit tests; CI runs this too)
 
 # TS Ingest Worker (Express, runs separately)
 cd worker && pnpm dev   # Start worker dev server (tsx watch)
@@ -31,15 +32,17 @@ python main.py          # Run pipeline CLI
 
 ## Architecture TL;DR
 
-MetroVision (SceneDeck) is a platform for structured camera movement analysis at cinematic scale. Next.js 15 App Router monolith (TypeScript, Tailwind CSS 4, shadcn/ui) on Vercel, with Neon PostgreSQL + pgvector for data and semantic search. Two-lane ingest pipeline: TS Express worker for interactive single-film ingestion with SSE streaming, and a Python pipeline for batch processing (PySceneDetect + Gemini classification). 6 D3 visualization components. AI chat agent with SSE tool-call streaming. AWS S3 for media storage. Camera movement taxonomy: 21 types, 15 directions, 7 speeds, 15 shot sizes, 15 angles, 6 durations.
+MetroVision (SceneDeck) is a **shot-level composition archive** at cinematic scale: per-shot **framing, depth, blocking, symmetry, dominant lines, lighting, color temperature, shot size, camera angle, and duration category** (`shot_metadata`), plus semantic text (`shot_semantic`), optional **detections** (`shot_objects`), **human verifications** (`verifications`), and **pgvector** search when embeddings exist. The **legacy camera-movement taxonomy** (movement types, directions, speeds) was **removed** from the shared taxonomy; see comments at the bottom of `src/lib/taxonomy.ts`.
+
+Stack: Next.js 15 App Router (TypeScript, Tailwind CSS 4, shadcn/ui) on Vercel, Neon PostgreSQL + Drizzle. Two-lane ingest: **TS Express worker** (interactive film ingest + SSE) and **Python pipeline** (PySceneDetect + Gemini). Six **D3** visualization panels. **AI chat** with SSE tool calls. **AWS S3** for media. **CI** (`.github/workflows/ci.yml`): `lint`, `check:taxonomy`, `check:schema-drift`, `test` — `build` expects `DATABASE_URL` where prerender hits the DB.
 
 ## Conventions
 
-- **Framework**: Next.js 15 App Router only (no Pages Router). Server Components for data fetching, Client Components (`"use client"`) only for interactivity.
+- **Framework**: Next.js 15 App Router only (no Pages Router). Server Components for data fetching, Client Components (`"use client"`) only for interactivity. Do not call **`buttonVariants()`** (from `@/components/ui/button`, a client module) from Server Components — extract a small client child or use plain `className`s.
 - **Styling**: Tailwind CSS 4 utility classes. OKLCH design tokens in `src/styles/tokens.css`. Dark cinematic theme.
 - **Components**: shadcn/ui base library in `src/components/ui/`. Radix UI primitives underneath.
 - **Database**: Drizzle ORM with `@neondatabase/serverless` HTTP driver. Always import `db` from `src/db/index.ts` (AC-04). Use drizzle-orm `^0.45.1` (AC-14). Prefer builder API `db.select().from().where()`.
-- **Taxonomy**: Fixed taxonomy in `src/lib/taxonomy.ts` (TS) and `pipeline/taxonomy.py` (Python). Must stay in sync (AC-02).
+- **Taxonomy**: **Composition** slugs in `src/lib/taxonomy.ts` and `pipeline/taxonomy.py` — must stay in sync (AC-02). Do not reintroduce removed movement/direction/speed enums without a migration and parity update.
 - **File organization**: App Router conventions. Components in `src/components/` by domain. Route group `(site)` for public pages.
 - **Naming**: kebab-case files, PascalCase components, camelCase functions/variables.
 - **Display helpers**: Use `src/lib/shot-display.ts` for taxonomy display names. Do not duplicate lookups.
@@ -56,8 +59,9 @@ MetroVision (SceneDeck) is a platform for structured camera movement analysis at
 src/db/schema.ts                      -- 9 Drizzle tables (films, scenes, shots, shotMetadata, shotSemantic, verifications, shotEmbeddings, shotObjects, pipelineJobs)
 src/db/index.ts                       -- Singleton Drizzle client (import db from here)
 src/db/queries.ts                     -- Database query functions
-src/lib/taxonomy.ts                   -- Camera movement taxonomy constants + types (21 movement types)
+src/lib/taxonomy.ts                   -- Composition taxonomy constants + types (framing, depth, blocking, …)
 pipeline/taxonomy.py                  -- Python taxonomy mirror (must match TS)
+src/lib/archive-trust.ts              -- Labels for provenance / trust copy (no DB)
 
 # Pages
 src/app/(site)/page.tsx               -- Landing page with hero
@@ -69,10 +73,18 @@ src/app/(site)/agent/page.tsx         -- AI chat interface
 src/app/(site)/visualize/page.tsx     -- D3 visualization dashboard
 src/app/(site)/ingest/page.tsx        -- Film ingest UI
 src/app/(site)/admin/page.tsx         -- Admin panel
+src/app/(site)/export/page.tsx        -- JSON/CSV export + citation block
+
+# Landing / trust / demo (composition wedge)
+src/components/archive/archive-demo-slice.tsx      -- Server: demo path + methodology
+src/components/archive/archive-demo-slice-actions.tsx -- Client: CTA links (`buttonVariants`)
+src/components/archive/methodology-blurb.tsx
+src/components/archive/shot-provenance-card.tsx
+src/components/export/export-citation-panel.tsx
 
 # Hero Feature
-src/components/video/metadata-overlay.tsx -- SVG overlay: direction arrows, badges, trajectory
-src/components/video/shot-player.tsx  -- Video player with overlay toggle
+src/components/video/metadata-overlay.tsx -- SVG composition overlay (badges: framing, depth, blocking, shot size, lighting, angles, duration)
+src/components/video/shot-player.tsx   -- Video player with overlay toggle
 
 # Visualizations (D3)
 src/components/visualize/rhythm-stream.tsx
@@ -107,6 +119,8 @@ package.json                          -- Root deps (`name`: metrovision)
 worker/package.json                   -- Worker deps (`name`: metrovision-worker; npm, not pnpm workspace)
 drizzle.config.ts                     -- Drizzle Kit config
 pnpm-workspace.yaml                   -- Workspace config (worker not yet integrated)
+.github/workflows/ci.yml              -- CI: lint, taxonomy, schema-drift, test
+vitest.config.ts                      -- Unit tests (`src/lib/__tests__/`)
 
 # Architecture (read-only reference)
 .kiln/master-plan.md                  -- 7-milestone build plan (M1-M7)
