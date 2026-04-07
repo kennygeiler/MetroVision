@@ -130,6 +130,10 @@ pnpm-workspace.yaml                   -- Workspace includes root app + `worker`
 .github/workflows/ci.yml              -- CI: lint, taxonomy, schema-drift, test
 vitest.config.ts                      -- Unit tests (`src/lib/__tests__/`)
 
+# Planning (pipeline proof points)
+.planning/research/pipeline-whitepaper.md    -- Pipeline stages, tech, inputs/outputs, fidelity limits
+.planning/research/ingest-accuracy-hitl-strategy.md -- Product stance, HITL, upgrade roadmap
+
 # Architecture (read-only reference)
 .kiln/master-plan.md                  -- 7-milestone build plan (M1-M7)
 .kiln/docs/architecture.md            -- System architecture

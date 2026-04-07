@@ -162,6 +162,11 @@ No `TODO` / `FIXME` / `HACK` / `XXX` markers were found in first-party trees `sr
 - Risk: Rate limiter regressions and Gemini API changes.
 - Priority: Medium.
 
+## Research / ingest accuracy strategy
+
+- **Strategy, constraints, learning-product stance, dev roadmap:** [`.planning/research/ingest-accuracy-hitl-strategy.md`](../research/ingest-accuracy-hitl-strategy.md)
+- **Pipeline whitepaper (proof point — steps, tech, I/O, fidelity):** [`.planning/research/pipeline-whitepaper.md`](../research/pipeline-whitepaper.md)
+
 ---
 
 *Concerns audit: 2026-04-07*

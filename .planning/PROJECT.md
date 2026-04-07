@@ -6,7 +6,9 @@ MetroVision (SceneDeck) is a platform for structured camera movement analysis at
 
 ## Core Value
 
-Trustworthy shot metadata and search—taxonomy, ingest, and APIs stay aligned so researchers and tools can rely on the data model.
+**Shot-first** compositional metadata and search: taxonomy, ingest, and APIs stay aligned so learners, researchers, and tools can rely on **per-shot** rows. Automatic `scenes` groupings are **convenience** (model-derived), not screenplay ground truth; **user-defined** shot collections are the intended way for students and fans to name their own “scenes” for study (product roadmap).
+
+**Proof-point docs:** [`.planning/research/pipeline-whitepaper.md`](research/pipeline-whitepaper.md) (pipeline I/O and fidelity), [`.planning/research/ingest-accuracy-hitl-strategy.md`](research/ingest-accuracy-hitl-strategy.md) (strategy, constraints, upgrade steps).
 
 ## Requirements
 
@@ -46,4 +48,4 @@ Phased delivery is driven by `.planning/codebase/CONCERNS.md` (audit 2026-04-07)
 | Drizzle version | Document `^0.45.1` as standard (AC-14) | ✓ Good |
 
 ---
-*Last updated: 2026-04-07 after Phase 5 execution (REQ-TAX-01 validated)*
+*Last updated: 2026-04-07 — added learning-product stance, links to pipeline whitepaper and ingest strategy.*
