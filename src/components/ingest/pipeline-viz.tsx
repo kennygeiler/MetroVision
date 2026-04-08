@@ -538,7 +538,19 @@ export function PipelineViz({
           };
         });
       } catch (err) {
-        if ((err as Error).name !== "AbortError") setState((s) => ({ ...s, error: (err as Error).message }));
+        if ((err as Error).name === "AbortError") return;
+        const e = err as Error;
+        let message = (e?.message ?? String(e)).trim() || "Request failed";
+        if (/failed to fetch|network\s*error|load failed|networkerror|connection.*refused|aborted/i.test(message)) {
+          message = `${message}
+
+Common causes: offline or flaky network, VPN/firewall/proxy blocking ${typeof window !== "undefined" ? window.location.origin : ""}, or a browser extension (ad blocker) blocking fetch. Try another network or a private window.
+
+If this happens right away: open DevTools → Network, retry ingest, and inspect POST /api/ingest-film/stream (status, blocked, CORS).
+
+If it happens after detect starts: the connection may have been reset (host sleep, timeout, or mobile network). Confirm INGEST_WORKER_URL on Vercel and check Vercel + Railway logs.`;
+        }
+        setState((s) => ({ ...s, error: message }));
       }
     })();
     return () => abort.abort();
@@ -866,7 +878,9 @@ export function PipelineViz({
         {state.error ? (
           <div className="rounded-[var(--radius-xl)] border p-6" style={{ backgroundColor: "rgba(214,92,107,0.06)", borderColor: "rgba(214,92,107,0.3)" }}>
             <h3 className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[#d65c6b]">Pipeline Error</h3>
-            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{state.error}</p>
+            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--color-text-secondary)]">
+              {state.error}
+            </p>
           </div>
         ) : null}
       </div>
