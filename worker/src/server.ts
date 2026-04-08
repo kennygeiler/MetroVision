@@ -5,10 +5,29 @@ import { ingestFilmHandler } from "./ingest.js";
 const app = express();
 const PORT = parseInt(process.env.PORT ?? "3100", 10);
 
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(",") ?? ["http://localhost:3000", "https://scene-deck.vercel.app"],
-  credentials: true,
-}));
+const defaultOrigins = [
+  "http://localhost:3000",
+  "https://scene-deck.vercel.app",
+  "https://metrovision.vercel.app",
+];
+
+app.use(
+  cors({
+    credentials: true,
+    origin(origin, callback) {
+      const explicit = process.env.ALLOWED_ORIGINS?.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const allowList = explicit?.length ? explicit : defaultOrigins;
+      if (!origin) return callback(null, true);
+      if (allowList.includes(origin)) return callback(null, true);
+      if (process.env.ALLOW_VERCEL_SUBDOMAINS === "1" && /\.vercel\.app$/i.test(origin))
+        return callback(null, true);
+      console.warn("[worker] CORS rejected origin:", origin);
+      return callback(null, false);
+    },
+  }),
+);
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -25,9 +44,9 @@ app.get("/health", (_req, res) => {
     uptime: process.uptime(),
     env: {
       hasGoogleKey: !!process.env.GOOGLE_API_KEY,
-      hasAws: !!process.env.AWS_ACCESS_KEY_ID,
+      hasAws: !!process.env.AWS_ACCESS_KEY_ID && !!process.env.AWS_S3_BUCKET,
       hasDb: !!process.env.DATABASE_URL,
-      hasScenedetect: !!process.env.SCENEDETECT_PATH || true,
+      hasScenedetectPath: !!process.env.SCENEDETECT_PATH,
     },
   });
 });

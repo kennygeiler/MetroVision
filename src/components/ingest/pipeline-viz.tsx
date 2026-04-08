@@ -19,6 +19,8 @@ type StepInfo = {
   status: "pending" | "active" | "complete";
   duration?: number;
   startedAt?: number;
+  /** Latest server message for this step (SSE `message` field). */
+  detail?: string;
 };
 
 type FrameState = {
@@ -364,6 +366,12 @@ export function PipelineViz({
                     status: e.status as StepInfo["status"],
                     duration: (e.duration as number) ?? s.duration,
                     startedAt: e.status === "active" ? now : s.startedAt,
+                    detail:
+                      typeof e.message === "string"
+                        ? e.message
+                        : e.status === "complete"
+                          ? undefined
+                          : s.detail,
                   }
                 : s,
             );
@@ -574,6 +582,11 @@ export function PipelineViz({
             <p className="mt-1 font-mono text-xs text-[var(--color-text-tertiary)]">
               {director} &middot; {year}
             </p>
+            {activeStep?.detail ? (
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                {activeStep.detail}
+              </p>
+            ) : null}
           </div>
           <div className="text-right">
             <div className="flex items-baseline justify-end gap-3">

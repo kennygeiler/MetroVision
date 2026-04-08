@@ -30,8 +30,11 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** Match non-stream ingest; without this Vercel defaults to ~10–60s and the pipeline dies mid extract/classify. */
-export const maxDuration = 300;
+/**
+ * Vercel serverless wall clock. **Hobby max is 300s** — if deploy fails, set this to `300` and use the TS worker for long ingests.
+ * Pro/Enterprise: up to **800s** (still too short for many full films). `FUNCTION_INVOCATION_TIMEOUT` → limit hit; use `NEXT_PUBLIC_WORKER_URL` or a tighter timeline window.
+ */
+export const maxDuration = 800;
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -70,12 +73,30 @@ export async function POST(request: Request) {
       let disposeSourceVideo: (() => Promise<void>) | undefined;
 
       try {
+        // Flush immediately so proxies and the browser SSE parser don’t sit idle until the first await completes.
+        try {
+          controller.enqueue(encoder.encode(": sse-prelude\n\n"));
+        } catch {
+          /* closed */
+        }
+
         const concurrency = body.concurrency ?? 5;
         const detector: "content" | "adaptive" =
           body.detector === "content" ? "content" : "adaptive";
         const filmSlug = `${sanitize(body.filmTitle)}-${body.year}`;
 
         const rawInput = String(body.videoUrl ?? body.videoPath);
+        const inputIsRemote =
+          rawInput.startsWith("http://") || rawInput.startsWith("https://");
+        emit({
+          type: "step",
+          step: "detect",
+          status: "active",
+          message: inputIsRemote
+            ? "Preparing source video (FFmpeg is copying from your URL to the server; large files can take several minutes)…"
+            : "Opening uploaded file on the server…",
+        });
+
         let videoPath: string;
         try {
           const resolved = await resolveIngestVideoToLocalPath(rawInput);
@@ -326,8 +347,9 @@ export async function POST(request: Request) {
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

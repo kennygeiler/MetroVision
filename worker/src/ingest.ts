@@ -83,10 +83,19 @@ export async function ingestFilmHandler(req: Request, res: Response) {
   }
 
   res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
   });
+  if (typeof res.flushHeaders === "function") {
+    res.flushHeaders();
+  }
+  try {
+    res.write(": sse-prelude\n\n");
+  } catch {
+    /* client gone */
+  }
 
   function emit(event: Record<string, unknown>) {
     try {
@@ -97,12 +106,33 @@ export async function ingestFilmHandler(req: Request, res: Response) {
   }
 
   try {
+    const rawSource = String(body.videoUrl ?? body.videoPath ?? "");
+    let sourceHost: string | null = null;
+    try {
+      if (rawSource.startsWith("http")) sourceHost = new URL(rawSource).host;
+    } catch {
+      sourceHost = null;
+    }
+    console.log("[worker] ingest stream start", {
+      film: body.filmTitle,
+      year: body.year,
+      sourceHost,
+      isHttp: rawSource.startsWith("http"),
+    });
+
     const concurrency = body.concurrency ?? 5;
     const detector: "content" | "adaptive" =
       body.detector === "content" ? "content" : "adaptive";
     const filmSlug = `${sanitize(body.filmTitle)}-${body.year}`;
 
-    emit({ type: "step", step: "detect", status: "active", message: "Preparing video..." });
+    emit({
+      type: "step",
+      step: "detect",
+      status: "active",
+      message: rawSource.startsWith("http")
+        ? "Preparing video (FFmpeg is copying from your URL to the worker; large files can take several minutes with no shot count yet)…"
+        : "Preparing video file…",
+    });
     const videoPath = await resolveVideo(body.videoPath ?? body.videoUrl);
     console.log(`[worker] Video resolved: ${videoPath}`);
 
