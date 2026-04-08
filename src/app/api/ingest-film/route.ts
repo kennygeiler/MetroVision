@@ -26,10 +26,10 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /**
- * Vercel Hobby: **300s** max (same as stream ingest). After upgrading to Pro, you can set **800** here for longer serverless runs.
- * Prefer the TS worker for production ingest.
+ * Vercel **Pro/Enterprise**: up to **800s**. **Hobby**: **300s** max — change if you downgrade.
+ * Prefer the TS worker for production ingest at cinematic scale.
  */
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 type IngestRequest = {
   videoPath: string;

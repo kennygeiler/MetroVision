@@ -31,10 +31,10 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /**
- * Vercel **Hobby** hard-caps at **300s** (deploy fails above that). Pro/Enterprise can raise this to **800** in this file after upgrading.
- * Full films: use `NEXT_PUBLIC_WORKER_URL` (TS worker) or a short timeline window — 300s is often too little for serverless ingest.
+ * Vercel **Pro/Enterprise**: up to **800s**. **Hobby** max **300s** (lower this if you downgrade or deploy fails validation).
+ * Very long ingests: still prefer `NEXT_PUBLIC_WORKER_URL` (TS worker).
  */
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 export async function POST(request: Request) {
   const body = await request.json();
