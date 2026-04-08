@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChangeEvent } from "react";
 import {
   useCallback,
   useEffect,
@@ -16,7 +17,7 @@ import type { FilmCard } from "@/lib/types";
 
 const STORAGE_PREFIX = "metrovision:eval-gold:";
 
-type SourceMode = "shot" | "custom";
+type SourceMode = "shot" | "custom" | "local";
 
 type FilmPayload = {
   film: { id: string; title: string; director: string; year: number | null };
@@ -39,6 +40,8 @@ type Persisted = {
   sourceMode: SourceMode;
   customVideoUrl: string;
   timeOffsetSec: number;
+  /** Remembered filename only; blob URL cannot persist across reloads. */
+  localFileLabel?: string;
 };
 
 function roundTc(sec: number): number {
@@ -65,6 +68,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const persistHydrated = useRef(false);
+  const prevSourceMode = useRef<SourceMode | null>(null);
 
   const [filmPayload, setFilmPayload] = useState<FilmPayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -73,14 +77,22 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
   const [note, setNote] = useState("");
   const [filmId, setFilmId] = useState<string>("");
   const [referenceShotId, setReferenceShotId] = useState<string>("");
-  const [sourceMode, setSourceMode] = useState<SourceMode>("shot");
+  const [sourceMode, setSourceMode] = useState<SourceMode>(() =>
+    films.length > 0 ? "shot" : "local",
+  );
   const [customVideoUrl, setCustomVideoUrl] = useState("");
   const [timeOffsetSec, setTimeOffsetSec] = useState(0);
+  /** Object URL from a picked file; cleared when leaving local mode or unloading. */
+  const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
+  const [localFileLabel, setLocalFileLabel] = useState("");
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const localVideoUrlRef = useRef<string | null>(null);
   const [playerTime, setPlayerTime] = useState(0);
   const filmTimelineRef = useRef(0);
+
+  localVideoUrlRef.current = localVideoUrl;
 
   const storageKey = sessionId ? `${STORAGE_PREFIX}${sessionId}` : null;
 
@@ -116,11 +128,14 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
         const fid = urlFilm || (typeof p.filmId === "string" ? p.filmId : "");
         if (fid) setFilmId(fid);
         if (typeof p.referenceShotId === "string") setReferenceShotId(p.referenceShotId);
-        if (p.sourceMode === "shot" || p.sourceMode === "custom") setSourceMode(p.sourceMode);
+        if (p.sourceMode === "shot" || p.sourceMode === "custom" || p.sourceMode === "local") {
+          setSourceMode(p.sourceMode);
+        }
         if (typeof p.customVideoUrl === "string") setCustomVideoUrl(p.customVideoUrl);
         if (typeof p.timeOffsetSec === "number" && Number.isFinite(p.timeOffsetSec)) {
           setTimeOffsetSec(p.timeOffsetSec);
         }
+        if (typeof p.localFileLabel === "string") setLocalFileLabel(p.localFileLabel);
       } else if (urlFilm) {
         setFilmId(urlFilm);
       }
@@ -139,6 +154,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
       sourceMode,
       customVideoUrl,
       timeOffsetSec,
+      localFileLabel,
     };
     try {
       localStorage.setItem(storageKey, JSON.stringify(payload));
@@ -155,7 +171,25 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
     sourceMode,
     customVideoUrl,
     timeOffsetSec,
+    localFileLabel,
   ]);
+
+  useEffect(() => {
+    return () => {
+      const u = localVideoUrlRef.current;
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, []);
+
+  useEffect(() => {
+    const prev = prevSourceMode.current;
+    prevSourceMode.current = sourceMode;
+    if (prev === "local" && sourceMode !== "local") {
+      if (localVideoUrl) URL.revokeObjectURL(localVideoUrl);
+      setLocalVideoUrl(null);
+      setLocalFileLabel("");
+    }
+  }, [sourceMode, localVideoUrl]);
 
   useEffect(() => {
     if (!filmId) {
@@ -197,12 +231,14 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
   }, [filmPayload, referenceShotId]);
 
   const videoSrc =
-    sourceMode === "custom"
-      ? customVideoUrl.trim() || null
-      : referenceShot?.videoUrl ?? null;
+    sourceMode === "local"
+      ? localVideoUrl
+      : sourceMode === "custom"
+        ? customVideoUrl.trim() || null
+        : referenceShot?.videoUrl ?? null;
 
   const filmTimelineSec = useMemo(() => {
-    if (sourceMode === "custom") {
+    if (sourceMode === "custom" || sourceMode === "local") {
       return roundTc(timeOffsetSec + playerTime);
     }
     const base = referenceShot?.startTc ?? 0;
@@ -273,8 +309,36 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
     }
   }
 
+  function onPickLocalFile(ev: ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    if (localVideoUrl) URL.revokeObjectURL(localVideoUrl);
+    if (!file) {
+      setLocalVideoUrl(null);
+      setLocalFileLabel("");
+      return;
+    }
+    if (!file.type.startsWith("video/") && !/\.(mp4|webm|mov|mkv)$/iu.test(file.name)) {
+      window.alert("Pick a video file (e.g. mp4, webm, mov).");
+      ev.target.value = "";
+      return;
+    }
+    setLocalVideoUrl(URL.createObjectURL(file));
+    setLocalFileLabel(file.name);
+  }
+
+  function clearLocalFile() {
+    if (localVideoUrl) URL.revokeObjectURL(localVideoUrl);
+    setLocalVideoUrl(null);
+    setLocalFileLabel("");
+  }
+
   function downloadJson() {
-    const filmTitle = filmPayload?.film.title ?? films.find((f) => f.id === filmId)?.title ?? "film";
+    const fromLocalName = localFileLabel.replace(/\.[^.]+$/u, "").trim();
+    const filmTitle =
+      filmPayload?.film.title ??
+      films.find((f) => f.id === filmId)?.title ??
+      (sourceMode === "local" && fromLocalName ? fromLocalName : null) ??
+      "annotation";
     const createdAt = new Date().toISOString();
     const payload = {
       schemaVersion: "1.0",
@@ -288,7 +352,9 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
       createdAt,
       referenceMode: sourceMode,
       referenceShotId: sourceMode === "shot" ? referenceShotId || undefined : undefined,
-      timeOffsetSec: sourceMode === "custom" ? timeOffsetSec : undefined,
+      timeOffsetSec:
+        sourceMode === "custom" || sourceMode === "local" ? timeOffsetSec : undefined,
+      localFileName: sourceMode === "local" && localFileLabel ? localFileLabel : undefined,
       cutsSec: cuts,
     };
 
@@ -323,6 +389,14 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
           for this session only. Export downloads JSON compatible with{" "}
           <code className="font-mono text-xs">pnpm eval:pipeline</code> (<code className="font-mono text-xs">cutsSec</code>{" "}
           = interior hard-cut times on the <strong>film timeline</strong> in seconds).
+        </p>
+        <p className="max-w-3xl text-sm leading-7 text-[var(--color-text-secondary)]">
+          The film dropdown is filled from your <strong>database</strong> (ingested titles). If it is empty, use{" "}
+          <strong>Local video file</strong> to annotate a file on disk, ingest a film from{" "}
+          <a href="/ingest" className="text-[var(--color-text-accent)] underline-offset-1 hover:underline">
+            Ingest
+          </a>
+          , or paste a playable URL under Custom. Reloading the page clears a local file pick until you choose it again.
         </p>
       </section>
 
@@ -369,9 +443,12 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
             <select
               value={filmId}
               onChange={(e) => onFilmChange(e.target.value)}
-              className="h-9 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 text-sm text-[var(--color-text-primary)]"
+              disabled={films.length === 0}
+              className="h-9 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 text-sm text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <option value="">Select a film…</option>
+              <option value="">
+                {films.length === 0 ? "No films in database — use Local file or Ingest" : "Select a film…"}
+              </option>
               {films.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.title} · {f.director}
@@ -388,16 +465,30 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
             <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
               Video source
             </span>
-            <div className="flex flex-wrap gap-4 text-sm">
-              <label className="flex cursor-pointer items-center gap-2">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              <label
+                className={`flex cursor-pointer items-center gap-2 ${films.length === 0 ? "cursor-not-allowed opacity-45" : ""}`}
+                title={films.length === 0 ? "Ingest a film first, or use Local file" : undefined}
+              >
                 <input
                   type="radio"
                   name="src"
                   checked={sourceMode === "shot"}
+                  disabled={films.length === 0}
                   onChange={() => setSourceMode("shot")}
                   className="accent-[var(--color-accent-base)]"
                 />
-                Shot clip (film time = shot start + player time)
+                Shot clip (needs DB film)
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="src"
+                  checked={sourceMode === "local"}
+                  onChange={() => setSourceMode("local")}
+                  className="accent-[var(--color-accent-base)]"
+                />
+                Local video file
               </label>
               <label className="flex cursor-pointer items-center gap-2">
                 <input
@@ -433,6 +524,46 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
                   ))
                 )}
               </select>
+            </div>
+          ) : null}
+
+          {sourceMode === "local" ? (
+            <div className="space-y-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                  Video file (this device)
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="file"
+                    accept="video/*,.mp4,.webm,.mov,.mkv"
+                    onChange={onPickLocalFile}
+                    className="max-w-full text-xs text-[var(--color-text-secondary)] file:mr-2 file:rounded-md file:border file:border-[var(--color-border-default)] file:bg-[var(--color-surface-primary)] file:px-3 file:py-1 file:font-mono"
+                  />
+                  {localFileLabel ? (
+                    <Button type="button" variant="ghost" size="xs" onClick={clearLocalFile}>
+                      Clear file
+                    </Button>
+                  ) : null}
+                </div>
+                {localFileLabel ? (
+                  <p className="font-mono text-[10px] text-[var(--color-text-tertiary)]">
+                    Loaded: {localFileLabel}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                  Time offset (film seconds when player is at 0:00)
+                </label>
+                <input
+                  type="number"
+                  step={0.001}
+                  value={timeOffsetSec}
+                  onChange={(e) => setTimeOffsetSec(Number(e.target.value) || 0)}
+                  className="h-9 w-40 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 text-sm"
+                />
+              </div>
             </div>
           ) : null}
 
@@ -481,7 +612,9 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
               />
             ) : (
               <div className="flex size-full items-center justify-center p-6 text-center font-mono text-xs text-[var(--color-text-tertiary)]">
-                Select a film and shot, or set a custom video URL.
+                {sourceMode === "local"
+                  ? "Choose a local video file, or switch to Custom URL."
+                  : "Select a film and shot, paste a URL, or use a local file."}
               </div>
             )}
           </div>
