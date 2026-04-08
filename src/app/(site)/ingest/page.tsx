@@ -7,6 +7,8 @@ import { TmdbTitleSearch } from "@/components/ingest/tmdb-title-search";
 
 type IngestPhase = "form" | "uploading" | "processing";
 
+const LAST_SOURCE_S3_KEY = "metrovision_ingest_last_source_s3_key";
+
 /** Empty, 0, or invalid → undefined; supports optional `763,222`-style decimals. */
 function tryParseOptionalTimelineBound(
   raw: string,
@@ -166,6 +168,8 @@ export default function IngestPage() {
   const [ingestTimelineStart, setIngestTimelineStart] = useState("");
   const [ingestTimelineEnd, setIngestTimelineEnd] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  /** When set, Start skips browser → S3 upload and re-presigns this source object instead. */
+  const [reuseSourceKey, setReuseSourceKey] = useState("");
   const [videoPath, setVideoPath] = useState<string | null>(null);
   /** Set when a run starts (after upload succeeds) so the pipeline request includes optional timeline bounds. */
   const [ingestTimelineForRun, setIngestTimelineForRun] = useState<{
@@ -183,6 +187,16 @@ export default function IngestPage() {
 
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "";
 
+  const [lastSourceKeyAvailable, setLastSourceKeyAvailable] = useState(false);
+
+  useEffect(() => {
+    try {
+      setLastSourceKeyAvailable(Boolean(sessionStorage.getItem(LAST_SOURCE_S3_KEY)?.trim()));
+    } catch {
+      setLastSourceKeyAvailable(false);
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       uploadAbortRef.current?.abort();
@@ -194,7 +208,7 @@ export default function IngestPage() {
   }
 
   async function handleStart() {
-    if (!selectedFile || !filmTitle || !director || !year) return;
+    if (!filmTitle || !director || !year) return;
 
     const startParsed = tryParseOptionalTimelineBound(ingestTimelineStart, "start");
     if (!startParsed.ok) {
@@ -220,6 +234,58 @@ export default function IngestPage() {
     const ac = new AbortController();
     uploadAbortRef.current = ac;
     const { signal } = ac;
+
+    const trimmedReuse = reuseSourceKey.trim();
+
+    if (trimmedReuse) {
+      setPhase("uploading");
+      setUploadError(null);
+      setUploadProgress(null);
+      setUploadStageMessage("Skipping upload — minting a fresh download URL for your existing S3 source…");
+      setIngestTimelineForRun(null);
+      try {
+        const reuseRes = await fetch("/api/s3/presign-get", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: trimmedReuse }),
+          signal,
+        });
+        if (!reuseRes.ok) {
+          const msg = await readFetchErrorMessage(reuseRes);
+          throw new Error(msg);
+        }
+        const { videoUrl } = (await reuseRes.json()) as { videoUrl?: string };
+        if (!videoUrl?.trim()) {
+          throw new Error("Presign response missing videoUrl.");
+        }
+        setIngestTimelineForRun({ ingestStartSec, ingestEndSec });
+        setVideoPath(videoUrl);
+        setPhase("processing");
+        setUploadStageMessage(null);
+        setUploadProgress(null);
+      } catch (error) {
+        const aborted =
+          (error instanceof DOMException && error.name === "AbortError") ||
+          (error instanceof Error && error.name === "AbortError");
+        if (aborted) {
+          setUploadError("Cancelled.");
+        } else {
+          const message = error instanceof Error ? error.message : "Reuse presign failed";
+          setUploadError(message);
+        }
+        setPhase("form");
+        setUploadStageMessage(null);
+        setUploadProgress(null);
+      } finally {
+        uploadAbortRef.current = null;
+      }
+      return;
+    }
+
+    if (!selectedFile) {
+      setUploadError("Select a video file, or paste an S3 source key below to skip upload.");
+      return;
+    }
 
     setPhase("uploading");
     setUploadError(null);
@@ -257,7 +323,19 @@ export default function IngestPage() {
         setUploadStageMessage(
           `Step 2 of 2: Uploading ${fileMb} MB directly to cloud storage (browser → S3). Progress below updates as bytes are sent.`,
         );
-        const { putUrl, videoUrl } = await presignRes.json();
+        const { putUrl, videoUrl, s3Key } = (await presignRes.json()) as {
+          putUrl: string;
+          videoUrl: string;
+          s3Key?: string;
+        };
+        if (typeof s3Key === "string" && s3Key.trim()) {
+          try {
+            sessionStorage.setItem(LAST_SOURCE_S3_KEY, s3Key.trim());
+            setLastSourceKeyAvailable(true);
+          } catch {
+            /* private mode */
+          }
+        }
         setUploadProgress({ loaded: 0, total: selectedFile.size });
         await putFileWithProgress(
           putUrl,
@@ -383,6 +461,64 @@ export default function IngestPage() {
                 </p>
               )}
             </div>
+            <p className="mt-2 font-mono text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
+              Optional: skip upload if this file is already in S3 (see below).
+            </p>
+          </div>
+
+          {/* Reuse existing source on S3 (faster re-testing) */}
+          <div
+            className="rounded-[var(--radius-lg)] border p-4"
+            style={{
+              borderColor: "color-mix(in oklch, var(--color-border-default) 70%, transparent)",
+              backgroundColor: "color-mix(in oklch, var(--color-surface-primary) 92%, transparent)",
+            }}
+          >
+            <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+              Skip upload — S3 source key
+            </label>
+            <textarea
+              value={reuseSourceKey}
+              onChange={(e) => setReuseSourceKey(e.target.value)}
+              disabled={phase !== "form"}
+              placeholder="films/your-film-slug/source/1234567890-filename.mp4"
+              rows={2}
+              className="mt-2 w-full resize-y rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-text-accent)]"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {lastSourceKeyAvailable ? (
+                <button
+                  type="button"
+                  disabled={phase !== "form"}
+                  onClick={() => {
+                    try {
+                      const k = sessionStorage.getItem(LAST_SOURCE_S3_KEY)?.trim() ?? "";
+                      if (k) setReuseSourceKey(k);
+                    } catch {
+                      /* */
+                    }
+                  }}
+                  className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-transparent px-3 py-1.5 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-text-accent)] hover:text-[var(--color-text-primary)] disabled:opacity-40"
+                >
+                  Use last uploaded source
+                </button>
+              ) : null}
+              {reuseSourceKey.trim() ? (
+                <button
+                  type="button"
+                  disabled={phase !== "form"}
+                  onClick={() => setReuseSourceKey("")}
+                  className="rounded-[var(--radius-md)] border border-transparent px-3 py-1.5 font-mono text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+                >
+                  Clear key
+                </button>
+              ) : null}
+            </div>
+            <p className="mt-2 font-mono text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
+              Paste the <code className="text-[var(--color-text-secondary)]">s3Key</code> from the upload presign response (Network tab) or click
+              <span className="text-[var(--color-text-secondary)]"> Use last uploaded source </span>
+              after one normal upload in this browser. When this field is non-empty, Start skips the file upload and re-mints a GET URL for the worker.
+            </p>
           </div>
 
           {/* Metadata — title search fills director + year from TMDB */}
@@ -498,14 +634,20 @@ export default function IngestPage() {
           <button
             type="button"
             onClick={handleStart}
-            disabled={!selectedFile || !filmTitle || !director || !year || phase !== "form"}
+            disabled={
+              phase !== "form" ||
+              !filmTitle ||
+              !director ||
+              !year ||
+              (!selectedFile && !reuseSourceKey.trim())
+            }
             className="w-full rounded-[var(--radius-lg)] px-6 py-3 font-mono text-sm uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] transition-all disabled:cursor-not-allowed disabled:opacity-40"
             style={{
               backgroundColor: "var(--color-interactive-default)",
               boxShadow: "var(--shadow-glow)",
             }}
           >
-            {phase === "uploading" ? "Uploading…" : "Start Ingestion"}
+            {phase === "uploading" ? (reuseSourceKey.trim() ? "Preparing…" : "Uploading…") : "Start Ingestion"}
           </button>
 
           {phase === "uploading" && uploadStageMessage ? (
