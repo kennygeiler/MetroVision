@@ -363,7 +363,7 @@ export function PipelineViz({
                     ...s,
                     status: e.status as StepInfo["status"],
                     duration: (e.duration as number) ?? s.duration,
-                    startedAt: e.status === "active" ? now : s.startedAt,
+                    startedAt: e.status === "active" ? (s.startedAt ?? now) : s.startedAt,
                     detail:
                       typeof e.message === "string"
                         ? e.message
@@ -483,6 +483,13 @@ export function PipelineViz({
           setState((s) => ({ ...s, error: errText }));
           return;
         }
+        handleEvent({
+          type: "step",
+          step: "detect",
+          status: "active",
+          message: "Connected — waiting for first progress event…",
+        });
+
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buf = "";
@@ -490,13 +497,21 @@ export function PipelineViz({
           const { done, value } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
-          const parts = buf.split("\n\n");
+          /** Split on blank line; `\r\n\r\n` is common (RFC 8895 / proxies) — `\n\n` alone misses it. */
+          const parts = buf.split(/\r?\n\r?\n/);
           buf = parts.pop() ?? "";
-          for (const part of parts) {
-            const line = part.replace(/^data: /, "").trim();
-            if (!line) continue;
+          for (const rawPart of parts) {
+            const part = rawPart.replace(/\r\n/g, "\n").trim();
+            if (!part || part.startsWith(":")) continue;
+            const dataLines = part
+              .split("\n")
+              .filter((l) => l.startsWith("data:"))
+              .map((l) => l.replace(/^data:\s*/, "").trim())
+              .filter(Boolean);
+            const payload = dataLines.join("");
+            if (!payload) continue;
             try {
-              handleEvent(JSON.parse(line));
+              handleEvent(JSON.parse(payload));
             } catch {
               /* skip */
             }
@@ -552,22 +567,29 @@ export function PipelineViz({
 
   // Step progress percentages
   function getStepProgress(stepId: StepId): number {
-    if (state.totalShots === 0) return 0;
     const step = state.steps.find((s) => s.id === stepId);
     if (step?.status === "complete") return 100;
     if (step?.status === "pending") return 0;
+    if (state.totalShots === 0 && (stepId === "extract" || stepId === "classify" || stepId === "write")) {
+      return 0;
+    }
     switch (stepId) {
-      case "extract": return (extracted / state.totalShots) * 100;
-      case "classify": return (classified / state.totalShots) * 100;
-      case "write": return (written / state.totalShots) * 100;
+      case "extract":
+        return state.totalShots > 0 ? (extracted / state.totalShots) * 100 : 0;
+      case "classify":
+        return state.totalShots > 0 ? (classified / state.totalShots) * 100 : 0;
+      case "write":
+        return state.totalShots > 0 ? (written / state.totalShots) * 100 : 0;
       case "detect": {
-        // Estimate based on time spent vs benchmark
         const spent = step?.startedAt ? (Date.now() - step.startedAt) / 1000 : 0;
         return Math.min(95, (spent / STEP_ESTIMATES.detect(state.totalShots || 30, state.concurrency)) * 100);
       }
-      case "lookup": return 50; // indeterminate
-      case "group": return 50;
-      default: return 0;
+      case "lookup":
+        return 50;
+      case "group":
+        return 50;
+      default:
+        return 0;
     }
   }
 
