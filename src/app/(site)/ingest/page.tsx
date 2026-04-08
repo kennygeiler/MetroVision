@@ -6,6 +6,35 @@ import { PipelineViz } from "@/components/ingest/pipeline-viz";
 
 type IngestPhase = "form" | "uploading" | "processing";
 
+/** Empty, 0, or invalid → undefined; supports optional `763,222`-style decimals. */
+function tryParseOptionalTimelineBound(
+  raw: string,
+  role: "start" | "end",
+): { ok: true; value: number | undefined } | { ok: false; message: string } {
+  const t = raw.trim();
+  if (t === "") return { ok: true, value: undefined };
+  let s = t;
+  if (/^-?\d+,\d+$/.test(s)) s = s.replace(",", ".");
+  const n = Number(s);
+  if (!Number.isFinite(n)) {
+    return {
+      ok: false,
+      message:
+        role === "start"
+          ? "Timeline start must be a valid number (seconds). Use a dot or single comma for decimals (e.g. 763.222)."
+          : "Timeline end must be a valid number (seconds). Use a dot or single comma for decimals (e.g. 763.222).",
+    };
+  }
+  if (n === 0) return { ok: true, value: undefined };
+  if (role === "start" && n < 0) {
+    return { ok: false, message: "Timeline start cannot be negative." };
+  }
+  if (role === "end" && n < 0) {
+    return { ok: false, message: "Timeline end must be positive, or use 0 / empty for full length." };
+  }
+  return { ok: true, value: n };
+}
+
 export default function IngestPage() {
   const [phase, setPhase] = useState<IngestPhase>("form");
   const [filmTitle, setFilmTitle] = useState("");
@@ -31,24 +60,24 @@ export default function IngestPage() {
   async function handleStart() {
     if (!selectedFile || !filmTitle || !director || !year) return;
 
-    let ingestStartSec: number | undefined;
-    let ingestEndSec: number | undefined;
-    if (ingestTimelineStart.trim()) {
-      ingestStartSec = Number(ingestTimelineStart);
-      if (!Number.isFinite(ingestStartSec) || ingestStartSec < 0) {
-        setUploadError("Timeline start must be a non-negative number (seconds).");
-        return;
-      }
+    const startParsed = tryParseOptionalTimelineBound(ingestTimelineStart, "start");
+    if (!startParsed.ok) {
+      setUploadError(startParsed.message);
+      return;
     }
-    if (ingestTimelineEnd.trim()) {
-      ingestEndSec = Number(ingestTimelineEnd);
-      if (!Number.isFinite(ingestEndSec) || !(ingestEndSec > 0)) {
-        setUploadError("Timeline end must be a number greater than 0 (seconds).");
-        return;
-      }
+    const endParsed = tryParseOptionalTimelineBound(ingestTimelineEnd, "end");
+    if (!endParsed.ok) {
+      setUploadError(endParsed.message);
+      return;
     }
-    if (ingestStartSec !== undefined && ingestEndSec !== undefined && ingestStartSec >= ingestEndSec) {
-      setUploadError("Timeline start must be less than timeline end.");
+    const ingestStartSec = startParsed.value;
+    const ingestEndSec = endParsed.value;
+    if (ingestEndSec !== undefined && ingestEndSec <= (ingestStartSec ?? 0)) {
+      setUploadError(
+        ingestStartSec !== undefined
+          ? "Timeline end must be greater than timeline start."
+          : "Timeline end must be greater than 0 (seconds), or leave empty for full length.",
+      );
       return;
     }
 
@@ -237,7 +266,7 @@ export default function IngestPage() {
                 value={ingestTimelineStart}
                 onChange={(e) => setIngestTimelineStart(e.target.value)}
                 disabled={phase !== "form"}
-                placeholder="0 = from beginning"
+                placeholder="Empty or 0 = from beginning"
                 className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-text-accent)]"
               />
             </div>
@@ -251,13 +280,13 @@ export default function IngestPage() {
                 value={ingestTimelineEnd}
                 onChange={(e) => setIngestTimelineEnd(e.target.value)}
                 disabled={phase !== "form"}
-                placeholder="e.g. 763.222 — empty = full file"
+                placeholder="e.g. 763.222 — empty or 0 = full length"
                 className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-text-accent)]"
               />
             </div>
           </div>
           <p className="font-mono text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
-            Shot detection still runs on the full file; only shots overlapping this window are ingested. Leave both empty to process everything.
+            Shot detection still runs on the full file; only shots overlapping this window are ingested.             Leave fields empty or use 0 for 'from beginning' / 'to end of file.' Decimals: 763.222 or 763,222.
           </p>
 
           {/* Concurrency */}

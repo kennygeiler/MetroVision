@@ -68,16 +68,20 @@ export function parseIngestTimelineFromBody(body: Record<string, unknown>): {
     if (!Number.isFinite(n)) throw new Error(`${key} must be a finite number`);
     return n;
   };
-  const startSec = asOptNumber("ingestStartSec");
-  const endSec = asOptNumber("ingestEndSec");
+  let startSec = asOptNumber("ingestStartSec");
+  let endSec = asOptNumber("ingestEndSec");
+  // Treat 0 like “omit” on the UI; APIs may also send 0 to mean full extent.
+  if (startSec === 0) startSec = undefined;
+  if (endSec === 0) endSec = undefined;
   if (startSec !== undefined && startSec < 0) {
     throw new Error("ingestStartSec must be >= 0");
   }
-  if (endSec !== undefined && !(endSec > 0)) {
-    throw new Error("ingestEndSec must be greater than 0");
-  }
-  if (startSec !== undefined && endSec !== undefined && startSec >= endSec) {
-    throw new Error("ingestStartSec must be less than ingestEndSec");
+  if (endSec !== undefined && endSec <= (startSec ?? 0)) {
+    throw new Error(
+      startSec !== undefined
+        ? "ingestEndSec must be greater than ingestStartSec"
+        : "ingestEndSec must be greater than 0",
+    );
   }
   return { startSec, endSec };
 }
