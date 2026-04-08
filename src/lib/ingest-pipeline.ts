@@ -3,6 +3,7 @@ import { access, constants, mkdir, readFile, mkdtemp, rm } from "node:fs/promise
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { FFMPEG_SPAWN_ENOENT_HINT, getFfprobePath, getFfmpegPath } from "./ffmpeg-bin";
 import { uploadToS3, buildS3Key } from "./s3";
 import { acquireToken } from "./rate-limiter";
 import {
@@ -137,7 +138,14 @@ export async function runCommand(
     };
     proc.stdout.on("data", (d) => (stdout += d.toString()));
     proc.stderr.on("data", (d) => (stderr += d.toString()));
-    proc.on("error", (err) => done(err, null));
+    proc.on("error", (err) => {
+      const e = err as NodeJS.ErrnoException;
+      if (e?.code === "ENOENT") {
+        done(new Error(`Command not found: ${command}. ${FFMPEG_SPAWN_ENOENT_HINT}`), null);
+        return;
+      }
+      done(err, null);
+    });
     proc.on("close", (code) => done(null, code));
   });
 }
@@ -160,7 +168,7 @@ export async function resolveIngestVideoToLocalPath(
   await mkdir(downloadDir, { recursive: true });
   const localPath = path.join(downloadDir, `${Date.now()}-source.mp4`);
 
-  await runCommand("ffmpeg", [
+  await runCommand(getFfmpegPath(), [
     "-y",
     "-threads",
     "2",
@@ -243,7 +251,7 @@ export async function detectShots(
   await rm(tempDir, { recursive: true, force: true });
 
   if (!csv.trim()) {
-    const { stdout } = await runCommand("ffprobe", [
+    const { stdout } = await runCommand(getFfprobePath(), [
       "-v", "error",
       "-show_entries", "format=duration",
       "-of", "default=noprint_wrappers=1:nokey=1",
@@ -266,7 +274,7 @@ export async function detectShots(
 }
 
 async function probeVideoDurationSec(videoPath: string): Promise<number> {
-  const { stdout } = await runCommand("ffprobe", [
+  const { stdout } = await runCommand(getFfprobePath(), [
     "-v", "error",
     "-show_entries", "format=duration",
     "-of", "default=noprint_wrappers=1:nokey=1",
@@ -438,12 +446,12 @@ export async function extractLocally(
 
   // Run clip extraction + thumbnail in parallel (2 FFmpeg calls at once)
   await Promise.all([
-    runCommand("ffmpeg", [
+    runCommand(getFfmpegPath(), [
       "-y", "-ss", String(split.start), "-to", String(split.end),
       "-i", videoPath, "-c", "copy", "-avoid_negative_ts", "make_zero",
       clipPath,
     ]),
-    runCommand("ffmpeg", [
+    runCommand(getFfmpegPath(), [
       "-y", "-ss", String(midpoint), "-i", videoPath,
       "-frames:v", "1", "-q:v", "3", "-vf", "scale=320:trunc(ow/a/2)*2",
       thumbPath,
@@ -670,7 +678,7 @@ async function classifyShotWithGemini(
   const clipDuration = Math.min(split.end - split.start, 10);
   const clipFile = path.join(tempDir, "clip.mp4");
 
-  await runCommand("ffmpeg", [
+  await runCommand(getFfmpegPath(), [
     "-y", "-ss", String(split.start), "-t", String(clipDuration),
     "-i", videoPath, "-c:v", "libx264", "-crf", "32",
     "-vf", "scale=320:trunc(ow/a/2)*2", "-r", "12", "-an", clipFile,
