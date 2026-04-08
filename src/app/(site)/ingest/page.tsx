@@ -186,8 +186,6 @@ export default function IngestPage() {
   const uploadAbortRef = useRef<AbortController | null>(null);
   const uploadProgressThrottleRef = useRef(0);
 
-  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "";
-
   const [lastSourceKeyAvailable, setLastSourceKeyAvailable] = useState(false);
 
   useEffect(() => {
@@ -631,6 +629,12 @@ export default function IngestPage() {
             <code className="font-mono text-[10px]">METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene</code>.
             Automatic scene rows are model grouping for navigation only.
           </p>
+          <p className="max-w-prose font-mono text-[10px] leading-relaxed text-[var(--color-text-secondary)]">
+            Deployed on Vercel: set <code className="text-[10px]">INGEST_WORKER_URL</code> or{" "}
+            <code className="text-[10px]">NEXT_PUBLIC_WORKER_URL</code> to your TS worker base URL. The browser always
+            calls <code className="text-[10px]">/api/ingest-film/stream</code> on this app; Next proxies that request to
+            the worker so detection is not stuck decoding a full feature inside serverless.
+          </p>
 
           {/* Error */}
           {uploadError ? (
@@ -717,7 +721,6 @@ export default function IngestPage() {
           director={director}
           year={parseInt(year, 10)}
           concurrency={concurrency}
-          workerUrl={workerUrl}
           ingestStartSec={ingestTimelineForRun.ingestStartSec}
           ingestEndSec={ingestTimelineForRun.ingestEndSec}
         />

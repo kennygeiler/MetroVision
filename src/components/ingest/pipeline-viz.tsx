@@ -318,7 +318,6 @@ type PipelineVizProps = {
   year: number;
   concurrency: number;
   detector?: "content" | "adaptive"; // default adaptive (see ingest page)
-  workerUrl?: string;
   /** Inclusive window in seconds; omit for full file (detection still scans whole video). */
   ingestStartSec?: number;
   ingestEndSec?: number;
@@ -333,7 +332,6 @@ export function PipelineViz({
   year,
   concurrency,
   detector = "adaptive",
-  workerUrl = "",
   ingestStartSec,
   ingestEndSec,
   onComplete,
@@ -461,8 +459,8 @@ export function PipelineViz({
     const abort = new AbortController();
     (async () => {
       try {
-        // Use remote worker if configured, otherwise local API
-        const endpoint = workerUrl ? `${workerUrl}/api/ingest-film/stream` : "/api/ingest-film/stream";
+        // Always same-origin: Next proxies to INGEST_WORKER_URL / NEXT_PUBLIC_WORKER_URL when set (see ingest-worker-delegate).
+        const endpoint = "/api/ingest-film/stream";
 
         const isHttpSource = /^https?:\/\//i.test(videoPath);
         // S3 / remote URLs must be videoUrl so the server never proxies the file through Next.js JSON/body limits.
@@ -509,7 +507,7 @@ export function PipelineViz({
           return {
             ...s,
             error:
-              "Connection closed before ingest finished (common causes: Vercel 300s function limit during detection, worker restart, or network drop). Try the Content detector, a shorter timeline window or clip, or set NEXT_PUBLIC_WORKER_URL to the TS worker for long PySceneDetect runs.",
+              "Connection closed before ingest finished (timeout, worker restart, or network). Set INGEST_WORKER_URL or NEXT_PUBLIC_WORKER_URL to your TS worker base URL so Next proxies ingest (recommended). On Vercel-only runs, narrow the timeline window or use a shorter test clip.",
           };
         });
       } catch (err) {
@@ -517,7 +515,7 @@ export function PipelineViz({
       }
     })();
     return () => abort.abort();
-  }, [videoPath, filmTitle, director, year, concurrency, detector, workerUrl, ingestStartSec, ingestEndSec, handleEvent]);
+  }, [videoPath, filmTitle, director, year, concurrency, detector, ingestStartSec, ingestEndSec, handleEvent]);
 
 
   // Computed

@@ -29,17 +29,30 @@ import {
   buildIngestProvenance,
   initialReviewStatusForShot,
 } from "@/lib/pipeline-provenance";
+import {
+  forwardIngestFilmStreamToWorker,
+  resolveIngestWorkerProxyTarget,
+} from "@/lib/ingest-worker-delegate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /**
  * Vercel **Pro/Enterprise**: up to **800s**. **Hobby** max **300s** (lower this if you downgrade or deploy fails validation).
- * Very long ingests: still prefer `NEXT_PUBLIC_WORKER_URL` (TS worker).
+ * Set `INGEST_WORKER_URL` or `NEXT_PUBLIC_WORKER_URL` to **proxy** ingest to the TS worker (recommended on Vercel).
  */
 export const maxDuration = 800;
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  const bodyText = await request.text();
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(bodyText) as Record<string, unknown>;
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   if ((!body.videoPath && !body.videoUrl) || !body.filmTitle || !body.director || !body.year) {
     return new Response(JSON.stringify({ error: "Missing required fields (videoPath or videoUrl)" }), {
@@ -50,7 +63,7 @@ export async function POST(request: Request) {
 
   let timeline: { startSec?: number; endSec?: number };
   try {
-    timeline = parseIngestTimelineFromBody(body as Record<string, unknown>);
+    timeline = parseIngestTimelineFromBody(body);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Invalid timeline fields";
     return new Response(JSON.stringify({ error: message }), {
@@ -58,6 +71,19 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
     });
   }
+
+  const ingestWorker = resolveIngestWorkerProxyTarget();
+  if (ingestWorker) {
+    return forwardIngestFilmStreamToWorker(ingestWorker, bodyText);
+  }
+
+  const filmTitleStr = String(body.filmTitle);
+  const directorStr = String(body.director);
+  const yearNum = Number(body.year);
+  const concurrencyNum =
+    typeof body.concurrency === "number" && Number.isFinite(body.concurrency)
+      ? body.concurrency
+      : 5;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -82,10 +108,10 @@ export async function POST(request: Request) {
           /* closed */
         }
 
-        const concurrency = body.concurrency ?? 5;
+        const concurrency = concurrencyNum;
         const detector: "content" | "adaptive" =
           body.detector === "content" ? "content" : "adaptive";
-        const filmSlug = `${sanitize(body.filmTitle)}-${body.year}`;
+        const filmSlug = `${sanitize(filmTitleStr)}-${yearNum}`;
 
         const rawInput = String(body.videoUrl ?? body.videoPath);
         const inputIsRemote =
@@ -118,11 +144,15 @@ export async function POST(request: Request) {
         const detectMessage = shouldRunPysceneEnsemble()
           ? "PySceneDetect ensemble (adaptive + content + NMS)"
           : detectorLabel;
+        const detectHint =
+          process.env.VERCEL === "1"
+            ? " On Vercel, set INGEST_WORKER_URL to your TS worker for reliable PySceneDetect, or FFmpeg scene mode may take many minutes on long films."
+            : "";
         emit({
           type: "step",
           step: "detect",
           status: "active",
-          message: `Analyzing shot boundaries — ${detectMessage}`,
+          message: `Analyzing shot boundaries — ${detectMessage}.${detectHint}`,
         });
         const t0 = Date.now();
         const inlineCuts = parseInlineBoundaryCuts(body.extraBoundaryCuts);
@@ -132,9 +162,9 @@ export async function POST(request: Request) {
             type: "step",
             step: "detect",
             status: "active",
-            message: `Analyzing shot boundaries — ${detectMessage} (${sec}s elapsed; PySceneDetect is silent — full features may exceed Vercel 300s; use the TS worker for long runs)`,
+            message: `Still detecting… ${detectMessage} (${sec}s). FFmpeg/PySceneDetect often emit no progress until done — for full movies on Vercel use INGEST_WORKER_URL (same value as NEXT_PUBLIC_WORKER_URL is fine).`,
           });
-        }, 25_000);
+        }, 8_000);
         let rawSplits: Awaited<ReturnType<typeof detectShotsForIngest>>["splits"];
         let detectCtx: Awaited<ReturnType<typeof detectShotsForIngest>>["ctx"];
         try {
@@ -169,7 +199,7 @@ export async function POST(request: Request) {
         // TMDB lookup
         emit({ type: "step", step: "lookup", status: "active", message: "Looking up film metadata..." });
         const t1 = Date.now();
-        const tmdbId = await searchTmdbMovieId(body.filmTitle, body.year);
+        const tmdbId = await searchTmdbMovieId(filmTitleStr, yearNum);
         const tmdbDetails = tmdbId ? await fetchTmdbMovieDetails(tmdbId) : null;
         const castList = await fetchTmdbCast(tmdbId);
         emit({ type: "step", step: "lookup", status: "complete", message: tmdbId ? `TMDB #${tmdbId}` : "No TMDB match", duration: (Date.now() - t1) / 1000 });
@@ -197,7 +227,7 @@ export async function POST(request: Request) {
         const t3 = Date.now();
         const classifyResults = await processInParallel(splits, classifyConcurrency, async (split, worker) => {
           emit({ type: "shot", step: "classify", index: split.index, total: splits.length, worker, status: "start" });
-          const result = await classifyShot(videoPath, split, body.filmTitle, body.director, body.year, castList);
+          const result = await classifyShot(videoPath, split, filmTitleStr, directorStr, yearNum, castList);
           const c = result.classification;
           emit({ type: "shot", step: "classify", index: split.index, total: splits.length, worker, status: "complete", framing: c.framing, sceneTitle: c.scene_title });
           return result;
@@ -213,7 +243,7 @@ export async function POST(request: Request) {
         const [existingFilm] = await db
           .select({ id: schema.films.id })
           .from(schema.films)
-          .where(eq(schema.films.title, body.filmTitle))
+          .where(eq(schema.films.title, filmTitleStr))
           .limit(1);
 
         let filmId: string;
@@ -225,7 +255,7 @@ export async function POST(request: Request) {
           }).where(eq(schema.films.id, filmId));
         } else {
           const [inserted] = await db.insert(schema.films).values({
-            title: body.filmTitle, director: body.director, year: body.year, tmdbId,
+            title: filmTitleStr, director: directorStr, year: yearNum, tmdbId,
             posterUrl: tmdbDetails?.posterUrl, backdropUrl: tmdbDetails?.backdropUrl,
             overview: tmdbDetails?.overview, runtime: tmdbDetails?.runtime, genres: tmdbDetails?.genres,
           }).returning({ id: schema.films.id });
@@ -268,7 +298,7 @@ export async function POST(request: Request) {
 
         // Embeddings in parallel (high concurrency for API calls)
         const searchTexts = splits.map((split, i) =>
-          [body.filmTitle, body.director, classifications[i].framing, classifications[i].description, classifications[i].mood].filter(Boolean).join(" "),
+          [filmTitleStr, directorStr, classifications[i].framing, classifications[i].description, classifications[i].mood].filter(Boolean).join(" "),
         );
         const embeddings = await processInParallel(searchTexts, Math.min(concurrency * 2, 10), async (text) => {
           try { return await generateTextEmbedding(text); } catch { return null; }
@@ -359,7 +389,7 @@ export async function POST(request: Request) {
           .where(eq(schema.films.id, filmId));
 
         emit({ type: "step", step: "write", status: "complete", message: `${shotCount} shots written`, duration: (Date.now() - t5) / 1000 });
-        emit({ type: "complete", filmId, filmTitle: body.filmTitle, shotCount, sceneCount: scenePlans.length });
+        emit({ type: "complete", filmId, filmTitle: filmTitleStr, shotCount, sceneCount: scenePlans.length });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Pipeline failed";
         emit({ type: "error", message });

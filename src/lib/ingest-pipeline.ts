@@ -300,11 +300,30 @@ function ffmpegSceneCutThreshold(): number {
 }
 
 /**
- * Shot cuts via FFmpeg `select='gt(scene,σ)'` + showinfo (no PySceneDetect).
- * Full video decode — acceptable when `scenedetect` is absent (e.g. Vercel).
+ * Downsample before `scene` to avoid decoding every frame on a remote feature (else “stuck on detect”).
+ * `METROVISION_FFMPEG_SCENE_SAMPLE_FPS`: positive number = max analyzed fps, `0`/`full` = no fps filter (slowest, highest recall).
+ */
+function ffmpegSceneFilterGraph(): string {
+  const threshold = ffmpegSceneCutThreshold();
+  const raw = process.env.METROVISION_FFMPEG_SCENE_SAMPLE_FPS?.trim()?.toLowerCase();
+  let prefix = "";
+  if (raw === "0" || raw === "full" || raw === "off") {
+    prefix = "";
+  } else {
+    const fallback = process.env.VERCEL === "1" ? 2 : 4;
+    const n = raw ? Number(raw) : fallback;
+    const fps =
+      Number.isFinite(n) && n > 0 ? Math.min(Math.max(n, 0.25), 60) : fallback;
+    prefix = `fps=${fps},`;
+  }
+  return `${prefix}select='gt(scene,${threshold})',showinfo`;
+}
+
+/**
+ * Shot cuts via FFmpeg `scene` + showinfo (no PySceneDetect).
+ * Uses temporal downsampling by default so serverless runs finish in reasonable time.
  */
 async function detectShotsWithFfmpegScene(videoPath: string): Promise<DetectedSplit[]> {
-  const threshold = ffmpegSceneCutThreshold();
   const { stderr } = await runCommand(
     getFfmpegPath(),
     [
@@ -318,7 +337,7 @@ async function detectShotsWithFfmpegScene(videoPath: string): Promise<DetectedSp
       "0:v:0",
       "-an",
       "-filter:v",
-      `select='gt(scene,${threshold})',showinfo`,
+      ffmpegSceneFilterGraph(),
       "-f",
       "null",
       "-",
