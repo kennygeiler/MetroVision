@@ -250,7 +250,7 @@ export function ExportPanel({
           <p className="text-sm text-[var(--color-text-secondary)]">
             Rows are one detected shot; autoGroupedScene* is model navigation only (
             <a
-              href="https://github.com/kennygeiler/SceneDeck/blob/main/.planning/research/pipeline-whitepaper.md"
+              href="https://github.com/kennygeiler/MetroVision/blob/main/.planning/research/pipeline-whitepaper.md"
               className="text-[var(--color-text-accent)] underline-offset-2 hover:underline"
             >
               whitepaper
