@@ -157,8 +157,34 @@ export async function runCommand(
 }
 
 /**
- * Local filesystem path or http(s) URL → readable local path for PySceneDetect / FFmpeg.
- * HTTP(S) sources use FFmpeg remux (`-c copy`) like the TS worker — avoids buffering the whole file through Node fetch and matches production worker behavior.
+ * Serverless (Vercel, Lambda) /tmp is ~512MB — remuxing a feature-length source fills disk (ffmpeg exits -28 ENOSPC).
+ * In those environments, pass the HTTPS URL through to ffmpeg/PySceneDetect instead of copying locally.
+ * Override: `METROVISION_STREAM_REMOTE_VIDEO=1` (always) or `METROVISION_FORCE_LOCAL_VIDEO_REMUX=1` (never skip remux).
+ */
+export function shouldStreamRemoteIngestInput(): boolean {
+  if (process.env.METROVISION_FORCE_LOCAL_VIDEO_REMUX === "1") return false;
+  if (process.env.METROVISION_STREAM_REMOTE_VIDEO === "1") return true;
+  return process.env.VERCEL === "1" || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
+/** Basename for DB `sourceFile` when `videoPath` may be a presigned URL. */
+export function ingestSourceDisplayFileName(videoPathOrUrl: string): string {
+  const s = videoPathOrUrl.trim();
+  if (s.startsWith("http://") || s.startsWith("https://")) {
+    try {
+      const seg = new URL(s).pathname.split("/").filter(Boolean).pop();
+      if (seg) return decodeURIComponent(seg);
+    } catch {
+      /* ignore */
+    }
+    return "remote.mp4";
+  }
+  return path.basename(s);
+}
+
+/**
+ * Local filesystem path or http(s) URL → path/URL string for PySceneDetect / FFmpeg.
+ * HTTP(S): by default FFmpeg remuxes to /tmp (TS worker / beefy hosts). On Vercel/Lambda, returns the URL and skips remux.
  */
 export async function resolveIngestVideoToLocalPath(
   videoPathOrUrl: string,
@@ -168,6 +194,10 @@ export async function resolveIngestVideoToLocalPath(
     const localPath = path.resolve(input);
     await access(localPath, constants.R_OK);
     return { localPath, dispose: async () => {} };
+  }
+
+  if (shouldStreamRemoteIngestInput()) {
+    return { localPath: input, dispose: async () => {} };
   }
 
   const downloadDir = path.join(tmpdir(), "metrovision-ingest-downloads");

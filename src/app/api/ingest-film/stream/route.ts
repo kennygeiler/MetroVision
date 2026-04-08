@@ -16,6 +16,8 @@ import {
   parseIngestTimelineFromBody,
   clipDetectedSplitsToWindow,
   resolveIngestVideoToLocalPath,
+  shouldStreamRemoteIngestInput,
+  ingestSourceDisplayFileName,
 } from "@/lib/ingest-pipeline";
 import { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } from "@/lib/tmdb";
 import { planContiguousScenesByNormalizedTitle } from "@/lib/scene-grouping";
@@ -93,7 +95,9 @@ export async function POST(request: Request) {
           step: "detect",
           status: "active",
           message: inputIsRemote
-            ? "Preparing source video (FFmpeg is copying from your URL to the server; large files can take several minutes)…"
+            ? shouldStreamRemoteIngestInput()
+              ? "Using your video URL directly (serverless disk is too small for a full local copy)…"
+              : "Preparing source video (FFmpeg is copying from your URL to the server; large files can take several minutes)…"
             : "Opening uploaded file on the server…",
         });
 
@@ -289,9 +293,14 @@ export async function POST(request: Request) {
           const thumbnailUrl = `/api/s3?key=${encodeURIComponent(asset.thumbnailKey)}`;
 
           const [insertedShot] = await db.insert(schema.shots).values({
-            filmId, sceneId, sourceFile: path.basename(videoPath),
-            startTc: split.start, endTc: split.end, duration: durationSec,
-            videoUrl, thumbnailUrl,
+            filmId,
+            sceneId,
+            sourceFile: ingestSourceDisplayFileName(videoPath),
+            startTc: split.start,
+            endTc: split.end,
+            duration: durationSec,
+            videoUrl,
+            thumbnailUrl,
           }).returning({ id: schema.shots.id });
 
           // Batch the 3 related inserts in parallel (they only depend on shotId, not each other)
