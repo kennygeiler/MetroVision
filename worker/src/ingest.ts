@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 import type { Request, Response } from "express";
 
 import { db, schema } from "./db.js";
-import { getFfmpegPath } from "../../src/lib/ffmpeg-bin.js";
 import {
   detectShotsForIngest,
   classifyShot,
@@ -47,7 +46,7 @@ async function resolveVideo(videoUrl: string): Promise<string> {
 
   console.log("[worker] Downloading video via FFmpeg remux...");
   const t0 = Date.now();
-  await runCommand(getFfmpegPath(), [
+  await runCommand("ffmpeg", [
     "-y",
     "-threads",
     "2",

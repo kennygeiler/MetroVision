@@ -15,7 +15,6 @@ import {
   detectObjectsMultiFrame,
   replaceShotObjects,
 } from "@/lib/object-detection";
-import { getFfmpegPath } from "@/lib/ffmpeg-bin";
 import { uploadToS3, getPresignedUrl } from "@/lib/s3";
 import { searchTmdbMovieId } from "@/lib/tmdb";
 import type { ClassifiedShot, ShotWithDetails } from "@/lib/types";
@@ -214,7 +213,7 @@ async function extractClipAssets(
   const midpoint = roundTime(split.start + (split.end - split.start) / 2);
   const duration = roundTime(split.end - split.start);
 
-  await runProcess(getFfmpegPath(), [
+  await runProcess("ffmpeg", [
     "-hide_banner",
     "-loglevel",
     "error",
@@ -236,7 +235,7 @@ async function extractClipAssets(
     clipPath,
   ]);
 
-  await runProcess(getFfmpegPath(), [
+  await runProcess("ffmpeg", [
     "-hide_banner",
     "-loglevel",
     "error",
