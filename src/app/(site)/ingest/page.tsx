@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { PipelineViz } from "@/components/ingest/pipeline-viz";
 
@@ -78,9 +78,22 @@ export default function IngestPage() {
     ingestEndSec?: number;
   } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  /** Shown under the start button while phase === "uploading". */
+  const [uploadStageMessage, setUploadStageMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
 
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "";
+
+  useEffect(() => {
+    return () => {
+      uploadAbortRef.current?.abort();
+    };
+  }, []);
+
+  function handleCancelUpload() {
+    uploadAbortRef.current?.abort();
+  }
 
   async function handleStart() {
     if (!selectedFile || !filmTitle || !director || !year) return;
@@ -106,9 +119,16 @@ export default function IngestPage() {
       return;
     }
 
+    const ac = new AbortController();
+    uploadAbortRef.current = ac;
+    const { signal } = ac;
+
     setPhase("uploading");
     setUploadError(null);
+    setUploadStageMessage("Step 1 of 2: Requesting a direct upload URL from the app…");
     setIngestTimelineForRun(null);
+
+    const fileMb = (selectedFile.size / 1024 / 1024).toFixed(1);
 
     try {
       let resolvedPath: string;
@@ -122,14 +142,19 @@ export default function IngestPage() {
           filmTitle,
           year,
         }),
+        signal,
       });
 
       if (presignRes.ok) {
+        setUploadStageMessage(
+          `Step 2 of 2: Uploading ${fileMb} MB directly to cloud storage (browser → S3). This can take several minutes on a slow connection.`,
+        );
         const { putUrl, videoUrl } = await presignRes.json();
         const putRes = await fetch(putUrl, {
           method: "PUT",
           headers: { "Content-Type": selectedFile.type || "video/mp4" },
           body: selectedFile,
+          signal,
         });
         if (!putRes.ok) {
           throw new Error(`S3 upload failed: ${putRes.status}`);
@@ -140,9 +165,12 @@ export default function IngestPage() {
         if (presignRes.status >= 400 && presignRes.status < 500) {
           throw new Error(presignErr);
         }
+        setUploadStageMessage(
+          `Step 2 of 2: Uploading ${fileMb} MB through the app server (fallback). Large files may fail here — configure S3 for direct upload.`,
+        );
         const formData = new FormData();
         formData.append("video", selectedFile);
-        const uploadRes = await fetch("/api/upload-video", { method: "POST", body: formData });
+        const uploadRes = await fetch("/api/upload-video", { method: "POST", body: formData, signal });
         if (!uploadRes.ok) {
           const msg = await readFetchErrorMessage(uploadRes);
           throw new Error(
@@ -153,13 +181,25 @@ export default function IngestPage() {
         resolvedPath = path;
       }
 
+      setUploadStageMessage("Upload complete. Starting ingest pipeline…");
       setIngestTimelineForRun({ ingestStartSec, ingestEndSec });
       setVideoPath(resolvedPath);
       setPhase("processing");
+      setUploadStageMessage(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Upload failed";
-      setUploadError(message);
+      const aborted =
+        (error instanceof DOMException && error.name === "AbortError") ||
+        (error instanceof Error && error.name === "AbortError");
+      if (aborted) {
+        setUploadError("Upload cancelled.");
+      } else {
+        const message = error instanceof Error ? error.message : "Upload failed";
+        setUploadError(message);
+      }
       setPhase("form");
+      setUploadStageMessage(null);
+    } finally {
+      uploadAbortRef.current = null;
     }
   }
 
@@ -399,8 +439,27 @@ export default function IngestPage() {
               boxShadow: "var(--shadow-glow)",
             }}
           >
-            {phase === "uploading" ? "Uploading..." : "Start Ingestion"}
+            {phase === "uploading" ? "Uploading…" : "Start Ingestion"}
           </button>
+
+          {phase === "uploading" && uploadStageMessage ? (
+            <div
+              className="space-y-3 rounded-[var(--radius-md)] border p-4"
+              style={{
+                borderColor: "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
+                backgroundColor: "color-mix(in oklch, var(--color-surface-primary) 88%, transparent)",
+              }}
+            >
+              <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">{uploadStageMessage}</p>
+              <button
+                type="button"
+                onClick={handleCancelUpload}
+                className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-transparent px-4 py-2 font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-status-error)] hover:text-[var(--color-status-error)]"
+              >
+                Cancel upload
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
