@@ -11,6 +11,8 @@
   },
   "include": [
     "src/**/*.ts",
+    "../src/types/**/*.d.ts",
+    "../src/lib/ffmpeg-bin.ts",
     "../src/lib/ingest-pipeline.ts",
     "../src/lib/s3.ts",
     "../src/lib/rate-limiter.ts",

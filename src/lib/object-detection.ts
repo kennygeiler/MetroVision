@@ -7,6 +7,7 @@ import Replicate from "replicate";
 import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { getFfprobePath, getFfmpegPath } from "@/lib/ffmpeg-bin";
 import { acquireToken } from "@/lib/rate-limiter";
 import type {
   ShotObjectAttributes,
@@ -648,7 +649,7 @@ async function runProcess(command: string, args: string[]) {
 }
 
 async function probeImageDimensions(filePath: string) {
-  const { stdout } = await runProcess("ffprobe", [
+  const { stdout } = await runProcess(getFfprobePath(), [
     "-v",
     "error",
     "-select_streams",
@@ -682,7 +683,7 @@ async function extractFrameImage(
 ) {
   const framePath = path.join(outputDir, `frame_${frameIndex}.png`);
 
-  await runProcess("ffmpeg", [
+  await runProcess(getFfmpegPath(), [
     "-hide_banner",
     "-loglevel",
     "error",

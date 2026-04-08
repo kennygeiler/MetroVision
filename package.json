@@ -17,6 +17,7 @@
     "db:embeddings": "tsx src/db/generate-embeddings.ts",
     "db:embeddings:image": "tsx src/db/generate-image-embeddings.ts",
     "db:studio": "drizzle-kit studio",
+    "postinstall": "node scripts/ensure-ffmpeg-static.cjs",
     "batch-worker": "python3 -m pipeline.batch_worker",
     "corpus:ingest": "tsx src/db/ingest-corpus.ts",
     "embeddings:scenes": "tsx src/db/generate-scene-embeddings.ts",
@@ -37,6 +38,8 @@
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
     "drizzle-orm": "^0.45.1",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
     "framer-motion": "^12.36.0",
     "lucide-react": "^0.577.0",
     "next": "15.5.12",
@@ -61,5 +64,8 @@
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["ffmpeg-static"]
   }
 }
