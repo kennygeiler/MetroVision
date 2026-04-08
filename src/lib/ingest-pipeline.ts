@@ -147,7 +147,14 @@ export async function runCommand(
     proc.on("error", (err) => {
       const e = err as NodeJS.ErrnoException;
       if (e?.code === "ENOENT") {
-        done(new Error(`Command not found: ${command}. ${FFMPEG_SPAWN_ENOENT_HINT}`), null);
+        const hint =
+          /ffmpeg|ffprobe/i.test(command)
+            ? FFMPEG_SPAWN_ENOENT_HINT
+            : (process.env.SCENEDETECT_PATH ?? "scenedetect") === command ||
+                command.endsWith("scenedetect")
+              ? "Install PySceneDetect on the host (`pip install scenedetect`) or set SCENEDETECT_PATH. On Vercel, PySceneDetect is usually absent — ingest falls back to FFmpeg `scene` filter shot cuts when the CLI is missing."
+              : `Ensure ${command} is installed and on PATH.`;
+        done(new Error(`Command not found: ${command}. ${hint}`), null);
         return;
       }
       done(err, null);
@@ -260,10 +267,125 @@ export async function processInParallel<T, R>(
 // Step 1: Detect shot boundaries
 // ---------------------------------------------------------------------------
 
+let scenedetectReachableMemo: Promise<boolean> | null = null;
+
+/** PySceneDetect CLI is rarely present on Vercel; result is cached for the process. */
+export async function getScenedetectReachable(): Promise<boolean> {
+  if (!scenedetectReachableMemo) {
+    const bin = process.env.SCENEDETECT_PATH ?? "scenedetect";
+    scenedetectReachableMemo = new Promise((resolve) => {
+      let settled = false;
+      const done = (v: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(v);
+      };
+      const p = spawn(bin, ["version"], { stdio: "ignore" });
+      p.on("error", (err) => {
+        const e = err as NodeJS.ErrnoException;
+        if (e?.code === "ENOENT") done(false);
+        else done(true);
+      });
+      p.on("close", () => done(true));
+    });
+  }
+  return scenedetectReachableMemo;
+}
+
+function ffmpegSceneCutThreshold(): number {
+  const raw = process.env.METROVISION_FFMPEG_SCENE_THRESHOLD?.trim();
+  if (!raw) return 0.32;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 && n < 1 ? n : 0.32;
+}
+
+/**
+ * Shot cuts via FFmpeg `select='gt(scene,σ)'` + showinfo (no PySceneDetect).
+ * Full video decode — acceptable when `scenedetect` is absent (e.g. Vercel).
+ */
+async function detectShotsWithFfmpegScene(videoPath: string): Promise<DetectedSplit[]> {
+  const threshold = ffmpegSceneCutThreshold();
+  const { stderr } = await runCommand(
+    getFfmpegPath(),
+    [
+      "-hide_banner",
+      "-nostats",
+      "-threads",
+      "2",
+      "-i",
+      videoPath,
+      "-map",
+      "0:v:0",
+      "-an",
+      "-filter:v",
+      `select='gt(scene,${threshold})',showinfo`,
+      "-f",
+      "null",
+      "-",
+    ],
+    envWithFfmpegBinariesOnPath(),
+  );
+
+  const times: number[] = [];
+  for (const line of stderr.split("\n")) {
+    const m = line.match(/pts_time:([\d.]+)/);
+    if (m) times.push(roundTime(parseFloat(m[1]!)));
+  }
+  const uniqTimes = [...new Set(times)].sort((a, b) => a - b);
+  const duration = await probeVideoDurationSec(videoPath);
+  const d =
+    duration > 0
+      ? duration
+      : uniqTimes.length > 0
+        ? uniqTimes[uniqTimes.length - 1]! + 0.001
+        : 1;
+  if (uniqTimes.length === 0) {
+    return [{ start: 0, end: roundTime(d), index: 0 }];
+  }
+  const boundaries = [
+    0,
+    ...uniqTimes.filter((t) => t > 0 && t < d),
+    d,
+  ].sort((a, b) => a - b);
+  const uniq = boundaries.filter((t, i, arr) => i === 0 || t > arr[i - 1]!);
+  return splitsFromBoundaries(uniq);
+}
+
+function mergeEndpointsLikeEnsemble(
+  pointList: number[],
+  duration: number,
+  extraCuts: number[],
+): DetectedSplit[] {
+  const d =
+    duration > 0 ? duration : Math.max(0, ...pointList, 0);
+  const eps = boundaryMergeEpsilonSec();
+  const interior = [...new Set(pointList.map(roundTime))].filter(
+    (t) => t > 0 && t < d,
+  );
+  let clustered = clusterCutTimes(interior, eps);
+  if (extraCuts.length) {
+    clustered = clusterCutTimes(
+      [...clustered, ...extraCuts.map(roundTime)],
+      eps,
+    );
+  }
+  const boundaries = [0, ...clustered.filter((t) => t > 0 && t < d), d].sort(
+    (a, b) => a - b,
+  );
+  const uniq = boundaries.filter(
+    (t, i, arr) => i === 0 || t > arr[i - 1]!,
+  );
+  return splitsFromBoundaries(uniq);
+}
+
 export async function detectShots(
   videoPath: string,
   detector: "content" | "adaptive" = "adaptive",
 ): Promise<DetectedSplit[]> {
+  if (!(await getScenedetectReachable())) {
+    return detectShotsWithFfmpegScene(videoPath);
+  }
+
   const tempDir = await mkdtemp(path.join(tmpdir(), "metrovision-detect-"));
   const csvPath = path.join(tempDir, "shots.csv");
 
@@ -346,6 +468,13 @@ export async function detectShotsEnsemble(
   videoPath: string,
   extraCuts: number[],
 ): Promise<DetectedSplit[]> {
+  if (!(await getScenedetectReachable())) {
+    const splits = await detectShotsWithFfmpegScene(videoPath);
+    const duration = await probeVideoDurationSec(videoPath);
+    const pointList = endpointsFromSplits(splits);
+    return mergeEndpointsLikeEnsemble(pointList, duration, extraCuts);
+  }
+
   const [adaptive, content, duration] = await Promise.all([
     detectShots(videoPath, "adaptive"),
     detectShots(videoPath, "content"),
@@ -381,6 +510,7 @@ export async function detectShotsForIngest(
   requestedDetector: "content" | "adaptive",
   options?: DetectShotsForIngestOptions,
 ): Promise<{ splits: DetectedSplit[]; ctx: DetectShotsContext }> {
+  const pysceneCliAvailable = await getScenedetectReachable();
   const fileCuts = loadExtraBoundaryCuts();
   const inlineCuts = options?.inlineExtraBoundaryCuts ?? [];
   const extra = mergeBoundaryCutSources(fileCuts, inlineCuts);
@@ -394,7 +524,9 @@ export async function detectShotsForIngest(
         usedEnsemble: true,
         extraCutsMerged: extra.length,
         resolvedDetector: "ensemble",
-        boundaryLabel: `pyscenedetect_ensemble_pyscene${tagSuffix}`,
+        boundaryLabel: pysceneCliAvailable
+          ? `pyscenedetect_ensemble_pyscene${tagSuffix}`
+          : `ffmpeg_scene+ensemble_fallback${tagSuffix}`,
       },
     };
   }
@@ -426,8 +558,9 @@ export async function detectShotsForIngest(
   }
 
   const mode = boundaryModeFromEnv();
-  const baseLabel =
-    mode === "pyscenedetect_cli"
+  const baseLabel = !pysceneCliAvailable
+    ? "ffmpeg_scene"
+    : mode === "pyscenedetect_cli"
       ? `pyscenedetect_cli_${requestedDetector}`
       : `${mode}_${requestedDetector}`;
   const boundaryLabel = `${baseLabel}${tagSuffix}`;
