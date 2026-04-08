@@ -61,13 +61,107 @@ function uploadSizeHint(status: number, message: string): string {
     : "";
 }
 
+/** `fetch` does not surface upload progress; XHR does (critical for large S3 PUTs). */
+function putFileWithProgress(
+  url: string,
+  file: File,
+  contentType: string,
+  signal: AbortSignal,
+  onProgress: (loaded: number, total: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", contentType);
+
+    const onAbort = () => xhr.abort();
+    signal.addEventListener("abort", onAbort);
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    };
+
+    xhr.onload = () => {
+      cleanup();
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`S3 upload failed: ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => {
+      cleanup();
+      reject(new Error("Network error while uploading to storage."));
+    };
+    xhr.onabort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    xhr.send(file);
+  });
+}
+
+function postFormDataWithProgress(
+  url: string,
+  formData: FormData,
+  signal: AbortSignal,
+  onProgress: (loaded: number, total: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+
+    const onAbort = () => xhr.abort();
+    signal.addEventListener("abort", onAbort);
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    };
+
+    xhr.onload = () => {
+      cleanup();
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.responseText);
+      } else {
+        const t = xhr.responseText?.trim() ?? "";
+        let msg = `Request failed (HTTP ${xhr.status})`;
+        try {
+          const j = JSON.parse(t) as { error?: string };
+          if (typeof j.error === "string" && j.error.trim()) msg = j.error.trim();
+        } catch {
+          if (t) msg = t.replace(/\s+/g, " ").slice(0, 300);
+        }
+        reject(new Error(msg + uploadSizeHint(xhr.status, msg)));
+      }
+    };
+    xhr.onerror = () => {
+      cleanup();
+      reject(new Error("Network error while uploading to the server."));
+    };
+    xhr.onabort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    xhr.send(formData);
+  });
+}
+
 export default function IngestPage() {
   const [phase, setPhase] = useState<IngestPhase>("form");
   const [filmTitle, setFilmTitle] = useState("");
   const [director, setDirector] = useState("");
   const [year, setYear] = useState("");
   const [concurrency, setConcurrency] = useState(5);
-  const [detector, setDetector] = useState<"content" | "adaptive">("adaptive");
   const [ingestTimelineStart, setIngestTimelineStart] = useState("");
   const [ingestTimelineEnd, setIngestTimelineEnd] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -80,8 +174,11 @@ export default function IngestPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   /** Shown under the start button while phase === "uploading". */
   const [uploadStageMessage, setUploadStageMessage] = useState<string | null>(null);
+  /** Byte progress during Step 2 (XHR upload). */
+  const [uploadProgress, setUploadProgress] = useState<{ loaded: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
+  const uploadProgressThrottleRef = useRef(0);
 
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "";
 
@@ -125,10 +222,20 @@ export default function IngestPage() {
 
     setPhase("uploading");
     setUploadError(null);
+    setUploadProgress(null);
+    uploadProgressThrottleRef.current = 0;
     setUploadStageMessage("Step 1 of 2: Requesting a direct upload URL from the app…");
     setIngestTimelineForRun(null);
 
     const fileMb = (selectedFile.size / 1024 / 1024).toFixed(1);
+
+    const emitUploadProgress = (loaded: number, total: number) => {
+      const now = Date.now();
+      const done = total > 0 && loaded >= total;
+      if (!done && now - uploadProgressThrottleRef.current < 200) return;
+      uploadProgressThrottleRef.current = now;
+      setUploadProgress({ loaded, total });
+    };
 
     try {
       let resolvedPath: string;
@@ -147,18 +254,18 @@ export default function IngestPage() {
 
       if (presignRes.ok) {
         setUploadStageMessage(
-          `Step 2 of 2: Uploading ${fileMb} MB directly to cloud storage (browser → S3). This can take several minutes on a slow connection.`,
+          `Step 2 of 2: Uploading ${fileMb} MB directly to cloud storage (browser → S3). Progress below updates as bytes are sent.`,
         );
         const { putUrl, videoUrl } = await presignRes.json();
-        const putRes = await fetch(putUrl, {
-          method: "PUT",
-          headers: { "Content-Type": selectedFile.type || "video/mp4" },
-          body: selectedFile,
+        setUploadProgress({ loaded: 0, total: selectedFile.size });
+        await putFileWithProgress(
+          putUrl,
+          selectedFile,
+          selectedFile.type || "video/mp4",
           signal,
-        });
-        if (!putRes.ok) {
-          throw new Error(`S3 upload failed: ${putRes.status}`);
-        }
+          emitUploadProgress,
+        );
+        setUploadProgress({ loaded: selectedFile.size, total: selectedFile.size });
         resolvedPath = videoUrl;
       } else {
         const presignErr = await readFetchErrorMessage(presignRes);
@@ -166,18 +273,19 @@ export default function IngestPage() {
           throw new Error(presignErr);
         }
         setUploadStageMessage(
-          `Step 2 of 2: Uploading ${fileMb} MB through the app server (fallback). Large files may fail here — configure S3 for direct upload.`,
+          `Step 2 of 2: Uploading ${fileMb} MB through the app server (fallback). Progress below updates as bytes are sent.`,
         );
         const formData = new FormData();
         formData.append("video", selectedFile);
-        const uploadRes = await fetch("/api/upload-video", { method: "POST", body: formData, signal });
-        if (!uploadRes.ok) {
-          const msg = await readFetchErrorMessage(uploadRes);
-          throw new Error(
-            (msg || "Upload failed") + uploadSizeHint(uploadRes.status, msg),
-          );
-        }
-        const { videoPath: path } = await uploadRes.json();
+        setUploadProgress({ loaded: 0, total: selectedFile.size });
+        const responseText = await postFormDataWithProgress(
+          "/api/upload-video",
+          formData,
+          signal,
+          emitUploadProgress,
+        );
+        const { videoPath: path } = JSON.parse(responseText) as { videoPath: string };
+        setUploadProgress({ loaded: selectedFile.size, total: selectedFile.size });
         resolvedPath = path;
       }
 
@@ -186,6 +294,7 @@ export default function IngestPage() {
       setVideoPath(resolvedPath);
       setPhase("processing");
       setUploadStageMessage(null);
+      setUploadProgress(null);
     } catch (error) {
       const aborted =
         (error instanceof DOMException && error.name === "AbortError") ||
@@ -198,6 +307,7 @@ export default function IngestPage() {
       }
       setPhase("form");
       setUploadStageMessage(null);
+      setUploadProgress(null);
     } finally {
       uploadAbortRef.current = null;
     }
@@ -372,56 +482,11 @@ export default function IngestPage() {
             </div>
           </div>
 
-          {/* Detection algorithm */}
-          <div>
-            <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-              Shot Detection Algorithm
-            </label>
-            <p className="mt-3 max-w-prose text-xs leading-5 text-[var(--color-text-tertiary)]">
-              After ingest, shots are the primary metadata grain. Set{" "}
-              <code className="font-mono text-[10px]">METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene</code> on
-              the server for dual PySceneDetect + NMS (Phase D). Automatic &quot;scene&quot; rows are model grouping
-              for navigation only—not screenplay scenes.
-            </p>
-            <div className="mt-2 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setDetector("content")}
-                disabled={phase !== "form"}
-                className={`flex-1 rounded-[var(--radius-md)] border px-4 py-3 text-left transition-all ${
-                  detector === "content" ? "border-[var(--color-accent-base)]" : "border-[var(--color-border-default)]"
-                }`}
-                style={{
-                  backgroundColor: detector === "content" ? "rgba(92,184,214,0.06)" : "var(--color-surface-primary)",
-                }}
-              >
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">Content Detector</p>
-                <p className="mt-1 font-mono text-[10px] text-[var(--color-text-tertiary)]">
-                  Faster — histogram on downscaled frames (same recipe as ingest CLI content mode, -d 4). Best when cuts are crisp;
-                  weaker on busy motion.
-                </p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDetector("adaptive")}
-                disabled={phase !== "form"}
-                className={`flex-1 rounded-[var(--radius-md)] border px-4 py-3 text-left transition-all ${
-                  detector === "adaptive" ? "border-[var(--color-signal-amber)]" : "border-[var(--color-border-default)]"
-                }`}
-                style={{
-                  backgroundColor: detector === "adaptive" ? "rgba(214,160,92,0.06)" : "var(--color-surface-primary)",
-                }}
-              >
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                  Adaptive Detector <span className="font-normal text-[var(--color-text-tertiary)]">(default)</span>
-                </p>
-                <p className="mt-1 font-mono text-[10px] text-[var(--color-text-tertiary)]">
-                  Recommended for research — rolling-window cut detection; slower but usually better when camera movement or grading
-                  fights plain content mode. Run on a worker or beefy machine.
-                </p>
-              </button>
-            </div>
-          </div>
+          <p className="max-w-prose font-mono text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
+            Shot boundaries use PySceneDetect adaptive mode. For dual-detector + NMS on the server, set{" "}
+            <code className="font-mono text-[10px]">METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene</code>.
+            Automatic scene rows are model grouping for navigation only.
+          </p>
 
           {/* Error */}
           {uploadError ? (
@@ -451,6 +516,37 @@ export default function IngestPage() {
               }}
             >
               <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">{uploadStageMessage}</p>
+              {uploadProgress && uploadProgress.total > 0 ? (
+                <div className="space-y-2">
+                  <div
+                    className="h-2 w-full overflow-hidden rounded-full"
+                    style={{ backgroundColor: "color-mix(in oklch, var(--color-border-default) 85%, transparent)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-[width] duration-200 ease-out"
+                      style={{
+                        width: `${Math.min(100, Math.round((uploadProgress.loaded / uploadProgress.total) * 100))}%`,
+                        backgroundColor: "var(--color-interactive-default)",
+                      }}
+                    />
+                  </div>
+                  <p className="font-mono text-[10px] text-[var(--color-text-tertiary)]">
+                    {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} / {(uploadProgress.total / 1024 / 1024).toFixed(1)}{" "}
+                    MB sent ({Math.min(100, Math.round((uploadProgress.loaded / uploadProgress.total) * 100))}%)
+                  </p>
+                </div>
+              ) : null}
+              {uploadProgress && uploadProgress.total === 0 && uploadProgress.loaded > 0 ? (
+                <p className="font-mono text-[10px] text-[var(--color-text-tertiary)]">
+                  {(uploadProgress.loaded / 1024 / 1024).toFixed(1)} MB sent (total size unknown)
+                </p>
+              ) : null}
+              {uploadProgress ? (
+                <p className="font-mono text-[10px] text-[var(--color-text-tertiary)]">
+                  If the percentage stays at 0% for a long time, your network or browser may be buffering the start of the
+                  upload. If it never moves, cancel and try a different network or VPN.
+                </p>
+              ) : null}
               <button
                 type="button"
                 onClick={handleCancelUpload}
@@ -471,7 +567,6 @@ export default function IngestPage() {
           director={director}
           year={parseInt(year)}
           concurrency={concurrency}
-          detector={detector}
           workerUrl={workerUrl}
           ingestStartSec={ingestTimelineForRun.ingestStartSec}
           ingestEndSec={ingestTimelineForRun.ingestEndSec}
