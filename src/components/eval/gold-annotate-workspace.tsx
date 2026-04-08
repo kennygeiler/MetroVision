@@ -387,6 +387,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
       setLoadError(null);
       return;
     }
+    setFilmPayload(null);
     let cancelled = false;
     (async () => {
       setLoadError(null);
@@ -1343,31 +1344,51 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
         </div>
       </section>
 
-      {filmId && filmPayload?.predictedExport ? (
-        <section
-          className="space-y-4 rounded-[var(--radius-xl)] border p-5"
-          style={{
-            backgroundColor:
-              "color-mix(in oklch, var(--color-surface-secondary) 76%, transparent)",
-            borderColor:
-              "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
-          }}
-        >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-                Predicted eval (same logic as CLI)
-              </p>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
-                Boundary cuts vs ingested shots use the same matcher as{" "}
-                <code className="font-mono text-xs">pnpm eval:pipeline</code> (no files required). Predicted cuts match{" "}
-                <code className="font-mono text-xs">pnpm eval:export-film</code>. Use{" "}
-                <strong>Copy eval report</strong> for CLI-shaped JSON. Optional slot metrics match{" "}
-                <code className="font-mono text-xs">--slots</code> when you <strong>Import cuts JSON</strong> from a file
-                that also includes <code className="font-mono text-xs">shots[]</code>. If you use <strong>Local file</strong>{" "}
-                or <strong>Custom URL</strong>, align <strong>Time offset</strong> with the DB timeline.
-              </p>
-            </div>
+      <section
+        className="space-y-4 rounded-[var(--radius-xl)] border p-5"
+        style={{
+          backgroundColor:
+            "color-mix(in oklch, var(--color-surface-secondary) 76%, transparent)",
+          borderColor:
+            "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
+        }}
+      >
+        <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+          Predicted eval (same logic as CLI)
+        </p>
+        {films.length === 0 ? (
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
+            No films in the database yet. Use{" "}
+            <a href="/ingest" className="text-[var(--color-text-accent)] underline-offset-1 hover:underline">
+              Ingest
+            </a>{" "}
+            to add a title, then select it in the <strong>Film</strong> dropdown above.
+          </p>
+        ) : !filmId ? (
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
+            Select a <strong>Film</strong> in the dropdown above. This block compares your session’s gold{" "}
+            <code className="font-mono text-xs">cutsSec</code> to predicted interior cuts from ingested shots (same
+            matcher as <code className="font-mono text-xs">pnpm eval:pipeline</code>).
+          </p>
+        ) : loadError ? (
+          <p className="mt-1 text-sm text-[var(--color-signal-amber)]">{loadError}</p>
+        ) : !filmPayload?.predictedExport ? (
+          <p className="mt-1 font-mono text-sm text-[var(--color-text-tertiary)]">Loading film data…</p>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
+                  Boundary cuts vs ingested shots use the same matcher as{" "}
+                  <code className="font-mono text-xs">pnpm eval:pipeline</code> (no files required). Predicted cuts match{" "}
+                  <code className="font-mono text-xs">pnpm eval:export-film</code>. Use{" "}
+                  <strong>Copy eval report</strong> for CLI-shaped JSON. Optional slot metrics match{" "}
+                  <code className="font-mono text-xs">--slots</code> when you <strong>Import cuts JSON</strong> from a file
+                  that also includes <code className="font-mono text-xs">shots[]</code>. If you use{" "}
+                  <strong>Local file</strong> or <strong>Custom URL</strong>, align <strong>Time offset</strong> with the DB
+                  timeline.
+                </p>
+              </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -1589,8 +1610,9 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
               </ul>
             </div>
           ) : null}
-        </section>
-      ) : null}
+          </>
+        )}
+      </section>
 
       <section
         className="rounded-[var(--radius-xl)] border p-5"
