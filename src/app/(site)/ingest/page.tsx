@@ -286,7 +286,8 @@ export default function IngestPage() {
             </div>
           </div>
           <p className="font-mono text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
-            Shot detection still runs on the full file; only shots overlapping this window are ingested.             Leave fields empty or use 0 for 'from beginning' / 'to end of file.' Decimals: 763.222 or 763,222.
+            Shot detection still runs on the full file; only shots overlapping this window are ingested. Leave fields
+            empty or use 0 for an unset start or end (full length). Decimals: 763.222 or 763,222.
           </p>
 
           {/* Concurrency */}
