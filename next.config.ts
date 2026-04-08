@@ -8,9 +8,14 @@ const nextConfig: NextConfig = {
    * otherwise production (e.g. Vercel) resolves to `ffmpeg` on PATH → ENOENT.
    */
   outputFileTracingIncludes: {
-    "/*": [
+    // Keys are matched with picomatch against the *normalized route* (e.g. `/api/ingest-film/stream`).
+    // `/*` does NOT match nested paths, so includes never ran and Vercel omitted the binaries.
+    "/api/**/*": [
       "./node_modules/ffmpeg-static/**",
       "./node_modules/ffprobe-static/**",
+      // pnpm stores packages under .pnpm; symlinks may not pull the binary into the trace
+      "./node_modules/.pnpm/**/ffmpeg-static/**",
+      "./node_modules/.pnpm/**/ffprobe-static/**",
     ],
   },
   experimental: {
