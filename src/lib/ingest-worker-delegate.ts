@@ -8,12 +8,35 @@
 
 const PROXY_TIMEOUT_MS = 890_000;
 
+/**
+ * Worker env should be **origin only** (e.g. `https://metrovision-worker.fly.dev`).
+ * Strips trailing slashes and a mistaken trailing `/api` (else ingest would hit `/api/api/ingest-film/stream`).
+ */
+export function normalizeWorkerOrigin(raw: string): string {
+  let s = raw.trim().replace(/\/+$/, "");
+  if (s.endsWith("/api")) {
+    s = s.slice(0, -4).replace(/\/+$/, "");
+  }
+  return s;
+}
+
 export function resolveIngestWorkerProxyTarget(): string | null {
   if (process.env.METROVISION_DELEGATE_INGEST === "0") return null;
   const base =
     process.env.INGEST_WORKER_URL?.trim() || process.env.NEXT_PUBLIC_WORKER_URL?.trim();
   if (!base) return null;
-  return base.replace(/\/$/, "");
+  return normalizeWorkerOrigin(base);
+}
+
+function proxyFailureResponse(url: string, message: string, hint: string): Response {
+  const body = JSON.stringify({
+    error: `Ingest worker proxy failed: ${message}${hint}`,
+    proxyTarget: url,
+  });
+  return new Response(body, {
+    status: 502,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
 }
 
 /** POST body must already be validated; forwards JSON as-is and streams the SSE response back. */
@@ -21,16 +44,45 @@ export async function forwardIngestFilmStreamToWorker(
   workerOrigin: string,
   bodyText: string,
 ): Promise<Response> {
-  const url = `${workerOrigin.replace(/\/$/, "")}/api/ingest-film/stream`;
+  const origin = normalizeWorkerOrigin(workerOrigin);
+  const url = `${origin}/api/ingest-film/stream`;
   const ac = new AbortController();
   const timeout = setTimeout(() => ac.abort(), PROXY_TIMEOUT_MS);
+  const hint =
+    " Check INGEST_WORKER_URL / NEXT_PUBLIC_WORKER_URL: use the worker **origin** only (https://host.tld), no /api path. Verify GET {origin}/health returns JSON.";
+
   try {
-    const workerRes = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: bodyText,
-      signal: ac.signal,
-    });
+    let workerRes: Response;
+    try {
+      workerRes = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: bodyText,
+        signal: ac.signal,
+      });
+    } catch (err) {
+      const e = err as Error & { cause?: { code?: string } };
+      const name = e?.name ?? "Error";
+      const msg = e?.message ?? String(err);
+      const code =
+        e?.cause && typeof e.cause === "object" && "code" in e.cause
+          ? String((e.cause as { code?: string }).code)
+          : "";
+      const detail =
+        name === "AbortError"
+          ? `request timed out after ${PROXY_TIMEOUT_MS / 1000}s`
+          : [msg, code].filter(Boolean).join(" ");
+      return proxyFailureResponse(url, detail, hint);
+    }
+
+    if (workerRes.status === 404) {
+      const t = await workerRes.text().catch(() => "");
+      return proxyFailureResponse(
+        url,
+        `worker returned 404 — wrong URL or worker not deployed (${t.slice(0, 120)})`,
+        hint,
+      );
+    }
 
     const headers = new Headers();
     const ct = workerRes.headers.get("Content-Type");
@@ -48,5 +100,44 @@ export async function forwardIngestFilmStreamToWorker(
     });
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+/** GET {origin}/health — quick reachability check (Express worker exposes /health). */
+export async function probeWorkerHealth(origin: string): Promise<{
+  ok: boolean;
+  status?: number;
+  error?: string;
+  workerBody?: { service?: string; status?: string };
+}> {
+  const base = normalizeWorkerOrigin(origin);
+  const healthUrl = `${base}/health`;
+  try {
+    const r = await fetch(healthUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const text = await r.text();
+    let workerBody: { service?: string; status?: string } | undefined;
+    try {
+      workerBody = JSON.parse(text) as { service?: string; status?: string };
+    } catch {
+      /* ignore */
+    }
+    if (!r.ok) {
+      return {
+        ok: false,
+        status: r.status,
+        error: text.slice(0, 300),
+      };
+    }
+    return { ok: true, status: r.status, workerBody };
+  } catch (err) {
+    const e = err as Error;
+    return {
+      ok: false,
+      error: e.name === "TimeoutError" ? "timeout reaching worker /health" : e.message,
+    };
   }
 }

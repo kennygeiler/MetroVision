@@ -480,7 +480,19 @@ export function PipelineViz({
         });
         if (!res.ok || !res.body) {
           const errText = await res.text();
-          setState((s) => ({ ...s, error: errText }));
+          let msg = errText.trim() || `HTTP ${res.status}`;
+          try {
+            const j = JSON.parse(errText) as { error?: string; proxyTarget?: string };
+            if (typeof j.error === "string") {
+              msg =
+                j.proxyTarget && !j.error.includes(j.proxyTarget)
+                  ? `${j.error} — target: ${j.proxyTarget}`
+                  : j.error;
+            }
+          } catch {
+            /* keep msg */
+          }
+          setState((s) => ({ ...s, error: msg }));
           return;
         }
         handleEvent({

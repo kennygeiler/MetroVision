@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 
+import {
+  probeWorkerHealth,
+  resolveIngestWorkerProxyTarget,
+} from "@/lib/ingest-worker-delegate";
+
 /**
  * Presence-only config check (no secret values). Handy after Vercel env changes.
  *
@@ -49,17 +54,40 @@ export async function GET(request: Request) {
     checks.AWS_SECRET_ACCESS_KEY &&
     checks.AWS_S3_BUCKET;
 
+  const workerEffectiveOrigin = resolveIngestWorkerProxyTarget();
+  const workerHealth = workerEffectiveOrigin
+    ? await probeWorkerHealth(workerEffectiveOrigin)
+    : null;
+
+  let workerHostname: string | null = null;
+  if (workerEffectiveOrigin) {
+    try {
+      workerHostname = new URL(
+        workerEffectiveOrigin.startsWith("http")
+          ? workerEffectiveOrigin
+          : `https://${workerEffectiveOrigin}`,
+      ).hostname;
+    } catch {
+      workerHostname = null;
+    }
+  }
+
   return NextResponse.json({
     ok: criticalOk,
     nodeEnv: process.env.NODE_ENV ?? "unknown",
     vercel: process.env.VERCEL === "1",
     ingestWillProxyToWorker:
       ingestDelegateTarget && process.env.METROVISION_DELEGATE_INGEST !== "0",
+    /** Normalized origin Next will call (trailing /api stripped). Open `/health` on this host in a browser. */
+    workerEffectiveOrigin: workerEffectiveOrigin ?? null,
+    workerHostname,
+    /** GET {workerEffectiveOrigin}/health from this Vercel deployment — if ok:false, ingest proxy will fail the same way. */
+    workerHealth,
     checks,
     hints: {
       core: "Need DATABASE_URL, GOOGLE_API_KEY, AWS_* for S3, TMDB_API_KEY for ingest metadata.",
       ingest:
-        "For long jobs on Vercel: set INGEST_WORKER_URL or NEXT_PUBLIC_WORKER_URL so /api/ingest-film/stream can proxy (unless METROVISION_DELEGATE_INGEST=0).",
+        "Worker URL must be origin only: https://your-worker.example.com — not .../api or .../api/ingest-film/stream. If workerHealth.ok is false, fix the URL or deploy the worker and allow public HTTPS.",
       lockThisRoute:
         "Set METROVISION_CONFIG_CHECK_SECRET and pass Authorization: Bearer <value>.",
     },
