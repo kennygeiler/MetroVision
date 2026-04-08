@@ -24,24 +24,50 @@ function isUuid(s: string): boolean {
   return UUID_RE.test(s);
 }
 
+/** Operator-facing hint for common Postgres failures (missing table, etc.). */
+function evalArtifactDbErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes("eval_artifacts") &&
+    (lower.includes("does not exist") ||
+      lower.includes("relation") ||
+      lower.includes("undefined_table"))
+  ) {
+    return (
+      "Table eval_artifacts is missing. Run `pnpm db:push` with DATABASE_URL, or execute " +
+      "`drizzle/0007_eval_artifacts.sql` in Neon’s SQL editor, then redeploy/retry."
+    );
+  }
+  if (lower.includes("foreign key") && lower.includes("film")) {
+    return "filmId must be null or a UUID that exists in films.";
+  }
+  return msg.length > 600 ? `${msg.slice(0, 600)}…` : msg;
+}
+
 /** List recent artifacts (metadata only). Requires admin bearer when secret is set. */
 export async function GET(request: Request) {
   const reject = rejectUnlessEvalArtifactAdmin(request);
   if (reject) return reject;
 
-  const rows = await db
-    .select({
-      id: schema.evalArtifacts.id,
-      kind: schema.evalArtifacts.kind,
-      filmId: schema.evalArtifacts.filmId,
-      label: schema.evalArtifacts.label,
-      createdAt: schema.evalArtifacts.createdAt,
-    })
-    .from(schema.evalArtifacts)
-    .orderBy(desc(schema.evalArtifacts.createdAt))
-    .limit(200);
+  try {
+    const rows = await db
+      .select({
+        id: schema.evalArtifacts.id,
+        kind: schema.evalArtifacts.kind,
+        filmId: schema.evalArtifacts.filmId,
+        label: schema.evalArtifacts.label,
+        createdAt: schema.evalArtifacts.createdAt,
+      })
+      .from(schema.evalArtifacts)
+      .orderBy(desc(schema.evalArtifacts.createdAt))
+      .limit(200);
 
-  return NextResponse.json({ artifacts: rows });
+    return NextResponse.json({ artifacts: rows });
+  } catch (err) {
+    console.error("[GET /api/eval/artifacts]", err);
+    return NextResponse.json({ error: evalArtifactDbErrorMessage(err) }, { status: 500 });
+  }
 }
 
 /** Create artifact; returns retrieval token once. Optional admin bearer when secret is set. */
@@ -96,20 +122,42 @@ export async function POST(request: Request) {
   const rawToken = newRetrievalToken();
   const tokenHash = hashToken(rawToken);
 
-  const [row] = await db
-    .insert(schema.evalArtifacts)
-    .values({
-      kind,
-      filmId,
-      sessionId: sessionId || null,
-      label,
-      payload,
-      tokenHash,
-    })
-    .returning({ id: schema.evalArtifacts.id });
+  let row: { id: string } | undefined;
+  try {
+    const inserted = await db
+      .insert(schema.evalArtifacts)
+      .values({
+        kind,
+        filmId,
+        sessionId: sessionId || null,
+        label,
+        payload,
+        tokenHash,
+      })
+      .returning({ id: schema.evalArtifacts.id });
+
+    row = inserted[0];
+    if (!row) {
+      const [found] = await db
+        .select({ id: schema.evalArtifacts.id })
+        .from(schema.evalArtifacts)
+        .where(eq(schema.evalArtifacts.tokenHash, tokenHash))
+        .limit(1);
+      row = found;
+    }
+  } catch (err) {
+    console.error("[POST /api/eval/artifacts]", err);
+    return NextResponse.json({ error: evalArtifactDbErrorMessage(err) }, { status: 500 });
+  }
 
   if (!row) {
-    return NextResponse.json({ error: "Insert failed." }, { status: 500 });
+    return NextResponse.json(
+      {
+        error:
+          "Insert returned no row id. Check DATABASE_URL, eval_artifacts table, and Neon driver compatibility.",
+      },
+      { status: 500 },
+    );
   }
 
   const base = new URL(request.url);
