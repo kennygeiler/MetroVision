@@ -56,6 +56,65 @@ export function roundTime(t: number): number {
   return Math.round(t * 1000) / 1000;
 }
 
+/** Optional ingest window in seconds (empty = full file). Used by UI + ingest APIs. */
+export function parseIngestTimelineFromBody(body: Record<string, unknown>): {
+  startSec?: number;
+  endSec?: number;
+} {
+  const asOptNumber = (key: string): number | undefined => {
+    const v = body[key];
+    if (v === undefined || v === null || v === "") return undefined;
+    const n = typeof v === "number" ? v : Number(String(v).trim());
+    if (!Number.isFinite(n)) throw new Error(`${key} must be a finite number`);
+    return n;
+  };
+  const startSec = asOptNumber("ingestStartSec");
+  const endSec = asOptNumber("ingestEndSec");
+  if (startSec !== undefined && startSec < 0) {
+    throw new Error("ingestStartSec must be >= 0");
+  }
+  if (endSec !== undefined && !(endSec > 0)) {
+    throw new Error("ingestEndSec must be greater than 0");
+  }
+  if (startSec !== undefined && endSec !== undefined && startSec >= endSec) {
+    throw new Error("ingestStartSec must be less than ingestEndSec");
+  }
+  return { startSec, endSec };
+}
+
+/** Keep only shot intervals overlapping [startSec, endSec]; clamp bounds; renumber indices. */
+export function clipDetectedSplitsToWindow(
+  splits: DetectedSplit[],
+  window: { startSec?: number; endSec?: number },
+): DetectedSplit[] {
+  const { startSec, endSec } = window;
+  if (startSec === undefined && endSec === undefined) {
+    return splits;
+  }
+
+  const sorted = [...splits].sort((a, b) => a.start - b.start);
+  const out: DetectedSplit[] = [];
+
+  for (const s of sorted) {
+    let lo = s.start;
+    let hi = s.end;
+    if (startSec !== undefined) {
+      if (hi <= startSec) continue;
+      lo = Math.max(lo, startSec);
+    }
+    if (endSec !== undefined) {
+      if (lo >= endSec) continue;
+      hi = Math.min(hi, endSec);
+    }
+    lo = roundTime(lo);
+    hi = roundTime(hi);
+    if (hi <= lo) continue;
+    out.push({ start: lo, end: hi, index: out.length });
+  }
+
+  return out;
+}
+
 export async function runCommand(
   command: string,
   args: string[],

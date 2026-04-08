@@ -15,6 +15,8 @@ import {
   processInParallel,
   sanitize,
   roundTime,
+  parseIngestTimelineFromBody,
+  clipDetectedSplitsToWindow,
 } from "@/lib/ingest-pipeline";
 import { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } from "@/lib/tmdb";
 import { planContiguousScenesByNormalizedTitle } from "@/lib/scene-grouping";
@@ -35,6 +37,17 @@ export async function POST(request: Request) {
 
   if (!body.videoPath || !body.filmTitle || !body.director || !body.year) {
     return new Response(JSON.stringify({ error: "Missing required fields" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  let timeline: { startSec?: number; endSec?: number };
+  try {
+    timeline = parseIngestTimelineFromBody(body as Record<string, unknown>);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Invalid timeline fields";
+    return new Response(JSON.stringify({ error: message }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
@@ -78,13 +91,27 @@ export async function POST(request: Request) {
         });
         const t0 = Date.now();
         const inlineCuts = parseInlineBoundaryCuts(body.extraBoundaryCuts);
-        const { splits, ctx: detectCtx } = await detectShotsForIngest(
+        const { splits: rawSplits, ctx: detectCtx } = await detectShotsForIngest(
           videoPath,
           detector,
           inlineCuts ? { inlineExtraBoundaryCuts: inlineCuts } : undefined,
         );
+        const splits = clipDetectedSplitsToWindow(rawSplits, timeline);
+        if (splits.length === 0) {
+          emit({
+            type: "error",
+            message:
+              "No shots fall within the ingest timeline window. Widen the range or leave start/end empty for the full file.",
+          });
+          return;
+        }
         const detectDuration = (Date.now() - t0) / 1000;
-        emit({ type: "step", step: "detect", status: "complete", message: `Found ${splits.length} shots`, duration: detectDuration });
+        const clipped =
+          timeline.startSec !== undefined || timeline.endSec !== undefined;
+        const detectSummary = clipped
+          ? `Found ${splits.length} shots in window (${rawSplits.length} detected before clip)`
+          : `Found ${splits.length} shots`;
+        emit({ type: "step", step: "detect", status: "complete", message: detectSummary, duration: detectDuration });
         emit({ type: "init", totalShots: splits.length, concurrency });
 
         // TMDB lookup

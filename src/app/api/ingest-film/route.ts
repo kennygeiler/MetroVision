@@ -12,6 +12,8 @@ import {
   processInParallel,
   sanitize,
   roundTime,
+  parseIngestTimelineFromBody,
+  clipDetectedSplitsToWindow,
 } from "@/lib/ingest-pipeline";
 import { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } from "@/lib/tmdb";
 import { planContiguousScenesByNormalizedTitle } from "@/lib/scene-grouping";
@@ -34,6 +36,8 @@ type IngestRequest = {
   detector?: "content" | "adaptive";
   /** TransNet / human hard cuts (seconds), merged with METROVISION_EXTRA_BOUNDARY_CUTS_JSON. */
   extraBoundaryCuts?: number[];
+  ingestStartSec?: number;
+  ingestEndSec?: number;
 };
 
 export async function POST(request: Request) {
@@ -52,12 +56,30 @@ export async function POST(request: Request) {
     const filmSlug = `${sanitize(body.filmTitle)}-${body.year}`;
     const videoPath = path.resolve(body.videoPath);
 
+    let timeline: { startSec?: number; endSec?: number };
+    try {
+      timeline = parseIngestTimelineFromBody(body as Record<string, unknown>);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Invalid timeline fields";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
     const inlineCuts = parseInlineBoundaryCuts(body.extraBoundaryCuts);
-    const { splits, ctx: detectCtx } = await detectShotsForIngest(
+    const { splits: rawSplits, ctx: detectCtx } = await detectShotsForIngest(
       videoPath,
       detector,
       inlineCuts ? { inlineExtraBoundaryCuts: inlineCuts } : undefined,
     );
+    const splits = clipDetectedSplitsToWindow(rawSplits, timeline);
+    if (splits.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No shots fall within the ingest timeline window. Widen the range or omit start/end for the full file.",
+        },
+        { status: 400 },
+      );
+    }
 
     // TMDB
     const tmdbId = await searchTmdbMovieId(body.filmTitle, body.year);

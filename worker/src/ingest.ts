@@ -15,6 +15,8 @@ import {
   sanitize,
   roundTime,
   runCommand,
+  parseIngestTimelineFromBody,
+  clipDetectedSplitsToWindow,
 } from "../../src/lib/ingest-pipeline.js";
 import {
   parseInlineBoundaryCuts,
@@ -71,6 +73,15 @@ export async function ingestFilmHandler(req: Request, res: Response) {
     return;
   }
 
+  let timeline: { startSec?: number; endSec?: number };
+  try {
+    timeline = parseIngestTimelineFromBody(body as Record<string, unknown>);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Invalid timeline fields";
+    res.status(400).json({ error: message });
+    return;
+  }
+
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -108,17 +119,30 @@ export async function ingestFilmHandler(req: Request, res: Response) {
     });
     const t0 = Date.now();
     const inlineCuts = parseInlineBoundaryCuts(body.extraBoundaryCuts);
-    const { splits, ctx: detectCtx } = await detectShotsForIngest(
+    const { splits: rawSplits, ctx: detectCtx } = await detectShotsForIngest(
       videoPath,
       detector,
       inlineCuts ? { inlineExtraBoundaryCuts: inlineCuts } : undefined,
     );
-    console.log(`[worker] Detection complete: ${splits.length} shots`);
+    const splits = clipDetectedSplitsToWindow(rawSplits, timeline);
+    if (splits.length === 0) {
+      emit({
+        type: "error",
+        message:
+          "No shots fall within the ingest timeline window. Widen the range or leave start/end empty for the full file.",
+      });
+      return;
+    }
+    console.log(`[worker] Detection complete: ${splits.length} shots (window clip from ${rawSplits.length})`);
+    const clipped =
+      timeline.startSec !== undefined || timeline.endSec !== undefined;
     emit({
       type: "step",
       step: "detect",
       status: "complete",
-      message: `Found ${splits.length} shots`,
+      message: clipped
+        ? `Found ${splits.length} shots in window (${rawSplits.length} detected before clip)`
+        : `Found ${splits.length} shots`,
       duration: (Date.now() - t0) / 1000,
     });
     emit({ type: "init", totalShots: splits.length, concurrency });

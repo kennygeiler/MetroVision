@@ -316,11 +316,26 @@ type PipelineVizProps = {
   concurrency: number;
   detector?: "content" | "adaptive"; // default adaptive (see ingest page)
   workerUrl?: string;
+  /** Inclusive window in seconds; omit for full file (detection still scans whole video). */
+  ingestStartSec?: number;
+  ingestEndSec?: number;
   onComplete?: (result: { filmId: string; shotCount: number; sceneCount: number }) => void;
   onError?: (error: string) => void;
 };
 
-export function PipelineViz({ videoPath, filmTitle, director, year, concurrency, detector = "adaptive", workerUrl = "", onComplete, onError }: PipelineVizProps) {
+export function PipelineViz({
+  videoPath,
+  filmTitle,
+  director,
+  year,
+  concurrency,
+  detector = "adaptive",
+  workerUrl = "",
+  ingestStartSec,
+  ingestEndSec,
+  onComplete,
+  onError,
+}: PipelineVizProps) {
   const [state, setState] = useState<PipelineState>({
     steps: STEP_DEFS.map((s) => ({ ...s, status: "pending" as const })),
     frames: [],
@@ -435,9 +450,13 @@ export function PipelineViz({ videoPath, filmTitle, director, year, concurrency,
         const endpoint = workerUrl ? `${workerUrl}/api/ingest-film/stream` : "/api/ingest-film/stream";
 
         // If using remote worker, send as videoUrl (S3 presigned). If local, send as videoPath.
-        const bodyPayload = workerUrl
-          ? { videoUrl: videoPath, filmTitle, director, year, concurrency, detector }
-          : { videoPath, filmTitle, director, year, concurrency, detector };
+        const bodyPayload = {
+          ...(workerUrl
+            ? { videoUrl: videoPath, filmTitle, director, year, concurrency, detector }
+            : { videoPath, filmTitle, director, year, concurrency, detector }),
+          ...(ingestStartSec !== undefined ? { ingestStartSec } : {}),
+          ...(ingestEndSec !== undefined ? { ingestEndSec } : {}),
+        };
 
         const res = await fetch(endpoint, {
           method: "POST",
@@ -474,7 +493,7 @@ export function PipelineViz({ videoPath, filmTitle, director, year, concurrency,
       }
     })();
     return () => abort.abort();
-  }, [videoPath, filmTitle, director, year, concurrency, detector, workerUrl, handleEvent]);
+  }, [videoPath, filmTitle, director, year, concurrency, detector, workerUrl, ingestStartSec, ingestEndSec, handleEvent]);
 
 
   // Computed

@@ -13,8 +13,15 @@ export default function IngestPage() {
   const [year, setYear] = useState("");
   const [concurrency, setConcurrency] = useState(5);
   const [detector, setDetector] = useState<"content" | "adaptive">("adaptive");
+  const [ingestTimelineStart, setIngestTimelineStart] = useState("");
+  const [ingestTimelineEnd, setIngestTimelineEnd] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoPath, setVideoPath] = useState<string | null>(null);
+  /** Set when a run starts (after upload succeeds) so the pipeline request includes optional timeline bounds. */
+  const [ingestTimelineForRun, setIngestTimelineForRun] = useState<{
+    ingestStartSec?: number;
+    ingestEndSec?: number;
+  } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -24,8 +31,30 @@ export default function IngestPage() {
   async function handleStart() {
     if (!selectedFile || !filmTitle || !director || !year) return;
 
+    let ingestStartSec: number | undefined;
+    let ingestEndSec: number | undefined;
+    if (ingestTimelineStart.trim()) {
+      ingestStartSec = Number(ingestTimelineStart);
+      if (!Number.isFinite(ingestStartSec) || ingestStartSec < 0) {
+        setUploadError("Timeline start must be a non-negative number (seconds).");
+        return;
+      }
+    }
+    if (ingestTimelineEnd.trim()) {
+      ingestEndSec = Number(ingestTimelineEnd);
+      if (!Number.isFinite(ingestEndSec) || !(ingestEndSec > 0)) {
+        setUploadError("Timeline end must be a number greater than 0 (seconds).");
+        return;
+      }
+    }
+    if (ingestStartSec !== undefined && ingestEndSec !== undefined && ingestStartSec >= ingestEndSec) {
+      setUploadError("Timeline start must be less than timeline end.");
+      return;
+    }
+
     setPhase("uploading");
     setUploadError(null);
+    setIngestTimelineForRun(null);
 
     try {
       let resolvedPath: string;
@@ -73,6 +102,7 @@ export default function IngestPage() {
         resolvedPath = path; // local file path
       }
 
+      setIngestTimelineForRun({ ingestStartSec, ingestEndSec });
       setVideoPath(resolvedPath);
       setPhase("processing");
     } catch (error) {
@@ -195,6 +225,41 @@ export default function IngestPage() {
             </div>
           </div>
 
+          {/* Optional timeline window (seconds) — limits which detected shots are extracted/classified/written */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                Timeline start (seconds, optional)
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={ingestTimelineStart}
+                onChange={(e) => setIngestTimelineStart(e.target.value)}
+                disabled={phase !== "form"}
+                placeholder="0 = from beginning"
+                className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-text-accent)]"
+              />
+            </div>
+            <div>
+              <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                Timeline end (seconds, optional)
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={ingestTimelineEnd}
+                onChange={(e) => setIngestTimelineEnd(e.target.value)}
+                disabled={phase !== "form"}
+                placeholder="e.g. 763.222 — empty = full file"
+                className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-text-accent)]"
+              />
+            </div>
+          </div>
+          <p className="font-mono text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
+            Shot detection still runs on the full file; only shots overlapping this window are ingested. Leave both empty to process everything.
+          </p>
+
           {/* Concurrency */}
           <div>
             <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
@@ -288,7 +353,7 @@ export default function IngestPage() {
       ) : null}
 
       {/* Pipeline visualization */}
-      {phase === "processing" && videoPath ? (
+      {phase === "processing" && videoPath && ingestTimelineForRun ? (
         <PipelineViz
           videoPath={videoPath}
           filmTitle={filmTitle}
@@ -297,6 +362,8 @@ export default function IngestPage() {
           concurrency={concurrency}
           detector={detector}
           workerUrl={workerUrl}
+          ingestStartSec={ingestTimelineForRun.ingestStartSec}
+          ingestEndSec={ingestTimelineForRun.ingestEndSec}
         />
       ) : null}
     </div>
