@@ -49,7 +49,11 @@ export function rejectUnlessEvalArtifactAdmin(request: Request): Response | null
   if (!bearerMatchesSecret(request, secret)) {
     return Response.json(
       {
-        error: `Unauthorized. Send Authorization: Bearer <${ENV}>.`,
+        error:
+          `Unauthorized. Paste the exact secret string you set in hosting as ${ENV} into the ` +
+          `"Admin secret (Bearer)" field on /eval/gold-annotate, then save again. ` +
+          `Do not type the env var name or the word Bearer—only the random value. ` +
+          `Or call the API with header Authorization: Bearer <that same value>.`,
       },
       { status: 401 },
     );

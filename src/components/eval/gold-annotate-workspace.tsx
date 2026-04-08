@@ -1182,20 +1182,21 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
             </p>
             <p className="text-xs leading-5 text-[var(--color-text-secondary)]">
               Stores JSON in Postgres. Retrieval uses a secret link with <code className="font-mono text-[10px]">?t=</code>{" "}
-              (save it — the token is not stored server-side). In production, set{" "}
-              <code className="font-mono text-[10px]">METROVISION_EVAL_ARTIFACT_ADMIN_SECRET</code> and paste the same
-              value below for uploads.
+              (save it — the token is not stored server-side). In production, add env{" "}
+              <code className="font-mono text-[10px]">METROVISION_EVAL_ARTIFACT_ADMIN_SECRET</code> with a long random
+              string, redeploy, then paste <strong>that same string</strong> in the field below (not the variable name, not
+              the word <code className="font-mono text-[10px]">Bearer</code>).
             </p>
             <div className="flex flex-col gap-1">
               <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-                Admin secret (Bearer)
+                Same value as env METROVISION_EVAL_ARTIFACT_ADMIN_SECRET
               </label>
               <input
                 type="password"
                 autoComplete="off"
                 value={artifactAdminSecret}
                 onChange={(e) => setArtifactAdminSecret(e.target.value)}
-                placeholder="Required in production when env is set"
+                placeholder="Paste the random secret from Vercel / hosting env"
                 className="h-9 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 font-mono text-xs text-[var(--color-text-primary)]"
               />
               <label className="flex cursor-pointer items-center gap-2 pt-1 font-mono text-[10px] text-[var(--color-text-secondary)]">
