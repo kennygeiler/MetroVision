@@ -23,6 +23,7 @@ function assertNonEmptyColumns(label: string, table: object): boolean {
 
 const tables: [string, object][] = [
   ["films", app.films],
+  ["ingest_runs", app.ingestRuns],
   ["scenes", app.scenes],
   ["shots", app.shots],
   ["shot_metadata", app.shotMetadata],

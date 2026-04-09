@@ -23,6 +23,7 @@
     "../src/lib/pipeline-provenance.ts",
     "../src/lib/boundary-ensemble.ts",
     "../src/lib/ingest-reset.ts",
+    "../src/lib/ingest-run-record.ts",
     "../src/lib/taxonomy.ts",
     "../src/db/schema.ts"
   ]

@@ -286,6 +286,24 @@ export const batchJobs = pgTable("batch_jobs", {
 export type BatchJob = typeof batchJobs.$inferSelect;
 export type NewBatchJob = typeof batchJobs.$inferInsert;
 
+/** Durable record of interactive film ingest (observability, future resume UI). */
+export const ingestRuns = pgTable("ingest_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  filmId: uuid("film_id")
+    .references(() => films.id, { onDelete: "cascade" })
+    .notNull(),
+  status: text("status").notNull().default("running"),
+  stage: text("stage").notNull().default("group"),
+  errorMessage: text("error_message"),
+  shotCount: integer("shot_count"),
+  sceneCount: integer("scene_count"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export type IngestRun = typeof ingestRuns.$inferSelect;
+export type NewIngestRun = typeof ingestRuns.$inferInsert;
+
 // ---------------------------------------------------------------------------
 // M5: RAG Intelligence Layer — Multi-granularity Embeddings + Corpus
 // ---------------------------------------------------------------------------

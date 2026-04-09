@@ -34,6 +34,12 @@ import {
   resolveIngestWorkerProxyTarget,
 } from "@/lib/ingest-worker-delegate";
 import { resetFilmIngestArtifacts } from "@/lib/ingest-reset";
+import {
+  completeIngestRunRecord,
+  createIngestRunRecord,
+  failIngestRunRecord,
+  setIngestRunStage,
+} from "@/lib/ingest-run-record";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,6 +106,7 @@ export async function POST(request: Request) {
       }
 
       let disposeSourceVideo: (() => Promise<void>) | undefined;
+      let ingestRunId: string | null = null;
 
       try {
         // Flush immediately so proxies and the browser SSE parser don’t sit idle until the first await completes.
@@ -284,6 +291,7 @@ export async function POST(request: Request) {
         }
 
         await resetFilmIngestArtifacts(db, filmId);
+        ingestRunId = await createIngestRunRecord(db, filmId);
         emit({ type: "step", step: "group", status: "active", message: "Grouping shots into scenes…" });
 
         const scenePlans = planContiguousScenesByNormalizedTitle(classifications);
@@ -311,6 +319,7 @@ export async function POST(request: Request) {
 
         emit({ type: "step", step: "group", status: "complete", message: `${scenePlans.length} scenes created`, duration: (Date.now() - t4) / 1000 });
 
+        if (ingestRunId) await setIngestRunStage(db, ingestRunId, "write");
         // Step 5: Upload to S3 + Write to DB (parallel)
         emit({ type: "step", step: "write", status: "active", message: "Uploading to S3 + writing to database..." });
         const t5 = Date.now();
@@ -413,9 +422,15 @@ export async function POST(request: Request) {
           .where(eq(schema.films.id, filmId));
 
         emit({ type: "step", step: "write", status: "complete", message: `${shotCount} shots written`, duration: (Date.now() - t5) / 1000 });
+        if (ingestRunId) {
+          await completeIngestRunRecord(db, ingestRunId, shotCount, scenePlans.length);
+        }
         emit({ type: "complete", filmId, filmTitle: filmTitleStr, shotCount, sceneCount: scenePlans.length });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Pipeline failed";
+        if (ingestRunId) {
+          await failIngestRunRecord(db, ingestRunId, message).catch(() => {});
+        }
         emit({ type: "error", message });
       } finally {
         await disposeSourceVideo?.();

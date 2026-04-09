@@ -35,6 +35,12 @@ import {
   initialReviewStatusForShot,
 } from "../../src/lib/pipeline-provenance.js";
 import { resetFilmIngestArtifacts } from "../../src/lib/ingest-reset.js";
+import {
+  completeIngestRunRecord,
+  createIngestRunRecord,
+  failIngestRunRecord,
+  setIngestRunStage,
+} from "../../src/lib/ingest-run-record.js";
 
 async function resolveVideo(videoUrl: string): Promise<string> {
   if (!videoUrl.startsWith("http")) {
@@ -107,6 +113,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
     }
   }
 
+  let ingestRunId: string | null = null;
   try {
     const rawSource = String(body.videoUrl ?? body.videoPath ?? "");
     let sourceHost: string | null = null;
@@ -366,6 +373,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
     }
 
     await resetFilmIngestArtifacts(db, filmId);
+    ingestRunId = await createIngestRunRecord(db, filmId);
     emit({
       type: "step",
       step: "group",
@@ -409,6 +417,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       duration: (Date.now() - t4) / 1000,
     });
 
+    if (ingestRunId) await setIngestRunStage(db, ingestRunId, "write");
     emit({ type: "step", step: "write", status: "active", message: "Upload + database..." });
     const t5 = Date.now();
 
@@ -550,6 +559,9 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       message: `${shotCount} shots written`,
       duration: (Date.now() - t5) / 1000,
     });
+    if (ingestRunId) {
+      await completeIngestRunRecord(db, ingestRunId, shotCount, scenePlans.length);
+    }
     emit({
       type: "complete",
       filmId,
@@ -558,7 +570,11 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       sceneCount: scenePlans.length,
     });
   } catch (error) {
-    emit({ type: "error", message: (error as Error).message || "Pipeline failed" });
+    const msg = (error as Error).message || "Pipeline failed";
+    if (ingestRunId) {
+      await failIngestRunRecord(db, ingestRunId, msg).catch(() => {});
+    }
+    emit({ type: "error", message: msg });
   } finally {
     res.end();
   }

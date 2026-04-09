@@ -23,3 +23,5 @@ Heavy ingest (FFmpeg, PySceneDetect, long SSE) must not rely on Vercel serverles
 ## Re-ingest behavior
 
 When ingest reaches the **group** step, it **deletes** existing `pipeline_jobs` and `batch_jobs` for that film, then **all shots** (cascading metadata, embeddings, verifications, etc.) and **scenes**, then writes fresh rows. The **`films`** row is kept and updated. This avoids orphan scenes from interrupted runs.
+
+Each ingest creates a row in **`ingest_runs`** (`status`, `stage`, counts, errors) for observability. Apply migration `drizzle/0008_ingest_runs.sql` (or `pnpm db:push`) so the table exists before deploying this behavior.
