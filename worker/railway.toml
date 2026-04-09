@@ -11,7 +11,7 @@
 
 [build]
 builder = "RAILPACK"
-buildCommand = "pnpm install --frozen-lockfile"
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter metrovision-worker build"
 watchPatterns = [
   "worker/**",
   "src/lib/**",
