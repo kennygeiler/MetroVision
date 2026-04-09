@@ -4,20 +4,26 @@ Heavy ingest (FFmpeg, PySceneDetect, long SSE) must not rely on Vercel serverles
 
 ## Railway: deploy the real worker (not the Next.js site)
 
-If opening your **Railway public URL** shows the **MetroVision marketing/UI**, that service is running the **wrong app** (e.g. repo root / Next). The ingest worker is the small Express app under **`worker/`** and should show **JSON** at `/`, not HTML.
+If opening your **Railway public URL** shows the **MetroVision marketing/UI**, that service is running the **wrong app** (e.g. default `next start` from repo root). The ingest worker is the Express app under **`worker/`** and should show **JSON** at `/`, not HTML.
 
-Do this **once** for the **worker** service:
+### Shared monorepo (required for this repo)
 
-1. **Settings → Source:** same GitHub repo and branch you use for Vercel (usually `main`).
-2. **Settings → Root Directory:** `worker` (folder that contains `worker/package.json` and `worker/src/server.ts`).
-3. **Settings → Config as Code (optional but recommended):** set the file path to **`worker/railway.toml`** so builds use **Railpack** and `npm start`. There is **no** `worker/Dockerfile` in-repo (it could not see monorepo `src/`). For a manual Docker image from the **repo root**, use **`docker/metrovision-worker.Dockerfile`**.
-4. **Settings → Deploy:** start command should be **`npm start`** (overridden by `railway.toml` if the config file is active).
-5. **Redeploy** the service, then verify in a browser:
+The worker imports **`../../src/lib/*`** and **`../../src/db/*`**. Railway’s **Root Directory = `worker`** mode [only deploys files under `worker/`](https://docs.railway.com/guides/monorepo#deploying-an-isolated-monorepo), so **`src/` never reaches the container** and the app cannot run. Use a **shared** layout instead:
+
+1. **Settings → Source:** same GitHub repo and branch as Vercel (usually `main`).
+2. **Settings → Root Directory:** **leave empty** (repository root — not `worker`).
+3. **Settings → Config as Code:** set the path to **`/worker/railway.toml`** (leading slash; config paths are repo-absolute and do not follow root directory).
+4. **Redeploy.** `worker/railway.toml` sets **`pnpm install --frozen-lockfile`** and **`pnpm --filter metrovision-worker start`** so only the worker process runs, not `next start`.
+5. Verify in a browser:
    - `https://<railway-host>/` → `{"service":"metrovision-worker","status":"ok"}`
    - `https://<railway-host>/health` → JSON with `metrovision-worker`
-6. Copy that origin into Vercel as **`NEXT_PUBLIC_WORKER_URL`** (no path). Redeploy Vercel after changing `NEXT_PUBLIC_*`.
+6. Put that origin in Vercel as **`NEXT_PUBLIC_WORKER_URL`** (no path). Redeploy Vercel after changing `NEXT_PUBLIC_*`.
 
-**Auto-deploy:** ensure this service is set to deploy on pushes to your branch; narrow **watch paths** can skip builds when only `src/app/` changes—`worker/railway.toml` includes `worker/**` and shared `src/lib/**` / `src/db/**` so worker-related commits still trigger a deploy.
+**BuildKit / `node_modules` “cannot replace directory with file”:** keep repo **`.dockerignore`** (excludes `node_modules` / `.pnpm` from COPY contexts). Don’t commit `node_modules` into git.
+
+**Manual Docker image** (full monorepo context): from repo root, **`docker build -f docker/metrovision-worker.Dockerfile .`**
+
+**Watch paths** in `worker/railway.toml` include `worker/**`, `src/lib/**`, and `src/db/**` so ingest-related changes still trigger deploys.
 
 ## Required for reliable prod ingest
 

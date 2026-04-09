@@ -1,18 +1,28 @@
-# MetroVision ingest worker — use this file for the Railway **worker** service only.
+# MetroVision ingest worker — SHARED monorepo: worker imports ../../src/lib and ../../src/db.
 #
-# In Railway: Service → Settings → set **Root Directory** to `worker`, then either:
-# - Set **Config as Code** path to `worker/railway.toml`, or
-# - Leave defaults if Railway picks up this file from the service root.
+# Railway “Root Directory = worker” only uploads worker/ — parent src/ is MISSING → broken deploy.
 #
-# No Dockerfile in worker/ — Railway auto-picks Dockerfile and broke monorepo imports.
-# Optional image: docker build -f docker/metrovision-worker.Dockerfile .
+# Configure the worker service:
+# 1. Root Directory: leave EMPTY (repo root / “/”). Do NOT set “worker”.
+# 2. Config as code file: /worker/railway.toml  (absolute path; config does not follow root dir).
+# 3. Redeploy.
+#
+# Optional Docker image (full context): docker build -f docker/metrovision-worker.Dockerfile .
 
 [build]
 builder = "RAILPACK"
-watchPatterns = ["worker/**", "src/lib/**", "src/db/**", "src/types/**"]
+buildCommand = "pnpm install --frozen-lockfile"
+watchPatterns = [
+  "worker/**",
+  "src/lib/**",
+  "src/db/**",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+]
 
 [deploy]
-startCommand = "npm start"
+startCommand = "pnpm --filter metrovision-worker start"
 healthcheckPath = "/health"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"

@@ -1,0 +1,28 @@
+# BuildKit/Railpack: never COPY host or prior-layer node trees into an image that runs npm/pnpm install.
+# Fixes "cannot replace to directory .../node_modules/@aws-sdk/client-s3 with file" when context is polluted.
+
+node_modules
+**/node_modules
+.pnpm-store
+**/.pnpm
+.pnpm-debug.log*
+
+.next
+.git
+dist
+worker/dist
+coverage
+.turbo
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+# Large / irrelevant for worker-oriented images
+**/.claude
+**/.cursor
+**/.kiln
+**/.planning
+gold-*.json
+*.png
