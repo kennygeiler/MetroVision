@@ -203,6 +203,15 @@ export async function runCommand(
   args: string[],
   spawnEnv?: NodeJS.ProcessEnv,
 ): Promise<{ stdout: string; stderr: string }> {
+  const summarize = (text: string): string => {
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return "";
+    const tail = lines.slice(-8).join("\n");
+    return tail.length > 2000 ? tail.slice(-2000) : tail;
+  };
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, spawnEnv ? { env: spawnEnv } : undefined);
     let stdout = "";
@@ -213,7 +222,21 @@ export async function runCommand(
       settled = true;
       if (err) reject(err);
       else if (code === 0) resolve({ stdout, stderr });
-      else reject(new Error(stderr || `${command} exited with code ${code}`));
+      else {
+        const cmd = `${command} ${args.join(" ")}`.trim();
+        const stderrTail = summarize(stderr);
+        const stdoutTail = summarize(stdout);
+        const details = [stderrTail, stdoutTail]
+          .filter(Boolean)
+          .join("\n---\n");
+        reject(
+          new Error(
+            details
+              ? `${command} exited with code ${code}.\nCommand: ${cmd}\n${details}`
+              : `${command} exited with code ${code}.\nCommand: ${cmd}`,
+          ),
+        );
+      }
     };
     proc.stdout.on("data", (d) => (stdout += d.toString()));
     proc.stderr.on("data", (d) => (stderr += d.toString()));
