@@ -6,31 +6,35 @@ import { eq } from "drizzle-orm";
 import type { Request, Response } from "express";
 
 import { db, schema } from "./db.js";
-import { getFfmpegPath, probeVideoDurationSec } from "../../src/lib/ffmpeg-bin.js";
+import * as ffmpegBinModule from "../../src/lib/ffmpeg-bin.js";
 import * as ingestPipelineModule from "../../src/lib/ingest-pipeline.js";
 import * as pipelineProvenance from "../../src/lib/pipeline-provenance.js";
-import {
-  parseInlineBoundaryCuts,
-  shouldRunPysceneEnsemble,
-} from "../../src/lib/boundary-ensemble.js";
-import {
-  searchTmdbMovieId,
-  fetchTmdbMovieDetails,
-  fetchTmdbCast,
-} from "../../src/lib/tmdb.js";
-import { generateTextEmbedding } from "../../src/lib/openai-embedding.js";
-import { planContiguousScenesByNormalizedTitle } from "../../src/lib/scene-grouping.js";
-import { resetFilmIngestArtifacts } from "../../src/lib/ingest-reset.js";
-import {
-  completeIngestRunRecord,
-  createIngestRunRecord,
-  failIngestRunRecord,
-  setIngestRunStage,
-} from "../../src/lib/ingest-run-record.js";
+import * as boundaryEnsembleModule from "../../src/lib/boundary-ensemble.js";
+import * as tmdbModule from "../../src/lib/tmdb.js";
+import * as openaiEmbeddingModule from "../../src/lib/openai-embedding.js";
+import * as sceneGroupingModule from "../../src/lib/scene-grouping.js";
+import * as ingestResetModule from "../../src/lib/ingest-reset.js";
+import * as ingestRunRecordModule from "../../src/lib/ingest-run-record.js";
 
-const { buildIngestProvenance, initialReviewStatusForShot } = pipelineProvenance;
+const ffmpegBin = (ffmpegBinModule as { default?: typeof ffmpegBinModule }).default
+  ?? ffmpegBinModule;
 const ingestPipeline = (ingestPipelineModule as { default?: typeof ingestPipelineModule }).default
   ?? ingestPipelineModule;
+const provenance = (pipelineProvenance as { default?: typeof pipelineProvenance }).default
+  ?? pipelineProvenance;
+const boundaryEnsemble = (boundaryEnsembleModule as { default?: typeof boundaryEnsembleModule })
+  .default ?? boundaryEnsembleModule;
+const tmdb = (tmdbModule as { default?: typeof tmdbModule }).default ?? tmdbModule;
+const openaiEmbedding = (openaiEmbeddingModule as { default?: typeof openaiEmbeddingModule })
+  .default ?? openaiEmbeddingModule;
+const sceneGrouping = (sceneGroupingModule as { default?: typeof sceneGroupingModule }).default
+  ?? sceneGroupingModule;
+const ingestReset = (ingestResetModule as { default?: typeof ingestResetModule }).default
+  ?? ingestResetModule;
+const ingestRunRecord = (ingestRunRecordModule as { default?: typeof ingestRunRecordModule })
+  .default ?? ingestRunRecordModule;
+const { getFfmpegPath, probeVideoDurationSec } = ffmpegBin;
+const { buildIngestProvenance, initialReviewStatusForShot } = provenance;
 const {
   detectShotsForIngest,
   classifyShot,
@@ -47,6 +51,17 @@ const {
   offsetDetectedSplits,
   resolveIngestAbsoluteWindow,
 } = ingestPipeline;
+const { parseInlineBoundaryCuts, shouldRunPysceneEnsemble } = boundaryEnsemble;
+const { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } = tmdb;
+const { generateTextEmbedding } = openaiEmbedding;
+const { planContiguousScenesByNormalizedTitle } = sceneGrouping;
+const { resetFilmIngestArtifacts } = ingestReset;
+const {
+  completeIngestRunRecord,
+  createIngestRunRecord,
+  failIngestRunRecord,
+  setIngestRunStage,
+} = ingestRunRecord;
 
 async function resolveVideo(videoUrl: string): Promise<string> {
   if (!videoUrl.startsWith("http")) {
