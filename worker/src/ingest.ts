@@ -22,9 +22,8 @@ import {
   prepareIngestTimelineAnalysisMedia,
   offsetDetectedSplits,
   resolveIngestAbsoluteWindow,
-  buildIngestProvenance,
-  initialReviewStatusForShot,
 } from "../../src/lib/ingest-pipeline.js";
+import * as pipelineProvenance from "../../src/lib/pipeline-provenance.js";
 import {
   parseInlineBoundaryCuts,
   shouldRunPysceneEnsemble,
@@ -43,6 +42,8 @@ import {
   failIngestRunRecord,
   setIngestRunStage,
 } from "../../src/lib/ingest-run-record.js";
+
+const { buildIngestProvenance, initialReviewStatusForShot } = pipelineProvenance;
 
 async function resolveVideo(videoUrl: string): Promise<string> {
   if (!videoUrl.startsWith("http")) {

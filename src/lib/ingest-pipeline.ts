@@ -1157,5 +1157,3 @@ async function classifyShotWithGemini(
   }
 }
 
-/** Worker imports `ingest-pipeline.js` only — re-export so we do not load `pipeline-provenance` via a second specifier (tsx/Node can treat `*.js` vs bare as different modules). */
-export { buildIngestProvenance, initialReviewStatusForShot } from "./pipeline-provenance";
