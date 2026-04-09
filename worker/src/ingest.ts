@@ -447,6 +447,16 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       },
     );
     const classifications = classifyResults.map((r) => r.classification);
+    const fallbackCount = classifyResults.filter((r) => r.usedFallback).length;
+    const geminiOk = splits.length - fallbackCount;
+    console.log(
+      `[worker] Classification complete: ${geminiOk} Gemini, ${fallbackCount} template fallback (see classification_source in DB)`,
+    );
+    if (fallbackCount > 0) {
+      console.warn(
+        `[worker] ${fallbackCount}/${splits.length} shots used fallback — Gemini returned no parseable JSON (or API error before parse). Check Railway GOOGLE_API_KEY, billing/quota, GEMINI_CLASSIFY_MODEL / GEMINI_ADJUDICATE_MODEL.`,
+      );
+    }
     emit({
       type: "step",
       step: "classify",
