@@ -100,7 +100,48 @@ Record **`ingest_provenance`** (`pipeline_version`, `taxonomy_hash`, **`boundary
 
 ---
 
-## 5. References
+## 5. Second boundary eval — run 2 (logged)
+
+**Setting:** Same gold (**every hard cut**) and **`toleranceSec: 0.5`** as run 1, after a configuration pass (e.g. merge gap, ensemble, or detector tweaks — record the exact `ingest_provenance.boundaryDetector` + env in your lab notes).
+
+**Counts**
+
+| Metric | Value |
+|--------|------:|
+| True positives | 29 |
+| False positives | 7 |
+| False negatives | 42 |
+| Precision | 0.806 |
+| Recall | 0.408 |
+| F1 | 0.542 |
+
+**Delta vs run 1**
+
+| Metric | Run 1 | Run 2 | Δ |
+|--------|------:|------:|---|
+| TP | 28 | 29 | +1 |
+| FP | 9 | 7 | −2 |
+| FN | 43 | 42 | −1 |
+| Precision | 0.757 | 0.806 | +0.05 |
+| Recall | 0.394 | 0.408 | +0.014 |
+| F1 | 0.519 | 0.542 | +0.023 |
+
+**Interpretation**
+
+- **Precision improved more than recall:** two fewer unmatched predictions and one more hit; the system is slightly **cleaner** and **marginally better at finding** hard cuts.
+- **Recall remains the story:** ~**41%** of gold cuts are still missed (**42 FN**). Matched pairs in the sample stayed **within ~0.5s**, so **timing** is fine where cuts exist; you still need **more candidate boundaries** or **less merging**, not better alignment tuning alone.
+
+### Recommendation (prioritized for run 3)
+
+1. **Add a second cut source for recall** — Run **TransNet** (or equivalent) offline, merge cut times via **`extraBoundaryCuts`** on ingest (or **`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`** on the worker). This directly targets **false negatives** on dense hard-cut gold without fighting PyScene’s blind spots alone.
+2. **If merge gap was only slightly lowered** — Try another step down on **`METROVISION_BOUNDARY_MERGE_GAP_SEC`** (e.g. toward **0.18–0.22**) and re-eval; stop if **FP** climbs faster than **FN** falls.
+3. **Confirm dual PyScene is live** — `ingest_provenance.boundaryDetector` should read **`pyscenedetect_ensemble_pyscene`** (not **`ffmpeg_scene+ensemble_fallback`**). If you see the fallback label, fix **`scenedetect`** on the worker before interpreting further boundary tweaks.
+4. **If stuck on PyScene-only** — Temporarily set **`METROVISION_FFMPEG_SCENE_SAMPLE_FPS=full`** (or **`0`**) **only** if the worker is on FFmpeg-scene path or hybrid; expect longer detect time; re-measure F1.
+5. **Keep a one-line eval ledger** — For each run, append: date, **`boundaryDetector`**, **`METROVISION_BOUNDARY_MERGE_GAP_SEC`**, whether **`extraBoundaryCuts`** were used, and **P/R/F1** so run 3 is comparable to runs 1–2.
+
+---
+
+## 6. References
 
 - `src/lib/boundary-ensemble.ts` — merge gap, extra cuts file, detector mode string.
 - `src/lib/ingest-pipeline.ts` — `detectShotsForIngest`, `detectShotsEnsemble`, FFmpeg scene helpers.
