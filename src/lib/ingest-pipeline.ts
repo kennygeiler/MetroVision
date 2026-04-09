@@ -26,6 +26,43 @@ import {
   getGeminiClassifyModel,
 } from "./pipeline-provenance";
 
+/** Budget for `[classify] …` diagnostics per ingest batch (call `beginClassificationDiagBatch` once before classifying). */
+let classificationParseDiagRemaining = 0;
+
+/** Call once per film ingest before parallel `classifyShot` work so parse-failure logs are capped per run, not per shot. */
+export function beginClassificationDiagBatch(): void {
+  classificationParseDiagRemaining = 12;
+}
+
+function logClassificationParseFailure(message: string): void {
+  if (classificationParseDiagRemaining <= 0) return;
+  classificationParseDiagRemaining -= 1;
+  console.warn(`[classify] ${message}`);
+}
+
+function summarizeGeminiClassificationFailure(result: unknown): string {
+  if (!result || typeof result !== "object") return "response_not_object";
+  const r = result as {
+    promptFeedback?: { blockReason?: string };
+    candidates?: unknown[];
+  };
+  if (r.promptFeedback?.blockReason) {
+    return `prompt_blocked:${r.promptFeedback.blockReason}`;
+  }
+  if (!r.candidates?.length) return "no_candidates";
+  const c0 = r.candidates[0] as {
+    finishReason?: string;
+    content?: { parts?: Array<{ text?: string }> };
+  };
+  const fr = c0.finishReason ?? "(unset)";
+  let text = "";
+  for (const p of c0.content?.parts ?? []) {
+    if (p?.text) text += p.text;
+  }
+  const preview = text.trim().replace(/\s+/g, " ").slice(0, 240);
+  return `finish=${fr} textLen=${text.length} preview=${preview || "(empty)"}`;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -991,7 +1028,8 @@ function parseGeminiClassificationJson(result: unknown): ClassifiedShot | null {
   if (
     candidate.finishReason &&
     candidate.finishReason !== "STOP" &&
-    candidate.finishReason !== "MAX_TOKENS"
+    candidate.finishReason !== "MAX_TOKENS" &&
+    candidate.finishReason !== "FINISH_REASON_UNSPECIFIED"
   ) {
     return null;
   }
@@ -1054,7 +1092,8 @@ async function geminiGenerateClassification(
         ],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 1024,
+          /** Full composition JSON is large; 1024 often truncates mid-object → silent fallbacks. */
+          maxOutputTokens: 8192,
           responseMimeType: "application/json",
         },
       }),
@@ -1077,7 +1116,13 @@ async function geminiGenerateClassification(
     );
     return null;
   }
-  return parseGeminiClassificationJson(result);
+  const parsed = parseGeminiClassificationJson(result);
+  if (!parsed) {
+    logClassificationParseFailure(
+      `Unparseable classification JSON — ${summarizeGeminiClassificationFailure(result)}`,
+    );
+  }
+  return parsed;
 }
 
 async function classifyShotWithGemini(

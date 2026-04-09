@@ -17,6 +17,7 @@ import {
   clipDetectedSplitsToWindow,
   prepareIngestTimelineAnalysisMedia,
   offsetDetectedSplits,
+  beginClassificationDiagBatch,
 } from "@/lib/ingest-pipeline";
 import { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } from "@/lib/tmdb";
 import { planContiguousScenesByNormalizedTitle } from "@/lib/scene-grouping";
@@ -114,6 +115,7 @@ export async function POST(request: Request) {
     });
 
     const classifyParallelism = resolveGeminiClassifyParallelism(concurrency);
+    beginClassificationDiagBatch();
     const classifyResults = await processInParallel(splits, classifyParallelism, async (split) => {
       return classifyShot(videoPath, split, body.filmTitle, body.director, body.year, castList);
     });

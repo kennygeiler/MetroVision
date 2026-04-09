@@ -21,6 +21,7 @@ import {
   resolveIngestVideoToLocalPath,
   shouldStreamRemoteIngestInput,
   ingestSourceDisplayFileName,
+  beginClassificationDiagBatch,
 } from "@/lib/ingest-pipeline";
 import { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } from "@/lib/tmdb";
 import { planContiguousScenesByNormalizedTitle } from "@/lib/scene-grouping";
@@ -279,6 +280,7 @@ export async function POST(request: Request) {
         // Step 3: Classify with Gemini (parallel, higher concurrency)
         // Gemini 2.5 Flash supports high RPM — use up to 15 concurrent
         const classifyConcurrency = resolveGeminiClassifyParallelism(concurrency);
+        beginClassificationDiagBatch();
         emit({ type: "step", step: "classify", status: "active", message: `Classifying ${splits.length} shots (${classifyConcurrency} parallel)...` });
         const t3 = Date.now();
         const classifyResults = await processInParallel(splits, classifyConcurrency, async (split, worker) => {

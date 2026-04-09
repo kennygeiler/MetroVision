@@ -53,6 +53,7 @@ const {
   prepareIngestTimelineAnalysisMedia,
   offsetDetectedSplits,
   resolveIngestAbsoluteWindow,
+  beginClassificationDiagBatch,
 } = ingestPipeline;
 const { parseInlineBoundaryCuts, shouldRunPysceneEnsemble } = boundaryEnsemble;
 const { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } = tmdb;
@@ -404,6 +405,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
     });
 
     const classifyConcurrency = resolveGeminiClassifyParallelism(concurrency);
+    beginClassificationDiagBatch();
     emit({
       type: "step",
       step: "classify",
