@@ -34,6 +34,7 @@ import {
   buildIngestProvenance,
   initialReviewStatusForShot,
 } from "../../src/lib/pipeline-provenance.js";
+import { resetFilmIngestArtifacts } from "../../src/lib/ingest-reset.js";
 
 async function resolveVideo(videoUrl: string): Promise<string> {
   if (!videoUrl.startsWith("http")) {
@@ -318,7 +319,12 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       duration: (Date.now() - t3) / 1000,
     });
 
-    emit({ type: "step", step: "group", status: "active", message: "Grouping scenes..." });
+    emit({
+      type: "step",
+      step: "group",
+      status: "active",
+      message: "Resolving film record and replacing any previous ingest data…",
+    });
     const t4 = Date.now();
 
     const [existingFilm] = await db
@@ -358,6 +364,14 @@ export async function ingestFilmHandler(req: Request, res: Response) {
         .returning({ id: schema.films.id });
       filmId = ins.id;
     }
+
+    await resetFilmIngestArtifacts(db, filmId);
+    emit({
+      type: "step",
+      step: "group",
+      status: "active",
+      message: "Grouping shots into scenes…",
+    });
 
     const scenePlans = planContiguousScenesByNormalizedTitle(classifications);
     const sceneIdByShotIndex = new Map<number, string>();

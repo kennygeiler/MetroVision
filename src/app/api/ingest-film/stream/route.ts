@@ -33,6 +33,7 @@ import {
   forwardIngestFilmStreamToWorker,
   resolveIngestWorkerProxyTarget,
 } from "@/lib/ingest-worker-delegate";
+import { resetFilmIngestArtifacts } from "@/lib/ingest-reset";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -251,7 +252,12 @@ export async function POST(request: Request) {
         emit({ type: "step", step: "classify", status: "complete", message: `${splits.length} shots classified`, duration: (Date.now() - t3) / 1000 });
 
         // Step 4: Group scenes
-        emit({ type: "step", step: "group", status: "active", message: "Grouping shots into scenes..." });
+        emit({
+          type: "step",
+          step: "group",
+          status: "active",
+          message: "Resolving film record and replacing any previous ingest data…",
+        });
         const t4 = Date.now();
 
         // Upsert film
@@ -276,6 +282,9 @@ export async function POST(request: Request) {
           }).returning({ id: schema.films.id });
           filmId = inserted.id;
         }
+
+        await resetFilmIngestArtifacts(db, filmId);
+        emit({ type: "step", step: "group", status: "active", message: "Grouping shots into scenes…" });
 
         const scenePlans = planContiguousScenesByNormalizedTitle(classifications);
         const sceneIdByShotIndex = new Map<number, string>();

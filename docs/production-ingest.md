@@ -19,3 +19,7 @@ Heavy ingest (FFmpeg, PySceneDetect, long SSE) must not rely on Vercel serverles
 
 - **Neon + S3 + Gemini** must be present in both Vercel and the worker env where ingest runs (worker needs `DATABASE_URL`, keys, etc.).
 - **Idle timeouts:** the app emits periodic SSE during prep/detect so proxies are less likely to close the stream; if drops persist, confirm worker logs and Vercel function duration limits.
+
+## Re-ingest behavior
+
+When ingest reaches the **group** step, it **deletes** existing `pipeline_jobs` and `batch_jobs` for that film, then **all shots** (cascading metadata, embeddings, verifications, etc.) and **scenes**, then writes fresh rows. The **`films`** row is kept and updated. This avoids orphan scenes from interrupted runs.
