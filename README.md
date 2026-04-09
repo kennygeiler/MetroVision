@@ -144,6 +144,8 @@ SCENEDETECT_PATH=            # Path to scenedetect binary (pipeline)
 
 See `AGENTS.md` for optional production gates (`METROVISION_LLM_GATE_SECRET`, etc.).
 
+**Production ingest (Vercel + worker URL, health checks):** [docs/production-ingest.md](docs/production-ingest.md).
+
 ## Pipeline Usage
 
 ```bash
