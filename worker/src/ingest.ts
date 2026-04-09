@@ -22,6 +22,8 @@ import {
   prepareIngestTimelineAnalysisMedia,
   offsetDetectedSplits,
   resolveIngestAbsoluteWindow,
+  buildIngestProvenance,
+  initialReviewStatusForShot,
 } from "../../src/lib/ingest-pipeline.js";
 import {
   parseInlineBoundaryCuts,
@@ -34,10 +36,6 @@ import {
 } from "../../src/lib/tmdb.js";
 import { generateTextEmbedding } from "../../src/lib/openai-embedding.js";
 import { planContiguousScenesByNormalizedTitle } from "../../src/lib/scene-grouping.js";
-import {
-  buildIngestProvenance,
-  initialReviewStatusForShot,
-} from "../../src/lib/pipeline-provenance.js";
 import { resetFilmIngestArtifacts } from "../../src/lib/ingest-reset.js";
 import {
   completeIngestRunRecord,
