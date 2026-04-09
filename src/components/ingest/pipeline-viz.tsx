@@ -93,6 +93,29 @@ function shortFramingLabel(slug: string): string {
   return full.length > 12 ? `${full.slice(0, 11)}\u2026` : full;
 }
 
+/**
+ * Normalize classifier output so variants like "tracking_shot", "Tracking Shot", "TRACKING SHOT"
+ * share one legend chip. (Values may still be legacy movement vocabulary; FramingSlug is only for lookup.)
+ */
+function normalizeClassifierFramingKey(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function dedupeClassifierFramingLabels(frames: FrameState[]): { key: string; display: string; colorSlug: string }[] {
+  const map = new Map<string, { display: string; colorSlug: string }>();
+  for (const f of frames) {
+    const raw = f.movementType;
+    if (!raw) continue;
+    const key = normalizeClassifierFramingKey(raw);
+    if (!key) continue;
+    const display = getFramingDisplayName(key as FramingSlug);
+    if (!map.has(key)) map.set(key, { display, colorSlug: key });
+  }
+  return Array.from(map.entries())
+    .map(([k, v]) => ({ key: k, display: v.display, colorSlug: v.colorSlug }))
+    .sort((a, b) => a.display.localeCompare(b.display));
+}
+
 // Distinct worker colors
 const WORKER_COLORS = [
   "#5cb8d6", "#d6a05c", "#9b7cd6", "#5cd69b", "#d65c8e",
@@ -134,9 +157,35 @@ If it happens immediately: DevTools → Network → retry ingest → inspect POS
 
 If it happens after Detect starts: the connection may have been reset (timeout, sleep, mobile handoff). On Vercel set INGEST_WORKER_URL (or NEXT_PUBLIC_WORKER_URL) to your TS worker origin; check Vercel and worker logs.`;
 
-const INGEST_STREAM_END_TROUBLESHOOT = `On Vercel, set INGEST_WORKER_URL or NEXT_PUBLIC_WORKER_URL to your TS worker base URL so Next proxies to a long-running process.
+const INGEST_STREAM_END_TROUBLESHOOT = `The HTTP stream from the ingest endpoint closed before the server sent a final success event. That usually means a timeout, proxy idle limit, worker crash/OOM/restart, network drop, or the browser tab/machine sleeping—not an S3 problem.
 
-Without a worker, narrow the timeline window or use a shorter test clip.`;
+If you already use a TS worker: check that service’s logs around the disconnect time; confirm the host allows long requests (no low proxy idle timeout); try lower concurrency to cut memory and API pressure; keep this tab focused and the machine awake.
+
+On Vercel: set INGEST_WORKER_URL or NEXT_PUBLIC_WORKER_URL so ingest proxies to your TS worker. If you force inline ingest (METROVISION_DELEGATE_INGEST=0), long films can still hit serverless limits—narrow ingestStartSec/ingestEndSec or use a short test clip.
+
+You can start a new ingest run; film-level reset will replace prior scene/shot rows for that title when grouping runs.`;
+
+async function fetchIngestLiveDbSnapshot(filmTitle: string, year: number): Promise<DbSnapshot | null> {
+  try {
+    const lr = await fetch(
+      `/api/ingest-film/live-status?title=${encodeURIComponent(filmTitle)}&year=${encodeURIComponent(String(year))}`,
+    );
+    if (!lr.ok) return null;
+    const d = (await lr.json()) as {
+      found?: boolean;
+      filmId?: string;
+      shotCount?: number;
+      sceneCount?: number;
+    };
+    if (!d.found || typeof d.filmId !== "string") return null;
+    const shotCount = typeof d.shotCount === "number" ? d.shotCount : 0;
+    const sceneCount = typeof d.sceneCount === "number" ? d.sceneCount : 0;
+    if (shotCount <= 0) return null;
+    return { filmId: d.filmId, shotCount, sceneCount };
+  } catch {
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -639,10 +688,12 @@ export function PipelineViz({
             }
           }
         }
+        const freshDb = await fetchIngestLiveDbSnapshot(filmTitle, year);
         setState((s) => {
           if (s.result || s.error) return s;
           return {
             ...s,
+            ...(freshDb ? { dbSnapshot: freshDb } : {}),
             error: appendIngestErrorDetails(
               "Connection closed before ingest finished (timeout, worker restart, or network).",
               INGEST_STREAM_END_TROUBLESHOOT,
@@ -656,7 +707,12 @@ export function PipelineViz({
         if (/failed to fetch|network\s*error|load failed|networkerror|connection.*refused|aborted/i.test(message)) {
           message = appendIngestErrorDetails(message, INGEST_NETWORK_TROUBLESHOOT);
         }
-        setState((s) => ({ ...s, error: message }));
+        const netDb = await fetchIngestLiveDbSnapshot(filmTitle, year);
+        setState((s) => ({
+          ...s,
+          ...(netDb ? { dbSnapshot: netDb } : {}),
+          error: message,
+        }));
       }
     })();
     return () => abort.abort();
@@ -667,7 +723,7 @@ export function PipelineViz({
   const extracted = state.frames.filter((f) => f.extract === "complete").length;
   const classified = state.frames.filter((f) => f.classify === "complete").length;
   const written = state.frames.filter((f) => f.write === "complete").length;
-  const discoveredTypes = new Set(state.frames.map((f) => f.movementType).filter(Boolean));
+  const dedupedClassifierLabels = dedupeClassifierFramingLabels(state.frames);
   const discoveredScenes = new Set(state.frames.map((f) => f.sceneTitle).filter(Boolean));
   const activeStep = rightmostActiveStep(state.steps);
   const isDetecting = activeStep?.id === "detect" || (activeStep?.id === "lookup" && state.totalShots === 0);
@@ -690,6 +746,11 @@ export function PipelineViz({
 
   const errorPlainParts =
     state.error && !errorDbPartial ? splitIngestErrorDisplay(state.error) : null;
+
+  const errorPartialDetailsText =
+    state.error && errorDbPartial
+      ? splitIngestErrorDisplay(state.error).details || state.error.trim()
+      : null;
 
   const overallPct = state.totalShots > 0
     ? ((extracted / state.totalShots) * 30 + (classified / state.totalShots) * 50 + (written / state.totalShots) * 20)
@@ -991,13 +1052,13 @@ export function PipelineViz({
             <StatCounter label="Scenes" value={discoveredScenes.size} />
             <StatCounter label="Written" value={written} total={state.totalShots} color="#5cd69b" />
           </div>
-          {discoveredTypes.size > 0 ? (
+          {dedupedClassifierLabels.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {Array.from(discoveredTypes).sort().map((mt) => (
-                  <div key={mt} className="flex items-center gap-1.5">
-                  <div className="h-2 w-2 rounded-full" style={{ backgroundColor: framingChipColor(mt!) }} />
+              {dedupedClassifierLabels.map(({ key, display, colorSlug }) => (
+                <div key={key} className="flex items-center gap-1.5">
+                  <div className="h-2 w-2 rounded-full" style={{ backgroundColor: framingChipColor(colorSlug) }} />
                   <span className="font-mono text-[8px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-                    {getFramingDisplayName(mt! as FramingSlug)}
+                    {display}
                   </span>
                 </div>
               ))}
@@ -1012,7 +1073,7 @@ export function PipelineViz({
             <div className="mt-4 grid grid-cols-3 gap-4">
               <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{state.result.shotCount}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Shots analyzed</p></div>
               <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{state.result.sceneCount}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Scenes discovered</p></div>
-              <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{discoveredTypes.size}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Framing types</p></div>
+              <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{dedupedClassifierLabels.length}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Distinct composition labels</p></div>
             </div>
             <div className="mt-4 flex flex-wrap gap-4 font-mono text-[10px] text-[var(--color-text-tertiary)]">
               {state.steps.filter((s) => s.duration).map((s) => <span key={s.id}>{s.label}: {formatDuration(s.duration!)}</span>)}
@@ -1062,10 +1123,10 @@ export function PipelineViz({
                 </Link>
                 <details className="mt-4">
                   <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-                    Technical details and troubleshooting
+                    Troubleshooting (worker URL, clips, network)
                   </summary>
                   <p className="mt-3 whitespace-pre-line text-xs leading-relaxed text-[var(--color-text-tertiary)]">
-                    {state.error}
+                    {errorPartialDetailsText}
                   </p>
                 </details>
               </>

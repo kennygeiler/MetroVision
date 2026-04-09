@@ -14,6 +14,8 @@ import {
   roundTime,
   parseIngestTimelineFromBody,
   clipDetectedSplitsToWindow,
+  prepareIngestTimelineAnalysisMedia,
+  offsetDetectedSplits,
 } from "@/lib/ingest-pipeline";
 import { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } from "@/lib/tmdb";
 import { planContiguousScenesByNormalizedTitle } from "@/lib/scene-grouping";
@@ -69,11 +71,26 @@ export async function POST(request: Request) {
     }
 
     const inlineCuts = parseInlineBoundaryCuts(body.extraBoundaryCuts);
-    const { splits: rawSplits, ctx: detectCtx } = await detectShotsForIngest(
-      videoPath,
-      detector,
-      inlineCuts ? { inlineExtraBoundaryCuts: inlineCuts } : undefined,
-    );
+    const timelinePlan = await prepareIngestTimelineAnalysisMedia(videoPath, timeline);
+    let rawSplits: Awaited<ReturnType<typeof detectShotsForIngest>>["splits"];
+    let detectCtx: Awaited<ReturnType<typeof detectShotsForIngest>>["ctx"];
+    try {
+      const r = await detectShotsForIngest(
+        timelinePlan.analysisPath,
+        detector,
+        {
+          inlineExtraBoundaryCuts: inlineCuts,
+          segmentFilmWindow: timelinePlan.segmentFilmWindow,
+        },
+      );
+      rawSplits = r.splits;
+      detectCtx = r.ctx;
+      if (timelinePlan.splitTimeOffsetSec !== 0) {
+        rawSplits = offsetDetectedSplits(rawSplits, timelinePlan.splitTimeOffsetSec);
+      }
+    } finally {
+      await timelinePlan.disposeSegment?.();
+    }
     const splits = clipDetectedSplitsToWindow(rawSplits, timeline);
     if (splits.length === 0) {
       return NextResponse.json(

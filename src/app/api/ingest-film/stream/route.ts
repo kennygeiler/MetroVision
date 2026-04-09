@@ -15,6 +15,8 @@ import {
   roundTime,
   parseIngestTimelineFromBody,
   clipDetectedSplitsToWindow,
+  prepareIngestTimelineAnalysisMedia,
+  offsetDetectedSplits,
   resolveIngestVideoToLocalPath,
   shouldStreamRemoteIngestInput,
   ingestSourceDisplayFileName,
@@ -162,10 +164,10 @@ export async function POST(request: Request) {
           });
         }, 8_000);
 
-        let videoPath: string;
+        let sourceVideoPath: string;
         try {
           const resolved = await resolveIngestVideoToLocalPath(rawInput);
-          videoPath = resolved.localPath;
+          sourceVideoPath = resolved.localPath;
           disposeSourceVideo = resolved.dispose;
         } catch (e) {
           const message = e instanceof Error ? e.message : "Could not open or download source video";
@@ -175,7 +177,13 @@ export async function POST(request: Request) {
           clearInterval(prepHeartbeat);
         }
 
-        // Step 1: Detect shots
+        const timelinePlan = await prepareIngestTimelineAnalysisMedia(sourceVideoPath, timeline);
+        const segmentHint =
+          timelinePlan.segmentFilmWindow != null
+            ? ` (segment ${timelinePlan.segmentFilmWindow.absStart.toFixed(1)}–${timelinePlan.segmentFilmWindow.absEnd.toFixed(1)}s only)`
+            : "";
+
+        // Step 1: Detect shots (on segment file when timeline bounds are set)
         const detectorLabel =
           detector === "adaptive" ? "Adaptive (default, research)" : "Content (faster, hard cuts)";
         const detectMessage = shouldRunPysceneEnsemble()
@@ -189,7 +197,7 @@ export async function POST(request: Request) {
           type: "step",
           step: "detect",
           status: "active",
-          message: `Analyzing shot boundaries — ${detectMessage}.${detectHint}`,
+          message: `Analyzing shot boundaries${segmentHint} — ${detectMessage}.${detectHint}`,
         });
         const t0 = Date.now();
         const inlineCuts = parseInlineBoundaryCuts(body.extraBoundaryCuts);
@@ -199,21 +207,28 @@ export async function POST(request: Request) {
             type: "step",
             step: "detect",
             status: "active",
-            message: `Still detecting… ${detectMessage} (${sec}s). FFmpeg/PySceneDetect often emit no progress until done — for full movies on Vercel use INGEST_WORKER_URL (same value as NEXT_PUBLIC_WORKER_URL is fine).`,
+            message: `Still detecting${segmentHint}… ${detectMessage} (${sec}s). FFmpeg/PySceneDetect often emit no progress until done — for full movies on Vercel use INGEST_WORKER_URL (same value as NEXT_PUBLIC_WORKER_URL is fine).`,
           });
         }, 8_000);
         let rawSplits: Awaited<ReturnType<typeof detectShotsForIngest>>["splits"];
         let detectCtx: Awaited<ReturnType<typeof detectShotsForIngest>>["ctx"];
         try {
           const r = await detectShotsForIngest(
-            videoPath,
+            timelinePlan.analysisPath,
             detector,
-            inlineCuts ? { inlineExtraBoundaryCuts: inlineCuts } : undefined,
+            {
+              inlineExtraBoundaryCuts: inlineCuts,
+              segmentFilmWindow: timelinePlan.segmentFilmWindow,
+            },
           );
           rawSplits = r.splits;
           detectCtx = r.ctx;
+          if (timelinePlan.splitTimeOffsetSec !== 0) {
+            rawSplits = offsetDetectedSplits(rawSplits, timelinePlan.splitTimeOffsetSec);
+          }
         } finally {
           clearInterval(detectHeartbeat);
+          await timelinePlan.disposeSegment?.();
         }
         const splits = clipDetectedSplitsToWindow(rawSplits, timeline);
         if (splits.length === 0) {
@@ -227,9 +242,12 @@ export async function POST(request: Request) {
         const detectDuration = (Date.now() - t0) / 1000;
         const clipped =
           timeline.startSec !== undefined || timeline.endSec !== undefined;
-        const detectSummary = clipped
-          ? `Found ${splits.length} shots in window (${rawSplits.length} detected before clip)`
-          : `Found ${splits.length} shots`;
+        const detectSummary =
+          timelinePlan.segmentFilmWindow != null
+            ? `Found ${splits.length} shots in ${timelinePlan.segmentFilmWindow.absStart.toFixed(1)}–${timelinePlan.segmentFilmWindow.absEnd.toFixed(1)}s (detected on segment file only)`
+            : clipped
+              ? `Found ${splits.length} shots in window (${rawSplits.length} detected before clip)`
+              : `Found ${splits.length} shots`;
         emit({ type: "step", step: "detect", status: "complete", message: detectSummary, duration: detectDuration });
         emit({ type: "init", totalShots: splits.length, concurrency });
 
@@ -251,7 +269,7 @@ export async function POST(request: Request) {
         const extractDir = await mkTmp(path.join(getTmpDir(), "metrovision-extract-"));
         const localAssets = await processInParallel(splits, extractConcurrency, async (split, worker) => {
           emit({ type: "shot", step: "extract", index: split.index, total: splits.length, worker, status: "start" });
-          const result = await extractLocally(videoPath, split, filmSlug, extractDir);
+          const result = await extractLocally(sourceVideoPath, split, filmSlug, extractDir);
           emit({ type: "shot", step: "extract", index: split.index, total: splits.length, worker, status: "complete", duration: split.end - split.start });
           return result;
         });
@@ -264,7 +282,7 @@ export async function POST(request: Request) {
         const t3 = Date.now();
         const classifyResults = await processInParallel(splits, classifyConcurrency, async (split, worker) => {
           emit({ type: "shot", step: "classify", index: split.index, total: splits.length, worker, status: "start" });
-          const result = await classifyShot(videoPath, split, filmTitleStr, directorStr, yearNum, castList);
+          const result = await classifyShot(sourceVideoPath, split, filmTitleStr, directorStr, yearNum, castList);
           const c = result.classification;
           emit({ type: "shot", step: "classify", index: split.index, total: splits.length, worker, status: "complete", framing: c.framing, sceneTitle: c.scene_title });
           return result;
@@ -372,7 +390,7 @@ export async function POST(request: Request) {
           const [insertedShot] = await db.insert(schema.shots).values({
             filmId,
             sceneId,
-            sourceFile: ingestSourceDisplayFileName(videoPath),
+            sourceFile: ingestSourceDisplayFileName(rawInput),
             startTc: split.start,
             endTc: split.end,
             duration: durationSec,

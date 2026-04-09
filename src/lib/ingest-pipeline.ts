@@ -126,6 +126,77 @@ export function clipDetectedSplitsToWindow(
   return out;
 }
 
+/** Film-absolute [absStart, absEnd) in seconds for a bounded ingest window. */
+export type IngestAbsoluteWindow = { absStart: number; absEnd: number };
+
+/**
+ * When both start and end are omitted (after parsing), returns null = analyze entire source.
+ * Otherwise returns the film-absolute window to analyze.
+ * @throws If the window is invalid or end is required but duration is unknown.
+ */
+export function resolveIngestAbsoluteWindow(
+  timeline: { startSec?: number; endSec?: number },
+  durationSec: number,
+): IngestAbsoluteWindow | null {
+  const hasStart = timeline.startSec !== undefined;
+  const hasEnd = timeline.endSec !== undefined;
+  if (!hasStart && !hasEnd) return null;
+
+  const d = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 0;
+  let absStart = hasStart ? timeline.startSec! : 0;
+  let absEnd = hasEnd ? timeline.endSec! : d;
+
+  absStart = Math.max(0, absStart);
+  if (!hasEnd) {
+    if (d <= 0) {
+      throw new Error(
+        "ingestEndSec is required when video duration is unknown (or omit both timeline fields for full-file ingest).",
+      );
+    }
+    absEnd = d;
+  }
+  if (hasEnd && d > 0) {
+    absEnd = Math.min(absEnd, d);
+  }
+  if (d > 0) {
+    absStart = Math.min(absStart, d);
+  }
+
+  if (!(absEnd > absStart)) {
+    throw new Error("Ingest timeline window is empty or invalid.");
+  }
+  return { absStart, absEnd };
+}
+
+/** Map segment-local split times to film-absolute after detection on a subclip. */
+export function offsetDetectedSplits(
+  splits: DetectedSplit[],
+  offsetSec: number,
+): DetectedSplit[] {
+  if (offsetSec === 0) return splits;
+  return splits.map((s, i) => ({
+    ...s,
+    index: i,
+    start: roundTime(s.start + offsetSec),
+    end: roundTime(s.end + offsetSec),
+  }));
+}
+
+/** Extra boundary cuts are in film-absolute seconds; keep interior cuts and shift into segment-local times. */
+export function relativizeAbsoluteBoundaryCutsForSegment(
+  cuts: number[],
+  absStart: number,
+  absEnd: number,
+): number[] {
+  const out: number[] = [];
+  for (const t of cuts) {
+    if (!Number.isFinite(t)) continue;
+    if (t <= absStart || t >= absEnd) continue;
+    out.push(roundTime(t - absStart));
+  }
+  return out;
+}
+
 export async function runCommand(
   command: string,
   args: string[],
@@ -162,6 +233,90 @@ export async function runCommand(
     });
     proc.on("close", (code) => done(null, code));
   });
+}
+
+/** Remux one continuous segment; output timeline starts at 0 == `absStart` in the source. */
+export async function extractIngestAnalysisSegmentFfmpeg(
+  sourcePath: string,
+  absStart: number,
+  absEnd: number,
+  outPath: string,
+): Promise<void> {
+  const duration = absEnd - absStart;
+  if (!(duration > 0)) {
+    throw new Error("extractIngestAnalysisSegmentFfmpeg: segment duration must be positive.");
+  }
+  await runCommand(getFfmpegPath(), [
+    "-y",
+    "-threads",
+    "2",
+    "-ss",
+    String(absStart),
+    "-i",
+    sourcePath,
+    "-t",
+    String(duration),
+    "-c",
+    "copy",
+    "-avoid_negative_ts",
+    "make_zero",
+    outPath,
+  ]);
+}
+
+export type IngestTimelineAnalysisPlan = {
+  /** Path or URL passed to PySceneDetect / FFmpeg scene for shot detection only. */
+  analysisPath: string;
+  /**
+   * When non-null, `METROVISION_EXTRA_BOUNDARY_CUTS_JSON` and inline cuts are film-absolute;
+   * they are filtered and shifted into segment-local times for detection.
+   */
+  segmentFilmWindow: IngestAbsoluteWindow | null;
+  /** Added to split start/end after detection when analysis used a subclip (same as segment start). */
+  splitTimeOffsetSec: number;
+  disposeSegment: (() => Promise<void>) | null;
+};
+
+/**
+ * If timeline bounds are set, detection runs on a temp segment (or full source when window covers the file).
+ * Extraction/classification must still use the original source + film-absolute split times.
+ */
+export async function prepareIngestTimelineAnalysisMedia(
+  sourceVideoPath: string,
+  timeline: { startSec?: number; endSec?: number },
+): Promise<IngestTimelineAnalysisPlan> {
+  const duration = await probeVideoDurationSec(sourceVideoPath);
+  const absWin = resolveIngestAbsoluteWindow(timeline, duration);
+  if (!absWin) {
+    return {
+      analysisPath: sourceVideoPath,
+      segmentFilmWindow: null,
+      splitTimeOffsetSec: 0,
+      disposeSegment: null,
+    };
+  }
+  const { absStart, absEnd } = absWin;
+  const d = duration;
+  const coversWholeFile =
+    Number.isFinite(d) && d > 0 && absStart <= 0.001 && absEnd >= d - 0.05;
+  if (coversWholeFile) {
+    return {
+      analysisPath: sourceVideoPath,
+      segmentFilmWindow: null,
+      splitTimeOffsetSec: 0,
+      disposeSegment: null,
+    };
+  }
+  const segPath = path.join(tmpdir(), `metrovision-ingest-seg-${Date.now()}.mp4`);
+  await extractIngestAnalysisSegmentFfmpeg(sourceVideoPath, absStart, absEnd, segPath);
+  return {
+    analysisPath: segPath,
+    segmentFilmWindow: absWin,
+    splitTimeOffsetSec: absStart,
+    disposeSegment: async () => {
+      await rm(segPath, { force: true }).catch(() => {});
+    },
+  };
 }
 
 /**
@@ -479,8 +634,13 @@ export type DetectShotsContext = {
 };
 
 export type DetectShotsForIngestOptions = {
-  /** Hard-cut seconds from TransNet / human labeler, merged with file env (`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`). */
+  /** Hard-cut seconds from TransNet / human labeler, merged with file env (`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`). Film-absolute seconds. */
   inlineExtraBoundaryCuts?: number[] | null;
+  /**
+   * When `videoPath` is a segment file representing [absStart, absEnd] of the film, pass this so file + inline cuts
+   * (film-absolute) are relativized into segment-local times before merging with detector output.
+   */
+  segmentFilmWindow?: IngestAbsoluteWindow | null;
 };
 
 /** Phase D: dual PySceneDetect + NMS, optional `METROVISION_EXTRA_BOUNDARY_CUTS_JSON`. */
@@ -531,8 +691,25 @@ export async function detectShotsForIngest(
   options?: DetectShotsForIngestOptions,
 ): Promise<{ splits: DetectedSplit[]; ctx: DetectShotsContext }> {
   const pysceneCliAvailable = await getScenedetectReachable();
-  const fileCuts = loadExtraBoundaryCuts();
-  const inlineCuts = options?.inlineExtraBoundaryCuts ?? [];
+  const seg = options?.segmentFilmWindow ?? null;
+  const fileCutsRaw = loadExtraBoundaryCuts();
+  const inlineCutsRaw = options?.inlineExtraBoundaryCuts ?? [];
+  const fileCuts =
+    seg != null
+      ? relativizeAbsoluteBoundaryCutsForSegment(
+          fileCutsRaw,
+          seg.absStart,
+          seg.absEnd,
+        )
+      : fileCutsRaw;
+  const inlineCuts =
+    seg != null
+      ? relativizeAbsoluteBoundaryCutsForSegment(
+          inlineCutsRaw,
+          seg.absStart,
+          seg.absEnd,
+        )
+      : inlineCutsRaw;
   const extra = mergeBoundaryCutSources(fileCuts, inlineCuts);
   const tagSuffix = boundaryExtraTag(fileCuts.length, inlineCuts.length);
 

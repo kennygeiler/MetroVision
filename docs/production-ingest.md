@@ -30,5 +30,5 @@ Each ingest creates a row in **`ingest_runs`** (`status`, `stage`, counts, error
 ## Cost and runaway protection (Phase 5)
 
 - **Concurrency** on the ingest form caps parallel Gemini/FFmpeg work; keep it aligned with your API tier (see rate limiter / AC-07).
-- **Timeline window** (`ingestStartSec` / `ingestEndSec`) narrows spend on long sources.
+- **Timeline window** (`ingestStartSec` / `ingestEndSec`): when either bound is set, the worker/Next ingest path **FFmpeg-extracts that segment to a temp file** and runs **PySceneDetect / FFmpeg scene on that segment only** (not the whole feature). Clip extraction and Gemini classification still seek on the **original** full source using film-absolute timecodes. If **only** `ingestStartSec` is set, **`ingestEndSec` is required** when duration cannot be probed (or omit both fields for full-file ingest).
 - For very large films, prefer the **Python batch pipeline** or raising worker resources over unbounded interactive runs.

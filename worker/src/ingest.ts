@@ -18,6 +18,8 @@ import {
   runCommand,
   parseIngestTimelineFromBody,
   clipDetectedSplitsToWindow,
+  prepareIngestTimelineAnalysisMedia,
+  offsetDetectedSplits,
 } from "../../src/lib/ingest-pipeline.js";
 import {
   parseInlineBoundaryCuts,
@@ -162,6 +164,13 @@ export async function ingestFilmHandler(req: Request, res: Response) {
     }
     console.log(`[worker] Video resolved: ${videoPath}`);
 
+    const sourceVideoPath = videoPath;
+    const timelinePlan = await prepareIngestTimelineAnalysisMedia(sourceVideoPath, timeline);
+    const segmentHint =
+      timelinePlan.segmentFilmWindow != null
+        ? ` (segment ${timelinePlan.segmentFilmWindow.absStart.toFixed(3)}–${timelinePlan.segmentFilmWindow.absEnd.toFixed(3)}s only)`
+        : "";
+
     const detLabel =
       detector === "adaptive" ? "Adaptive (default, research)" : "Content (faster, hard cuts)";
     const detectLabel = shouldRunPysceneEnsemble()
@@ -171,7 +180,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       type: "step",
       step: "detect",
       status: "active",
-      message: `Detecting shots — ${detectLabel}`,
+      message: `Detecting shots${segmentHint} — ${detectLabel}`,
     });
     const t0 = Date.now();
     const inlineCuts = parseInlineBoundaryCuts(body.extraBoundaryCuts);
@@ -181,21 +190,28 @@ export async function ingestFilmHandler(req: Request, res: Response) {
         type: "step",
         step: "detect",
         status: "active",
-        message: `Detecting shots — ${detectLabel} (${sec}s elapsed; PySceneDetect has no progress bar — long films can take many minutes)`,
+        message: `Detecting shots${segmentHint} — ${detectLabel} (${sec}s elapsed; PySceneDetect has no progress bar — long films can take many minutes)`,
       });
     }, 8_000);
     let rawSplits: Awaited<ReturnType<typeof detectShotsForIngest>>["splits"];
     let detectCtx: Awaited<ReturnType<typeof detectShotsForIngest>>["ctx"];
     try {
       const r = await detectShotsForIngest(
-        videoPath,
+        timelinePlan.analysisPath,
         detector,
-        inlineCuts ? { inlineExtraBoundaryCuts: inlineCuts } : undefined,
+        {
+          inlineExtraBoundaryCuts: inlineCuts,
+          segmentFilmWindow: timelinePlan.segmentFilmWindow,
+        },
       );
       rawSplits = r.splits;
       detectCtx = r.ctx;
     } finally {
       clearInterval(detectHeartbeat);
+      await timelinePlan.disposeSegment?.();
+    }
+    if (timelinePlan.splitTimeOffsetSec !== 0) {
+      rawSplits = offsetDetectedSplits(rawSplits, timelinePlan.splitTimeOffsetSec);
     }
     const splits = clipDetectedSplitsToWindow(rawSplits, timeline);
     if (splits.length === 0) {
@@ -206,16 +222,24 @@ export async function ingestFilmHandler(req: Request, res: Response) {
       });
       return;
     }
-    console.log(`[worker] Detection complete: ${splits.length} shots (window clip from ${rawSplits.length})`);
+    console.log(
+      `[worker] Detection complete: ${splits.length} shots` +
+        (timelinePlan.segmentFilmWindow != null
+          ? ` (segment ${timelinePlan.segmentFilmWindow.absStart.toFixed(3)}–${timelinePlan.segmentFilmWindow.absEnd.toFixed(3)}s, ${rawSplits.length} in segment before film time remap + clip)`
+          : ` (${rawSplits.length} on full source before clip)`),
+    );
     const clipped =
       timeline.startSec !== undefined || timeline.endSec !== undefined;
     emit({
       type: "step",
       step: "detect",
       status: "complete",
-      message: clipped
-        ? `Found ${splits.length} shots in window (${rawSplits.length} detected before clip)`
-        : `Found ${splits.length} shots`,
+      message:
+        timelinePlan.segmentFilmWindow != null
+          ? `Found ${splits.length} shots in ${timelinePlan.segmentFilmWindow.absStart.toFixed(1)}–${timelinePlan.segmentFilmWindow.absEnd.toFixed(1)}s (detected on segment file only)`
+          : clipped
+            ? `Found ${splits.length} shots in window (${rawSplits.length} detected before clip)`
+            : `Found ${splits.length} shots`,
       duration: (Date.now() - t0) / 1000,
     });
     emit({ type: "init", totalShots: splits.length, concurrency });
@@ -254,7 +278,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
           worker: w,
           status: "start",
         });
-        const result = await extractLocally(videoPath, split, filmSlug, extractDir);
+        const result = await extractLocally(sourceVideoPath, split, filmSlug, extractDir);
         emit({
           type: "shot",
           step: "extract",
@@ -296,7 +320,7 @@ export async function ingestFilmHandler(req: Request, res: Response) {
           status: "start",
         });
         const wrapped = await classifyShot(
-          videoPath,
+          sourceVideoPath,
           split,
           body.filmTitle,
           body.director,
