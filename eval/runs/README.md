@@ -9,7 +9,7 @@ From the repo root, after each detect-only experiment:
 **Ran gold file (repo convention):** after copying from your machine, use `eval/gold/gold-ran-2026-04-10.json` (see `eval/gold/README.md`).
 
 ```bash
-pnpm detect:export-cuts -- /path/to/Ran.mkv --start 0 --end 720 \
+pnpm detect:export-cuts -- /path/to/Ran_1985.mp4 --start 0 --end 780 \
   --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 \
   --out eval/predicted/run-label.json \
   --ledger --run-id your-run-id --film-title "Ran"

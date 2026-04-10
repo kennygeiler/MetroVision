@@ -2,23 +2,20 @@
 
 Place boundary gold files here so paths stay stable across machines and docs.
 
-**Ran (1985), hand cuts:** copy your export to:
+## `gold-ran-2026-04-10.json` (in repo)
 
-`eval/gold/gold-ran-2026-04-10.json`
+Hand cuts from **gold annotate** for **Ran** (1985), `timeOffsetSec: 0`, reference file **`Ran_1985.mp4`**.
 
-```bash
-# From your Mac (example)
-cp ~/Downloads/gold-ran-2026-04-10.json eval/gold/gold-ran-2026-04-10.json
-```
+- **Interior cuts:** 74 (`cutsSec` entries).
+- **Last cut:** 763.222 s — gold spans **~12.7 minutes**, not 0–720. For `detect:export-cuts` / timeline ingest use **`--start 0 --end 780`** (or higher if your last shot extends past 780 s; end must clear the final shot).
 
-Shape: `cutsSec` (interior hard cuts, seconds) on the **same timebase** as the video you pass to `detect:export-cuts` or ingest. See `template.json`.
-
-**Detect-only eval** (after the file exists in this folder):
+**Detect-only eval** (same timebase as `Ran_1985.mp4` from t=0):
 
 ```bash
-pnpm detect:export-cuts -- /path/to/Ran.mkv \
+pnpm detect:export-cuts -- /path/to/Ran_1985.mp4 \
+  --start 0 --end 780 \
   --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 \
   --out eval/predicted/ran-detect-latest.json --ledger --run-id ran-gold-2026-04-10
 ```
 
-Set `--start` / `--end` to match the segment your gold was annotated on (e.g. first 12 minutes: `--start 0 --end 720` if gold times are film-absolute 0–720).
+Shape: `cutsSec` on the **same** clock as the source file. See `template.json`.
