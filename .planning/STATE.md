@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 complete (Vitest tranche, CI build + check:worker, server JSON logs); next `/gsd-plan-phase 7` or start Phase 7 boundary FN work
-last_updated: "2026-04-10T22:30:00.000Z"
-last_activity: 2026-04-10 — Phase 6 closed: `next build` in CI, `(site)` force-dynamic, `check:worker`, `logServerEvent` on search + worker ingest
+stopped_at: Phases 7–8 planned (RESEARCH + VALIDATION + PLAN.md); execute `/gsd-execute-phase 7` or implement plans manually
+last_updated: "2026-04-10T23:00:00.000Z"
+last_activity: 2026-04-10 — `/gsd-plan-phase` 7 & 8: eval-cut-json + boundary-misses markdown; refine-fn-windows CLI + docs plans
 progress:
   total_phases: 11
   completed_phases: 6

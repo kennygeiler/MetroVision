@@ -4,7 +4,7 @@
 
 This milestone delivers phased hardening and alignment work traced to `.planning/codebase/CONCERNS.md` (2026-04-07). Early phases fix **truth in docs and constraints**, then **correctness and schema integrity**, **security boundaries**, **rate limits and platform fit**, **fragile modules**, and finally **tests plus observability** so regressions surface before production.
 
-**Phase plans (1–5)** live under `.planning/milestones/v1.0-phases/`; matching `.planning/phases/01–05/` directories hold `ARCHIVED.md` pointers so tooling sees the phase layout. **Phase 6** (tests, CI, structured logging) is **complete**. **Phases 7–11** are the **shot-boundary reliability** track (FN analysis → local refinement → fusion → HITL → eval corpus); see phase detail sections below.
+**Phase plans (1–5)** live under `.planning/milestones/v1.0-phases/`; matching `.planning/phases/01–05/` directories hold `ARCHIVED.md` pointers so tooling sees the phase layout. **Phase 6** (tests, CI, structured logging) is **complete**. **Phases 7–11** are the **shot-boundary reliability** track (FN analysis → local refinement → fusion → HITL → eval corpus). **Phases 7–8** have **RESEARCH.md**, **VALIDATION.md**, and numbered **PLAN.md** files under `.planning/phases/`; **9–11** remain unplanned until `/gsd-plan-phase`.
 
 **Related plans**
 
@@ -174,23 +174,29 @@ Plans:
 
 ### Phase 7: Shot boundary FN analysis — list gold cuts with no predicted match within tolerance
 
-**Goal:** [To be planned]
+**Goal:** Eliminate duplicated eval JSON parsing; make FN/FP lists easy to log under `eval/runs/` for scrub-and-label workflows. (CLI `eval:boundary-misses` and in-app gold-annotate FN/FP already exist.)
+
 **Requirements**: TBD
 **Depends on:** Phase 6
-**Plans:** 0 plans
+**Plans:** 2 plans (see `.planning/phases/07-shot-boundary-fn-analysis-list-gold-cuts-with-no-predicted-match-within-tolerance/`)
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 7 to break down)
+
+- [ ] 07-01: Shared `extractCutsSecFromEvalJson` + Vitest (`src/lib/eval-cut-json.ts`)
+- [ ] 07-02: `eval:boundary-misses --markdown` / `--out` + doc cross-links
 
 ### Phase 8: Shot boundary local refinement — second-pass detection on FN windows
 
-**Goal:** [To be planned]
+**Goal:** Offline CLI: for each FN gold time (optionally capped), re-run `detectShotsForIngest` on a short film-absolute window, merge new cut instants into baseline predicted `cutsSec` with the same merge epsilon as ingest, write refined JSON for `eval:pipeline`.
+
 **Requirements**: TBD
 **Depends on:** Phase 7
-**Plans:** 0 plans
+**Plans:** 2 plans (see `.planning/phases/08-shot-boundary-local-refinement-second-pass-detection-on-fn-windows/`)
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 8 to break down)
+
+- [ ] 08-01: `mergeInteriorCutSec` helper + `pnpm detect:refine-fn-windows` script
+- [ ] 08-02: Document refinement CLI in `docs/tuning-flow.md`, `eval/runs/README.md`, `AGENTS.md` (+ optional `pipeline-analysis.md`)
 
 ### Phase 9: Shot boundary fusion policy — consensus and prune auxiliary detector peaks
 
@@ -236,8 +242,8 @@ Plans:
 | 4 | Rate limits & heavy-work boundaries | 4/4 | Complete | 2026-04-07 |
 | 5 | Fragile modules | 2/2 | Complete | 2026-04-07 |
 | 6 | Tests & observability | 3/3 | Complete | 2026-04-10 |
-| 7 | Shot boundary FN analysis | 0/TBD | Not planned | — |
-| 8 | Shot boundary local refinement | 0/TBD | Not planned | — |
+| 7 | Shot boundary FN analysis | 0/2 | Planned — not executed | — |
+| 8 | Shot boundary local refinement | 0/2 | Planned — not executed | — |
 | 9 | Shot boundary fusion policy | 0/TBD | Not planned | — |
 | 10 | Shot boundary HITL | 0/TBD | Not planned | — |
 | 11 | Shot boundary eval corpus | 0/TBD | Not planned | — |
