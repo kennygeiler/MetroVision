@@ -55,8 +55,11 @@ These are **not** environment variables; they travel with `POST /api/ingest-film
 ## 3. Evaluation workflow (gold vs predicted)
 
 1. **Gold JSON** — Human labels in `eval/gold/<film>.json` with **`cutsSec`** (and optionally per-shot slots). Shape: `eval/gold/template.json`.
-2. **Predicted JSON** — After ingest, export DB shots:  
-   `pnpm eval:export-film -- <filmId>` → `eval/predicted/<id>.json`.
+2. **Predicted JSON** — Either:
+   - After full ingest, export DB shots: `pnpm eval:export-film -- <filmId>` → `eval/predicted/<id>.json`, or
+   - **Detect-only (no DB, no Gemini)** — same boundary code as ingest:  
+     `pnpm detect:export-cuts -- <videoPath> [--start SEC] [--end SEC] [--gold eval/gold/....json] [--tol 0.5] [--out pred.json] [--ledger --run-id id]`  
+     See `scripts/detect-export-cuts.ts` and `eval/runs/README.md` for run logging.
 3. **Metrics** —  
    `pnpm eval:pipeline -- eval/gold/<film>.json eval/predicted/<id>.json --tol 0.5`  
    Add **`--slots`** if gold includes composition slots.

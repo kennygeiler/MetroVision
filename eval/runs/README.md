@@ -1,0 +1,46 @@
+# Pipeline eval run log
+
+Use this folder to **record boundary experiments** without relying on memory or chat history.
+
+## Quick path (automated ledger line)
+
+From the repo root, after each detect-only experiment:
+
+```bash
+pnpm detect:export-cuts -- /path/to/video.mp4 --start 0 --end 720 \
+  --gold eval/gold/your-gold.json --tol 0.5 \
+  --out eval/predicted/run-label.json \
+  --ledger --run-id your-run-id --film-title "Ran"
+```
+
+- **`ledger.jsonl`**: one JSON object per line (append-only). Safe to `tail` or import into a spreadsheet.
+- **`RUN.template.json`**: copy to a dated filename and fill for richer narrative + command history.
+
+## What to capture every time
+
+1. **Identity:** film, segment (time range), `runId` (unique string).
+2. **Commands:** exact shell line including env vars (`METROVISION_BOUNDARY_MERGE_GAP_SEC`, `METROVISION_BOUNDARY_DETECTOR`, optional `METROVISION_EXTRA_BOUNDARY_CUTS_JSON`).
+3. **Output:** path to `--out` JSON; **`boundary.boundaryLabel`** inside that file (confirms ensemble vs FFmpeg fallback).
+4. **Metrics:** P/R/F1, tp/fp/fn at a **fixed** `--tol` (e.g. 0.5) for comparability.
+5. **Failure mode:** mostly missed cuts (FN), mostly spurious (FP), or mixed.
+
+## Questions to answer after each run (copy into notes)
+
+1. Did **`boundaryLabel`** show **`pyscenedetect_ensemble_pyscene`** (not **`ffmpeg_scene+ensemble_fallback`**)?
+2. What **one knob** changed vs the previous run (merge gap, extra cuts file, detector, segment length)?
+3. Did **precision** or **recall** move more — does that match what you expected?
+4. Any **systematic** errors (e.g. only during fast action, only on fades)?
+5. What is the **next single experiment** you want to run?
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `ledger.jsonl` | Machine-friendly append log (created by `--ledger`) |
+| `RUN.template.json` | Human-friendly structured record; copy per milestone |
+
+## Related
+
+- `pnpm detect:export-cuts` — boundary detection only (no DB/Gemini); see `scripts/detect-export-cuts.ts`.
+- `pnpm eval:pipeline` — compare any two gold/predicted JSON files.
+- `docs/pipeline-analysis.md` — env vars and interpretation.
