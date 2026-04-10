@@ -13,6 +13,7 @@
     "test": "vitest run",
     "check:schema-drift": "tsx scripts/check-schema-drift.ts",
     "check:taxonomy": "tsx scripts/check-taxonomy-parity.ts",
+    "check:worker": "tsc --noEmit -p worker/tsconfig.json",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
@@ -60,6 +61,8 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

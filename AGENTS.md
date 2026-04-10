@@ -5,7 +5,7 @@
 ```bash
 # Web app (Next.js 15 + React 19)
 pnpm dev              # Start Next.js dev server (Turbopack)
-pnpm build            # Production build
+pnpm build            # Production build (`DATABASE_URL` required at build for module init; `(site)` is `force-dynamic` so no DB queries during prerender)
 pnpm lint             # ESLint
 pnpm start            # Start production server
 
@@ -18,7 +18,9 @@ pnpm db:embeddings    # Generate shot embeddings (tsx src/db/generate-embeddings
 pnpm db:studio        # Open Drizzle Studio
 pnpm check:schema-drift  # Ingest-related Drizzle tables present (`src/db/schema.ts` shared with worker)
 pnpm check:taxonomy      # src/lib/taxonomy.ts vs pipeline/taxonomy.py (AC-02)
+pnpm check:worker        # `tsc --noEmit -p worker/tsconfig.json` (Express worker types)
 pnpm test                # Vitest (unit tests; CI runs this too)
+# CI (`.github/workflows/ci.yml`): `lint`, `check:taxonomy`, `check:schema-drift`, `test`, `eval:smoke`, `build` (with placeholder `DATABASE_URL` + `NEXT_PUBLIC_SITE_URL`), `check:worker`
 
 # TS Ingest Worker (Express, runs separately)
 cd worker && pnpm dev   # Start worker dev server (`node --import tsx/esm --watch`)

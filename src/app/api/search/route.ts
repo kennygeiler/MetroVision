@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { searchShots } from "@/db/queries";
+import { logServerEvent } from "@/lib/server-log";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +17,12 @@ export async function GET(request: NextRequest) {
 
     return Response.json(shots);
   } catch (error) {
-    console.error("Failed to search shots.", error);
+    logServerEvent("error", "api_search_failed", {
+      err:
+        error instanceof Error
+          ? { name: error.name, message: error.message }
+          : String(error),
+    });
 
     return Response.json(
       { error: "Failed to search shots." },

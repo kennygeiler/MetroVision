@@ -28,4 +28,22 @@ describe("evalBoundaryCuts", () => {
     expect(r.unmatchedGoldSec).toEqual([10]);
     expect(r.unmatchedPredSec).toEqual([50]);
   });
+
+  it("lists unmatched gold when one pred pairs to closest gold only", () => {
+    const r = evalBoundaryCuts([10, 11], [10.15], 0.5);
+    expect(r.truePositives).toBe(1);
+    expect(r.falseNegatives).toBe(1);
+    expect(r.falsePositives).toBe(0);
+    expect(r.unmatchedGoldSec).toEqual([11]);
+    expect(r.unmatchedPredSec).toEqual([]);
+  });
+
+  it("lists all preds as FP when none match", () => {
+    const r = evalBoundaryCuts([100], [1, 2, 3], 0.5);
+    expect(r.truePositives).toBe(0);
+    expect(r.falsePositives).toBe(3);
+    expect(r.falseNegatives).toBe(1);
+    expect(r.unmatchedGoldSec).toEqual([100]);
+    expect(r.unmatchedPredSec).toEqual([1, 2, 3]);
+  });
 });

@@ -18,6 +18,7 @@ import * as openaiEmbeddingModule from "../../src/lib/openai-embedding.js";
 import * as sceneGroupingModule from "../../src/lib/scene-grouping.js";
 import * as ingestResetModule from "../../src/lib/ingest-reset.js";
 import * as ingestRunRecordModule from "../../src/lib/ingest-run-record.js";
+import { logServerEvent } from "../../src/lib/server-log.js";
 
 const ffmpegBin = (ffmpegBinModule as { default?: typeof ffmpegBinModule }).default
   ?? ffmpegBinModule;
@@ -712,6 +713,14 @@ export async function ingestFilmHandler(req: Request, res: Response) {
     });
   } catch (error) {
     const msg = (error as Error).message || "Pipeline failed";
+    logServerEvent("error", "worker_ingest_film_stream_failed", {
+      message: msg,
+      ...(ingestRunId ? { ingestRunId } : {}),
+      err:
+        error instanceof Error
+          ? { name: error.name, message: error.message }
+          : String(error),
+    });
     if (ingestRunId) {
       await failIngestRunRecord(db, ingestRunId, msg).catch(() => {});
     }
