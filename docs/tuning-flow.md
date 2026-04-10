@@ -6,7 +6,7 @@ This document **logs the intended tuning workflow** so operators (and future app
 
 ## Immediate next step (Ran / current gold)
 
-1. **TransNet merge (tried 2026-04-10):** On **`ranshort.mov`**, **ensemble + gap 0.22 + TransNet** (54 cuts, CPU, default threshold **0.5**) yielded **F1 0.693** vs **ensemble-only 0.714** — **no recall win**; see **`eval/runs/2026-04-10-ran-transnet-merge-comparison.md`**. Next tries: **TransNet `--threshold` sweep**, or **merge gap 0.35** with TransNet, or **CUDA** for faster iteration.
+1. **TransNet (tried 2026-04-10):** Threshold × merge-gap sweep via **`npm run eval:sweep-transnet`** on **`ranshort.mov`** (thresholds **0.4–0.6**, gaps **0.22 / 0.35**) — **no row beat ensemble-only** (**F1 0.714**). See **`eval/runs/2026-04-10-transnet-threshold-sweep.md`** and **`eval/runs/2026-04-10-ran-transnet-merge-comparison.md`**. Next: other titles, wider threshold range, **learned fusion**, or **HITL** on FN.
 2. **Isolate knobs:** Re-run **ensemble only** with default merge gap (no `0.22`) to see how much **gap** alone contributed vs **PyScene vs FFmpeg**.
 3. **Stricter alignment (optional):** Run **`npm run eval:boundary-deltas`** at **`--tol 0.25`** (or **`eval:sweep-tol`**) to see how fragile F1 is when you demand tighter gold–pred agreement.
 

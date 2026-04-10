@@ -65,6 +65,9 @@ These are **not** environment variables; they travel with `POST /api/ingest-film
    Add **`--slots`** if gold includes composition slots.
 4. **Matched-pair timing (not F1)** — mean/median **|pred−gt|**, signed bias, histogram:  
    `npm run eval:boundary-deltas -- --gold eval/gold/....json --pred eval/predicted/....json [--pred p2.json] --tol 0.5 --out eval/runs/report.md`
+5. **TransNet threshold × merge-gap grid** (reuses each TransNet JSON per threshold):  
+   `npm run eval:sweep-transnet -- --video path.mp4 --gold eval/gold/....json [--start 0] [--end 780] [--thresholds 0.4,0.5,0.6] [--merge-gaps 0.22,0.35] --device cpu --out eval/runs/report.md`  
+   Requires **PyScene on PATH** and **TransNet** (`transnetv2-pytorch`).
 
 Tolerance **`--tol`** (seconds): a predicted cut matches a gold cut if their times differ by at most this amount (greedy matching).
 

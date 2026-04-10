@@ -35,8 +35,10 @@ python3 -m pipeline.transnet_cuts /home/paperspace/videos/ranshort.mov \
 
 On **this** clip, with **default TransNet threshold (0.5)** and **merge gap 0.22**, fusing **54** TransNet cuts did **not** reduce false negatives vs ensemble-only; **F1 dropped ~0.02** (one fewer TP, more FP/FN). Likely causes: TransNet **spurious** or **misaligned** candidates that absorb matches or shift the greedy pairing, or **threshold** too sensitive / insensitive for this material.
 
-## Suggested follow-ups (not run here)
+## Follow-up: threshold × merge-gap sweep (done)
 
-- Sweep **TransNet `--threshold`** (e.g. 0.4 / 0.6) and re-merge.  
-- Try **TransNet without** tightening merge gap (ensemble + default 0.35 + extra cuts).  
-- **CUDA** TransNet if available to iterate faster (here: **CPU** ~85 s for `ranshort.mov`).
+See **`2026-04-10-transnet-threshold-sweep.md`** — TransNet thresholds **0.4 / 0.5 / 0.6** × merge gaps **0.22 / 0.35** on the same clip: **no improvement** over **ensemble-only**; best row remains **no TransNet**, **F1 0.714**.
+
+Automate future grids: **`npm run eval:sweep-transnet`** (`scripts/sweep-transnet-threshold.ts`).
+
+Further ideas: wider threshold range, different video, **CUDA** for faster TransNet iteration, or **HITL** on remaining FN.
