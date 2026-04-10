@@ -8,6 +8,7 @@ This milestone delivers phased hardening and alignment work traced to `.planning
 
 **Related plans**
 
+- **[Tuning agent vision + finish Ran checklist](tuning-agent-and-ran-completion.md)** — Product goal (15 min sample → self-tune → cross-session inference), roadmap mapping (Phases 10–11 + future session store), **ordered steps to close Ran tuning**.
 - **[/visualize composition dashboard](VISUALIZE-COMPOSITION-PLAN.md)** — `VizShot` / trust filters / staging & lighting D3 views; Phases 0–5 implemented in-app; Phase 6 (embeddings UMAP, scene facets, etc.) remains backlog.
 
 ## Phases
@@ -232,6 +233,8 @@ Plans:
 
 Plans:
 - [ ] TBD (run /gsd-plan-phase 11 to break down)
+
+**Cross-reference:** A future **self-tuning boundary agent** (sample-based tune + reuse prior sessions) depends on Phases **10–11** plus a **session store / tool loop** — see **[`tuning-agent-and-ran-completion.md`](tuning-agent-and-ran-completion.md)**.
 
 ---
 
