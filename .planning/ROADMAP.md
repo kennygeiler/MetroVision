@@ -4,6 +4,8 @@
 
 This milestone delivers phased hardening and alignment work traced to `.planning/codebase/CONCERNS.md` (2026-04-07). Early phases fix **truth in docs and constraints**, then **correctness and schema integrity**, **security boundaries**, **rate limits and platform fit**, **fragile modules**, and finally **tests plus observability** so regressions surface before production.
 
+**Phase plans (1–5)** live under `.planning/milestones/v1.0-phases/`; matching `.planning/phases/01–05/` directories hold `ARCHIVED.md` pointers so tooling sees the phase layout. **Phase 6** uses `.planning/phases/06-tests-observability/` for active plans.
+
 **Related plans**
 
 - **[/visualize composition dashboard](VISUALIZE-COMPOSITION-PLAN.md)** — `VizShot` / trust filters / staging & lighting D3 views; Phases 0–5 implemented in-app; Phase 6 (embeddings UMAP, scene facets, etc.) remains backlog.
