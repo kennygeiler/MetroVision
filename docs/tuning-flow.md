@@ -6,9 +6,9 @@ This document **logs the intended tuning workflow** so operators (and future app
 
 ## Immediate next step (Ran / current gold)
 
-1. **Recall first:** Add a second signal for missed hard cuts — e.g. **TransNet** (or similar) → **`extraBoundaryCuts`** / **`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`**, fused with **PyScene ensemble** + your chosen **`METROVISION_BOUNDARY_MERGE_GAP_SEC`**. Re-run **`npm run detect:export-cuts`** and compare F1 / FN.
-2. **Isolate knobs:** Optionally re-run **ensemble only** with default merge gap (no `0.22`) to see how much **gap** alone contributed vs **PyScene vs FFmpeg**.
-3. **Stricter alignment (optional):** Run **`npm run eval:boundary-deltas`** at **`--tol 0.25`** (or **`pnpm eval:sweep-tol`**) to see how fragile F1 is when you demand tighter gold–pred agreement.
+1. **TransNet merge (tried 2026-04-10):** On **`ranshort.mov`**, **ensemble + gap 0.22 + TransNet** (54 cuts, CPU, default threshold **0.5**) yielded **F1 0.693** vs **ensemble-only 0.714** — **no recall win**; see **`eval/runs/2026-04-10-ran-transnet-merge-comparison.md`**. Next tries: **TransNet `--threshold` sweep**, or **merge gap 0.35** with TransNet, or **CUDA** for faster iteration.
+2. **Isolate knobs:** Re-run **ensemble only** with default merge gap (no `0.22`) to see how much **gap** alone contributed vs **PyScene vs FFmpeg**.
+3. **Stricter alignment (optional):** Run **`npm run eval:boundary-deltas`** at **`--tol 0.25`** (or **`eval:sweep-tol`**) to see how fragile F1 is when you demand tighter gold–pred agreement.
 
 Use the **same** gold file and **same** source video timebase for every comparison.
 
