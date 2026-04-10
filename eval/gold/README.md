@@ -9,11 +9,16 @@ Hand cuts from **gold annotate** for **Ran** (1985), `timeOffsetSec: 0`, referen
 - **Interior cuts:** 71 (`cutsSec` entries).
 - **Last cut:** 763.222 s — gold spans **~12.7 minutes** (~764 s of annotated timeline), not 0–720. For `detect:export-cuts` / timeline ingest use **`--start 0 --end 780`** (or higher if your last shot extends past 780 s; end must clear the final shot).
 
-**Detect-only eval** (same timebase as `Ran_1985.mp4` from t=0):
+**Detect-only eval** (same timebase as `Ran_1985.mp4` from t=0). From repo root, with deps installed (`npm install` or `pnpm install`):
 
 ```bash
-pnpm detect:export-cuts -- /path/to/Ran_1985.mp4 \
-  --start 0 --end 780 \
+# pnpm (if installed)
+pnpm detect:export-cuts -- /path/to/Ran_1985.mp4 --start 0 --end 780 \
+  --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 \
+  --out eval/predicted/ran-detect-latest.json --ledger --run-id ran-gold-2026-04-10
+
+# npm only (no pnpm on machine)
+npm run detect:export-cuts -- /path/to/Ran_1985.mp4 --start 0 --end 780 \
   --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 \
   --out eval/predicted/ran-detect-latest.json --ledger --run-id ran-gold-2026-04-10
 ```
