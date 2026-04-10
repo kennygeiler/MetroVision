@@ -45,6 +45,7 @@ Match `--start` / `--end` to the segment encoded in that gold file (runtime / la
 
 ## Related
 
+- **`2026-04-10-ran-boundary-timing.md`** — matched-pair **|pred−gt|** stats (mean/median, signed bias, histogram) for Ran gold vs predicted cuts; see `npm run eval:boundary-deltas`.
 - **`NEXT-RUN.md`** — copy-paste command for the **next** boundary experiment after each logged baseline.
 - `pnpm detect:export-cuts` / `npm run detect:export-cuts` — see `scripts/detect-export-cuts.ts`.
 - `pnpm eval:pipeline` — compare any two gold/predicted JSON files.

@@ -1,0 +1,261 @@
+{
+  "schemaVersion": "1.1",
+  "source": "metrovision_detect_export",
+  "generatedAt": "2026-04-10T01:36:32.308Z",
+  "videoPath": "/home/paperspace/videos/ranshort.mov",
+  "videoPathResolved": "/home/paperspace/videos/ranshort.mov",
+  "ingestStartSec": 0,
+  "ingestEndSec": 780,
+  "runId": "ran-ranshort-s3",
+  "cutsSec": [
+    0.75,
+    17,
+    34.5,
+    41,
+    46.5,
+    55,
+    61.5,
+    67,
+    72.5,
+    83.5,
+    115,
+    132,
+    143.5,
+    154,
+    168.25,
+    175.25,
+    187.25,
+    195.25,
+    210.75,
+    254,
+    261.75,
+    268.5,
+    280.25,
+    296.5,
+    303.5,
+    306,
+    308.75,
+    318.25,
+    321.5,
+    326,
+    351,
+    361.75,
+    366,
+    371.75,
+    381,
+    408.5,
+    442.5
+  ],
+  "shotCount": 38,
+  "splits": [
+    {
+      "start": 0,
+      "end": 0.75,
+      "index": 0
+    },
+    {
+      "start": 0.75,
+      "end": 17,
+      "index": 1
+    },
+    {
+      "start": 17,
+      "end": 34.5,
+      "index": 2
+    },
+    {
+      "start": 34.5,
+      "end": 41,
+      "index": 3
+    },
+    {
+      "start": 41,
+      "end": 46.5,
+      "index": 4
+    },
+    {
+      "start": 46.5,
+      "end": 55,
+      "index": 5
+    },
+    {
+      "start": 55,
+      "end": 61.5,
+      "index": 6
+    },
+    {
+      "start": 61.5,
+      "end": 67,
+      "index": 7
+    },
+    {
+      "start": 67,
+      "end": 72.5,
+      "index": 8
+    },
+    {
+      "start": 72.5,
+      "end": 83.5,
+      "index": 9
+    },
+    {
+      "start": 83.5,
+      "end": 115,
+      "index": 10
+    },
+    {
+      "start": 115,
+      "end": 132,
+      "index": 11
+    },
+    {
+      "start": 132,
+      "end": 143.5,
+      "index": 12
+    },
+    {
+      "start": 143.5,
+      "end": 154,
+      "index": 13
+    },
+    {
+      "start": 154,
+      "end": 168.25,
+      "index": 14
+    },
+    {
+      "start": 168.25,
+      "end": 175.25,
+      "index": 15
+    },
+    {
+      "start": 175.25,
+      "end": 187.25,
+      "index": 16
+    },
+    {
+      "start": 187.25,
+      "end": 195.25,
+      "index": 17
+    },
+    {
+      "start": 195.25,
+      "end": 210.75,
+      "index": 18
+    },
+    {
+      "start": 210.75,
+      "end": 254,
+      "index": 19
+    },
+    {
+      "start": 254,
+      "end": 261.75,
+      "index": 20
+    },
+    {
+      "start": 261.75,
+      "end": 268.5,
+      "index": 21
+    },
+    {
+      "start": 268.5,
+      "end": 280.25,
+      "index": 22
+    },
+    {
+      "start": 280.25,
+      "end": 296.5,
+      "index": 23
+    },
+    {
+      "start": 296.5,
+      "end": 303.5,
+      "index": 24
+    },
+    {
+      "start": 303.5,
+      "end": 306,
+      "index": 25
+    },
+    {
+      "start": 306,
+      "end": 308.75,
+      "index": 26
+    },
+    {
+      "start": 308.75,
+      "end": 318.25,
+      "index": 27
+    },
+    {
+      "start": 318.25,
+      "end": 321.5,
+      "index": 28
+    },
+    {
+      "start": 321.5,
+      "end": 326,
+      "index": 29
+    },
+    {
+      "start": 326,
+      "end": 351,
+      "index": 30
+    },
+    {
+      "start": 351,
+      "end": 361.75,
+      "index": 31
+    },
+    {
+      "start": 361.75,
+      "end": 366,
+      "index": 32
+    },
+    {
+      "start": 366,
+      "end": 371.75,
+      "index": 33
+    },
+    {
+      "start": 371.75,
+      "end": 381,
+      "index": 34
+    },
+    {
+      "start": 381,
+      "end": 408.5,
+      "index": 35
+    },
+    {
+      "start": 408.5,
+      "end": 442.5,
+      "index": 36
+    },
+    {
+      "start": 442.5,
+      "end": 442.95,
+      "index": 37
+    }
+  ],
+  "boundary": {
+    "boundaryLabel": "ffmpeg_scene",
+    "usedEnsemble": false,
+    "resolvedDetector": "adaptive",
+    "extraCutsMerged": 0,
+    "mergeGapSec": 0.35,
+    "boundaryDetectorEnv": "",
+    "extraBoundaryCutsJsonEnv": ""
+  },
+  "evalAgainstGold": {
+    "goldPath": "/home/paperspace/MetroVision/eval/gold/gold-ran-2026-04-10.json",
+    "toleranceSec": 0.5,
+    "truePositives": 28,
+    "falsePositives": 9,
+    "falseNegatives": 43,
+    "precision": 0.7567567567567568,
+    "recall": 0.39436619718309857,
+    "f1": 0.5185185185185185
+  }
+}

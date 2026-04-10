@@ -63,6 +63,8 @@ These are **not** environment variables; they travel with `POST /api/ingest-film
 3. **Metrics** —  
    `pnpm eval:pipeline -- eval/gold/<film>.json eval/predicted/<id>.json --tol 0.5`  
    Add **`--slots`** if gold includes composition slots.
+4. **Matched-pair timing (not F1)** — mean/median **|pred−gt|**, signed bias, histogram:  
+   `npm run eval:boundary-deltas -- --gold eval/gold/....json --pred eval/predicted/....json [--pred p2.json] --tol 0.5 --out eval/runs/report.md`
 
 Tolerance **`--tol`** (seconds): a predicted cut matches a gold cut if their times differ by at most this amount (greedy matching).
 

@@ -28,6 +28,7 @@
     "eval:pipeline": "tsx scripts/eval-pipeline.ts",
     "eval:smoke": "tsx scripts/eval-smoke.ts",
     "eval:sweep-tol": "tsx scripts/sweep-eval-tolerance.ts",
+    "eval:boundary-deltas": "tsx scripts/eval-boundary-deltas.ts",
     "detect:export-cuts": "tsx scripts/detect-export-cuts.ts"
   },
   "dependencies": {
