@@ -158,9 +158,14 @@ function splitsToCutsSec(splits: DetectedSplit[]): number[] {
   return sorted.slice(1).map((s) => roundTime(s.start));
 }
 
+function resolveVideoPathOrUrl(videoPath: string): string {
+  const t = videoPath.trim();
+  return /^https?:\/\//i.test(t) ? t : path.resolve(t);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const resolved = path.resolve(args.videoPath);
+  const resolved = resolveVideoPathOrUrl(args.videoPath);
   const timeline = args.timeline;
 
   const inlineExtra = args.extraCutsPath

@@ -128,9 +128,14 @@ async function detectCutsForFilmWindow(
   }
 }
 
+function resolveVideoPathOrUrl(videoPath: string): string {
+  const t = videoPath.trim();
+  return /^https?:\/\//i.test(t) ? t : path.resolve(t);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const resolved = path.resolve(args.videoPath);
+  const resolved = resolveVideoPathOrUrl(args.videoPath);
   const goldRaw = JSON.parse(readFileSync(path.resolve(args.goldPath), "utf8")) as unknown;
   const predRaw = JSON.parse(readFileSync(path.resolve(args.predPath), "utf8")) as unknown;
   const goldCuts = extractCutsSecFromEvalJson(goldRaw);
