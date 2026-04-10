@@ -54,11 +54,15 @@ These are **not** environment variables; they travel with `POST /api/ingest-film
 
 ## 3. Evaluation workflow (gold vs predicted)
 
+**Living baseline and benchmark targets** (Ran gold, tol 0.5 s, registered F1/recall numbers, improvement tiers, TransNet decision): **[`eval/runs/STATUS.md`](../eval/runs/STATUS.md)**. Log per-run details in **`eval/runs/README.md`** (ledger, FN/FP markdown).
+
+**Phase 9 (fusion):** When merging **primary** detector interior cuts with **auxiliary** peaks (file/env **`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`**, request **`extraBoundaryCuts`**, **`detect-export-cuts --extra-cuts`**), ingest uses **`fuseBoundaryCutStreams`** in **`src/lib/boundary-fusion.ts`**. Policies: **`merge_flat`** (historical one-pass ε-cluster), **`auxiliary_near_primary`**, **`pairwise_min_sources`**. **`detect-export-cuts`** exposes **`--fusion-policy`**; **`detectShotsForIngest`** accepts **`boundaryFusionPolicy`** (default **`merge_flat`**). Plans: [`.planning/phases/09-shot-boundary-fusion-policy-consensus-and-prune-auxiliary-detector-peaks/`](../.planning/phases/09-shot-boundary-fusion-policy-consensus-and-prune-auxiliary-detector-peaks/).
+
 1. **Gold JSON** — Human labels in `eval/gold/<film>.json` with **`cutsSec`** (and optionally per-shot slots). Shape: `eval/gold/template.json`.
 2. **Predicted JSON** — Either:
    - After full ingest, export DB shots: `pnpm eval:export-film -- <filmId>` → `eval/predicted/<id>.json`, or
    - **Detect-only (no DB, no Gemini)** — same boundary code as ingest:  
-     `pnpm detect:export-cuts -- <videoPath> [--start SEC] [--end SEC] [--gold eval/gold/....json] [--tol 0.5] [--out pred.json] [--ledger --run-id id]`  
+     `pnpm detect:export-cuts -- <videoPath> [--start SEC] [--end SEC] [--fusion-policy merge_flat|...] [--gold eval/gold/....json] [--tol 0.5] [--out pred.json] [--ledger --run-id id]`  
      See `scripts/detect-export-cuts.ts` and `eval/runs/README.md` for run logging.
 3. **Metrics** —  
    `pnpm eval:pipeline -- eval/gold/<film>.json eval/predicted/<id>.json --tol 0.5`  

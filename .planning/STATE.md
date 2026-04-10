@@ -3,22 +3,22 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phases 7–8 executed (eval-cut-json, boundary-misses --out/--markdown, detect:refine-fn-windows, docs); next Phase 9 or Ran FN experiments
+stopped_at: Phase 9 executed — boundary-fusion.ts, detect-export-cuts --fusion-policy, ingest wiring; next Phase 10 or operator benchmarks
 last_updated: "2026-04-10T23:45:00.000Z"
-last_activity: 2026-04-10 — Implemented 07-01→08-02: mergeInteriorCutSec, refine CLI, shared eval JSON loader + sweep scripts aligned
+last_activity: 2026-04-10 — Phase 9: fuseBoundaryCutStreams + Vitest + detectShotsForIngest boundaryFusionPolicy + docs
 progress:
   total_phases: 11
-  completed_phases: 8
-  total_plans: 6
-  completed_plans: 19
-  percent: 73
+  completed_phases: 9
+  total_plans: 8
+  completed_plans: 21
+  percent: 82
 ---
 
 # Project State
 
-**Current focus:** **Phase 9** — fusion policy (unplanned) or operator experiments with **`detect:refine-fn-windows`** on real video.
+**Current focus:** **Phase 10** (HITL queue) unplanned — or Ran benchmark runs with **`--fusion-policy`** + extras vs **`eval/runs/STATUS.md`**.
 
-**Milestone core (phases 1–6):** complete. **Boundary track:** Phases **7–8** complete; **9–11** not planned.
+**Milestone core (phases 1–6):** complete. **Boundary track:** Phases **7–9** complete; **10–11** not planned.
 
 ## Accumulated Context
 

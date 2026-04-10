@@ -20,6 +20,10 @@ import {
   mergeBoundaryCutSources,
   shouldRunPysceneEnsemble,
 } from "./boundary-ensemble";
+import {
+  fuseBoundaryCutStreams,
+  type BoundaryFusionPolicy,
+} from "./boundary-fusion";
 import { extractFirstJsonObject } from "./gemini-json-extract";
 import {
   getGeminiAdjudicateModel,
@@ -591,6 +595,7 @@ function mergeEndpointsLikeEnsemble(
   pointList: number[],
   duration: number,
   extraCuts: number[],
+  fusionPolicy: BoundaryFusionPolicy = "merge_flat",
 ): DetectedSplit[] {
   const d =
     duration > 0 ? duration : Math.max(0, ...pointList, 0);
@@ -600,8 +605,10 @@ function mergeEndpointsLikeEnsemble(
   );
   let clustered = clusterCutTimes(interior, eps);
   if (extraCuts.length) {
-    clustered = clusterCutTimes(
-      [...clustered, ...extraCuts.map(roundTime)],
+    clustered = fuseBoundaryCutStreams(
+      clustered,
+      extraCuts.map(roundTime),
+      fusionPolicy,
       eps,
     );
   }
@@ -698,6 +705,10 @@ export type DetectShotsForIngestOptions = {
   /** Hard-cut seconds from TransNet / human labeler, merged with file env (`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`). Film-absolute seconds. */
   inlineExtraBoundaryCuts?: number[] | null;
   /**
+   * How primary detector interior cuts combine with file + inline extras (`merge_flat` = historical one-pass cluster).
+   */
+  boundaryFusionPolicy?: BoundaryFusionPolicy;
+  /**
    * When `videoPath` is a segment file representing [absStart, absEnd] of the film, pass this so file + inline cuts
    * (film-absolute) are relativized into segment-local times before merging with detector output.
    */
@@ -708,12 +719,18 @@ export type DetectShotsForIngestOptions = {
 export async function detectShotsEnsemble(
   videoPath: string,
   extraCuts: number[],
+  fusionPolicy: BoundaryFusionPolicy = "merge_flat",
 ): Promise<DetectedSplit[]> {
   if (!(await getScenedetectReachable())) {
     const splits = await detectShotsWithFfmpegScene(videoPath);
     const duration = await probeVideoDurationSec(videoPath);
     const pointList = endpointsFromSplits(splits);
-    return mergeEndpointsLikeEnsemble(pointList, duration, extraCuts);
+    return mergeEndpointsLikeEnsemble(
+      pointList,
+      duration,
+      extraCuts,
+      fusionPolicy,
+    );
   }
 
   const [adaptive, content, duration] = await Promise.all([
@@ -732,8 +749,10 @@ export async function detectShotsEnsemble(
   );
   let clustered = clusterCutTimes(interior, eps);
   if (extraCuts.length) {
-    clustered = clusterCutTimes(
-      [...clustered, ...extraCuts.map(roundTime)],
+    clustered = fuseBoundaryCutStreams(
+      clustered,
+      extraCuts.map(roundTime),
+      fusionPolicy,
       eps,
     );
   }
@@ -773,9 +792,10 @@ export async function detectShotsForIngest(
       : inlineCutsRaw;
   const extra = mergeBoundaryCutSources(fileCuts, inlineCuts);
   const tagSuffix = boundaryExtraTag(fileCuts.length, inlineCuts.length);
+  const fusionPolicy = options?.boundaryFusionPolicy ?? "merge_flat";
 
   if (shouldRunPysceneEnsemble()) {
-    const splits = await detectShotsEnsemble(videoPath, extra);
+    const splits = await detectShotsEnsemble(videoPath, extra, fusionPolicy);
     return {
       splits,
       ctx: {
@@ -800,10 +820,18 @@ export async function detectShotsForIngest(
     const interior = [...new Set(endpointsFromSplits(splits).map(roundTime))].filter(
       (t) => t > 0 && t < d,
     );
-    const clustered = clusterCutTimes(
-      [...interior, ...extra.map(roundTime)],
-      eps,
-    );
+    const clustered =
+      fusionPolicy === "merge_flat"
+        ? clusterCutTimes(
+            [...interior, ...extra.map(roundTime)],
+            eps,
+          )
+        : fuseBoundaryCutStreams(
+            clusterCutTimes(interior, eps),
+            extra.map(roundTime),
+            fusionPolicy,
+            eps,
+          );
     const boundaries = [
       0,
       ...clustered.filter((t) => t > 0 && t < d),

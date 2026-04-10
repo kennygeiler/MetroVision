@@ -4,7 +4,7 @@
 
 This milestone delivers phased hardening and alignment work traced to `.planning/codebase/CONCERNS.md` (2026-04-07). Early phases fix **truth in docs and constraints**, then **correctness and schema integrity**, **security boundaries**, **rate limits and platform fit**, **fragile modules**, and finally **tests plus observability** so regressions surface before production.
 
-**Phase plans (1–5)** live under `.planning/milestones/v1.0-phases/`; matching `.planning/phases/01–05/` directories hold `ARCHIVED.md` pointers so tooling sees the phase layout. **Phase 6** (tests, CI, structured logging) is **complete**. **Phases 7–11** are the **shot-boundary reliability** track (FN analysis → local refinement → fusion → HITL → eval corpus). **Phases 7–8** have **RESEARCH.md**, **VALIDATION.md**, and numbered **PLAN.md** files under `.planning/phases/`; **9–11** remain unplanned until `/gsd-plan-phase`.
+**Phase plans (1–5)** live under `.planning/milestones/v1.0-phases/`; matching `.planning/phases/01–05/` directories hold `ARCHIVED.md` pointers so tooling sees the phase layout. **Phase 6** (tests, CI, structured logging) is **complete**. **Phases 7–11** are the **shot-boundary reliability** track (FN analysis → local refinement → fusion → HITL → eval corpus). **Phases 7–9** have **RESEARCH.md**, **VALIDATION.md**, and numbered **PLAN.md** files under `.planning/phases/`; **Phase 9** is **implemented** in app code (`boundary-fusion.ts`, `detect-export-cuts --fusion-policy`). **10–11** remain unplanned until `/gsd-plan-phase`.
 
 **Related plans**
 
@@ -22,7 +22,7 @@ This milestone delivers phased hardening and alignment work traced to `.planning
 - [x] **Phase 6: Tests & observability** — Baseline automated tests, CI, structured logging
 - [x] **Phase 7: Shot boundary FN analysis** — List gold cuts with no predicted match within tolerance (CLI: `eval:boundary-misses`)
 - [x] **Phase 8: Shot boundary local refinement** — Second-pass detection on FN windows
-- [ ] **Phase 9: Shot boundary fusion policy** — Consensus and prune auxiliary detector peaks
+- [x] **Phase 9: Shot boundary fusion policy** — Consensus and prune auxiliary detector peaks (`src/lib/boundary-fusion.ts`, `detect-export-cuts --fusion-policy`, `detectShotsForIngest.boundaryFusionPolicy`; benchmarks in `eval/runs/STATUS.md`)
 - [ ] **Phase 10: Shot boundary HITL** — In-app review queue for per-film tuning
 - [ ] **Phase 11: Shot boundary eval corpus** — Multi-film gold and F1 calibration targets
 
@@ -200,13 +200,18 @@ Plans:
 
 ### Phase 9: Shot boundary fusion policy — consensus and prune auxiliary detector peaks
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Replace **flat** merge of primary + auxiliary cut streams (single `clusterCutTimes` pass) with **explicit fusion policies** so optional peaks (TransNet, `extraBoundaryCuts`, FN-refine extras) can **recover FN** without the FP blow-ups seen on Ran when auxiliary-only merges dominated. Default path stays **backward-compatible** (`merge_flat`).
+
+**Improvement target (primary benchmark):** Same as **[`eval/runs/STATUS.md`](../../eval/runs/STATUS.md)** — gold **`eval/gold/gold-ran-2026-04-10.json`**, window **0–780 s**, **`tol 0.5 s`**. **Baseline:** F1 **≈ 0.714**, R **≈ 0.634**, P **≈ 0.818** (TP 45 / FP 10 / FN 26). **Near-term:** F1 **≥ 0.75** and R **≥ 0.70** *or* a documented precision/recall tradeoff table. **Stretch:** F1 **> 0.80**, R **> 0.75**. **Regression:** `pnpm eval:smoke` green; Ran F1 not below **0.70** without an explicit “precision-first” label.
+
+**Requirements**: TBD (derive from `09-01` / `09-02` acceptance)
 **Depends on:** Phase 8
-**Plans:** 0 plans
+**Plans:** 2 plans (see `.planning/phases/09-shot-boundary-fusion-policy-consensus-and-prune-auxiliary-detector-peaks/`)
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 9 to break down)
+
+- [x] 09-01: `src/lib/boundary-fusion.ts` + Vitest (`fuseBoundaryCutStreams`, `BoundaryFusionPolicy`)
+- [x] 09-02: `detect-export-cuts --fusion-policy`, docs (`pipeline-analysis`, `tuning-flow`, `AGENTS`), optional offline fusion sweep script (deferred — use `detect-export-cuts` + `--extra-cuts`)
 
 ### Phase 10: Shot boundary HITL — in-app review queue for per-film tuning
 
@@ -244,6 +249,6 @@ Plans:
 | 6 | Tests & observability | 3/3 | Complete | 2026-04-10 |
 | 7 | Shot boundary FN analysis | 2/2 | Complete | 2026-04-10 |
 | 8 | Shot boundary local refinement | 2/2 | Complete | 2026-04-10 |
-| 9 | Shot boundary fusion policy | 0/TBD | Not planned | — |
+| 9 | Shot boundary fusion policy | 2/2 | Complete | 2026-04-10 |
 | 10 | Shot boundary HITL | 0/TBD | Not planned | — |
 | 11 | Shot boundary eval corpus | 0/TBD | Not planned | — |

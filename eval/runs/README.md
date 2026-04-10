@@ -1,5 +1,7 @@
 # Pipeline eval run log
 
+**Current baseline, targets, and decisions:** **[`STATUS.md`](STATUS.md)** — canonical Ran numbers, improvement tiers, TransNet decision, presigned-URL note, Phase 9 pointer.
+
 Use this folder to **record boundary experiments** without relying on memory or chat history.
 
 **Product tuning narrative (sample → gold → predict → score → adjust):** see **[`docs/tuning-flow.md`](../docs/tuning-flow.md)** — maps this folder + CLI to future **in-app per-film tuning**.
@@ -52,7 +54,7 @@ Stderr prints baseline vs refined P/R/F1. Then run **`pnpm eval:pipeline -- eval
 
 1. **Identity:** film, segment (time range), `runId` (unique string).
 2. **Commands:** exact shell line including env vars (`METROVISION_BOUNDARY_MERGE_GAP_SEC`, `METROVISION_BOUNDARY_DETECTOR`, optional `METROVISION_EXTRA_BOUNDARY_CUTS_JSON`).
-3. **Output:** path to `--out` JSON; **`boundary.boundaryLabel`** inside that file (confirms ensemble vs FFmpeg fallback).
+3. **Output:** path to `--out` JSON; **`boundary.boundaryLabel`** inside that file (confirms ensemble vs FFmpeg fallback); **`boundary.fusionPolicy`** when using **`detect-export-cuts`** (default **`merge_flat`**).
 4. **Metrics:** P/R/F1, tp/fp/fn at a **fixed** `--tol` (e.g. 0.5) for comparability.
 5. **Failure mode:** mostly missed cuts (FN), mostly spurious (FP), or mixed.
 

@@ -10,11 +10,16 @@
  *
  * Note: `detectShotsForIngest` already merges `METROVISION_EXTRA_BOUNDARY_CUTS_JSON` from the environment.
  * `--extra-cuts` adds film-absolute seconds from a JSON array file for this run only (merged like ingest `extraBoundaryCuts`).
+ * `--fusion-policy` controls how primary detector cuts merge with those extras (and file env extras): `merge_flat` (default), `auxiliary_near_primary`, `pairwise_min_sources`.
  */
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { evalBoundaryCuts } from "@/lib/boundary-eval";
+import {
+  parseBoundaryFusionPolicy,
+  type BoundaryFusionPolicy,
+} from "@/lib/boundary-fusion";
 import { extractCutsSecFromEvalJson } from "@/lib/eval-cut-json";
 import { boundaryMergeEpsilonSec } from "@/lib/boundary-ensemble";
 import {
@@ -45,6 +50,7 @@ export type DetectExportPayload = {
     resolvedDetector: string;
     extraCutsMerged: number;
     mergeGapSec: number;
+    fusionPolicy: BoundaryFusionPolicy;
     boundaryDetectorEnv: string;
     extraBoundaryCutsJsonEnv: string;
   };
@@ -70,6 +76,7 @@ Options:
   --end SEC                ingestEndSec, optional
   --detector adaptive|content   passed to detectShotsForIngest (ensemble ignores family choice)
   --extra-cuts PATH        JSON array of film-absolute cut seconds (merged this run only)
+  --fusion-policy POLICY   merge_flat | auxiliary_near_primary | pairwise_min_sources (default: merge_flat)
   --out PATH               write JSON file; default: stdout
   --gold PATH              gold JSON (cutsSec) — compute metrics and embed in output
   --tol SEC                tolerance for --gold (default: 0.5)
@@ -90,6 +97,7 @@ function parseArgs(argv: string[]) {
   let end: number | undefined;
   let detector: "content" | "adaptive" = "adaptive";
   let extraCutsPath: string | undefined;
+  let fusionPolicyRaw: string | undefined;
   let outPath: string | undefined;
   let goldPath: string | undefined;
   let tol = 0.5;
@@ -106,6 +114,7 @@ function parseArgs(argv: string[]) {
       if (d !== "content" && d !== "adaptive") usage();
       detector = d;
     } else if (a === "--extra-cuts") extraCutsPath = argv[++i]!;
+    else if (a === "--fusion-policy") fusionPolicyRaw = argv[++i]!;
     else if (a === "--out") outPath = argv[++i]!;
     else if (a === "--gold") goldPath = argv[++i]!;
     else if (a === "--tol") tol = Number(argv[++i]);
@@ -123,6 +132,18 @@ function parseArgs(argv: string[]) {
   if (end !== undefined && !Number.isFinite(end)) usage();
   if (!Number.isFinite(tol) || tol < 0) usage();
 
+  let fusionPolicy: BoundaryFusionPolicy = "merge_flat";
+  if (fusionPolicyRaw !== undefined) {
+    const p = parseBoundaryFusionPolicy(fusionPolicyRaw);
+    if (!p) {
+      console.error(
+        `[detect-export-cuts] invalid --fusion-policy "${fusionPolicyRaw}"`,
+      );
+      usage();
+    }
+    fusionPolicy = p;
+  }
+
   return {
     videoPath,
     timeline: { startSec: start, endSec: end } as {
@@ -131,6 +152,7 @@ function parseArgs(argv: string[]) {
     },
     detector,
     extraCutsPath,
+    fusionPolicy,
     outPath,
     goldPath,
     tol,
@@ -181,6 +203,7 @@ async function main() {
   try {
     const r = await detectShotsForIngest(timelinePlan.analysisPath, args.detector, {
       inlineExtraBoundaryCuts: inlineExtra,
+      boundaryFusionPolicy: args.fusionPolicy,
       segmentFilmWindow: timelinePlan.segmentFilmWindow,
     });
     splits = r.splits;
@@ -244,6 +267,7 @@ async function main() {
       resolvedDetector,
       extraCutsMerged,
       mergeGapSec,
+      fusionPolicy: args.fusionPolicy,
       boundaryDetectorEnv: (process.env.METROVISION_BOUNDARY_DETECTOR ?? "").trim(),
       extraBoundaryCutsJsonEnv: (process.env.METROVISION_EXTRA_BOUNDARY_CUTS_JSON ?? "").trim(),
     },
@@ -281,6 +305,7 @@ async function main() {
       predInteriorCuts: cutsSec.length,
       boundaryLabel,
       mergeGapSec,
+      fusionPolicy: args.fusionPolicy,
       boundaryDetectorEnv: payload.boundary.boundaryDetectorEnv || null,
       outPath: args.outPath ? path.resolve(args.outPath) : null,
     };
