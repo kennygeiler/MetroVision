@@ -1,0 +1,370 @@
+{
+  "schemaVersion": "1.1",
+  "source": "metrovision_detect_export",
+  "generatedAt": "2026-04-10T14:50:37.187Z",
+  "videoPath": "/tmp/ranshort_ran.mov",
+  "videoPathResolved": "/tmp/ranshort_ran.mov",
+  "ingestStartSec": 0,
+  "ingestEndSec": 780,
+  "filmTitle": "Ran ranshort",
+  "runId": "ran-downloaded-20260410",
+  "cutsSec": [
+    16.961,
+    21.462,
+    27.963,
+    34.464,
+    40.965,
+    46.466,
+    54.968,
+    61.469,
+    66.97,
+    72.471,
+    77.972,
+    83.473,
+    89.474,
+    97.933,
+    106.143,
+    108.56,
+    109.56,
+    114.353,
+    115.27,
+    118.312,
+    120.521,
+    123.354,
+    124.938,
+    132.064,
+    133.44,
+    136.565,
+    143.4,
+    150.067,
+    154.068,
+    168.154,
+    175.363,
+    187.365,
+    195.158,
+    210.869,
+    254.044,
+    261.712,
+    268.629,
+    280.215,
+    296.551,
+    303.594,
+    305.927,
+    308.845,
+    318.346,
+    321.638,
+    326.098,
+    341.142,
+    351.102,
+    357.311,
+    361.729,
+    365.938,
+    371.689,
+    380.94,
+    408.653,
+    426.782,
+    442.576
+  ],
+  "shotCount": 56,
+  "splits": [
+    {
+      "start": 0,
+      "end": 16.961,
+      "index": 0
+    },
+    {
+      "start": 16.961,
+      "end": 21.462,
+      "index": 1
+    },
+    {
+      "start": 21.462,
+      "end": 27.963,
+      "index": 2
+    },
+    {
+      "start": 27.963,
+      "end": 34.464,
+      "index": 3
+    },
+    {
+      "start": 34.464,
+      "end": 40.965,
+      "index": 4
+    },
+    {
+      "start": 40.965,
+      "end": 46.466,
+      "index": 5
+    },
+    {
+      "start": 46.466,
+      "end": 54.968,
+      "index": 6
+    },
+    {
+      "start": 54.968,
+      "end": 61.469,
+      "index": 7
+    },
+    {
+      "start": 61.469,
+      "end": 66.97,
+      "index": 8
+    },
+    {
+      "start": 66.97,
+      "end": 72.471,
+      "index": 9
+    },
+    {
+      "start": 72.471,
+      "end": 77.972,
+      "index": 10
+    },
+    {
+      "start": 77.972,
+      "end": 83.473,
+      "index": 11
+    },
+    {
+      "start": 83.473,
+      "end": 89.474,
+      "index": 12
+    },
+    {
+      "start": 89.474,
+      "end": 97.933,
+      "index": 13
+    },
+    {
+      "start": 97.933,
+      "end": 106.143,
+      "index": 14
+    },
+    {
+      "start": 106.143,
+      "end": 108.56,
+      "index": 15
+    },
+    {
+      "start": 108.56,
+      "end": 109.56,
+      "index": 16
+    },
+    {
+      "start": 109.56,
+      "end": 114.353,
+      "index": 17
+    },
+    {
+      "start": 114.353,
+      "end": 115.27,
+      "index": 18
+    },
+    {
+      "start": 115.27,
+      "end": 118.312,
+      "index": 19
+    },
+    {
+      "start": 118.312,
+      "end": 120.521,
+      "index": 20
+    },
+    {
+      "start": 120.521,
+      "end": 123.354,
+      "index": 21
+    },
+    {
+      "start": 123.354,
+      "end": 124.938,
+      "index": 22
+    },
+    {
+      "start": 124.938,
+      "end": 132.064,
+      "index": 23
+    },
+    {
+      "start": 132.064,
+      "end": 133.44,
+      "index": 24
+    },
+    {
+      "start": 133.44,
+      "end": 136.565,
+      "index": 25
+    },
+    {
+      "start": 136.565,
+      "end": 143.4,
+      "index": 26
+    },
+    {
+      "start": 143.4,
+      "end": 150.067,
+      "index": 27
+    },
+    {
+      "start": 150.067,
+      "end": 154.068,
+      "index": 28
+    },
+    {
+      "start": 154.068,
+      "end": 168.154,
+      "index": 29
+    },
+    {
+      "start": 168.154,
+      "end": 175.363,
+      "index": 30
+    },
+    {
+      "start": 175.363,
+      "end": 187.365,
+      "index": 31
+    },
+    {
+      "start": 187.365,
+      "end": 195.158,
+      "index": 32
+    },
+    {
+      "start": 195.158,
+      "end": 210.869,
+      "index": 33
+    },
+    {
+      "start": 210.869,
+      "end": 254.044,
+      "index": 34
+    },
+    {
+      "start": 254.044,
+      "end": 261.712,
+      "index": 35
+    },
+    {
+      "start": 261.712,
+      "end": 268.629,
+      "index": 36
+    },
+    {
+      "start": 268.629,
+      "end": 280.215,
+      "index": 37
+    },
+    {
+      "start": 280.215,
+      "end": 296.551,
+      "index": 38
+    },
+    {
+      "start": 296.551,
+      "end": 303.594,
+      "index": 39
+    },
+    {
+      "start": 303.594,
+      "end": 305.927,
+      "index": 40
+    },
+    {
+      "start": 305.927,
+      "end": 308.845,
+      "index": 41
+    },
+    {
+      "start": 308.845,
+      "end": 318.346,
+      "index": 42
+    },
+    {
+      "start": 318.346,
+      "end": 321.638,
+      "index": 43
+    },
+    {
+      "start": 321.638,
+      "end": 326.098,
+      "index": 44
+    },
+    {
+      "start": 326.098,
+      "end": 341.142,
+      "index": 45
+    },
+    {
+      "start": 341.142,
+      "end": 351.102,
+      "index": 46
+    },
+    {
+      "start": 351.102,
+      "end": 357.311,
+      "index": 47
+    },
+    {
+      "start": 357.311,
+      "end": 361.729,
+      "index": 48
+    },
+    {
+      "start": 361.729,
+      "end": 365.938,
+      "index": 49
+    },
+    {
+      "start": 365.938,
+      "end": 371.689,
+      "index": 50
+    },
+    {
+      "start": 371.689,
+      "end": 380.94,
+      "index": 51
+    },
+    {
+      "start": 380.94,
+      "end": 408.653,
+      "index": 52
+    },
+    {
+      "start": 408.653,
+      "end": 426.782,
+      "index": 53
+    },
+    {
+      "start": 426.782,
+      "end": 442.576,
+      "index": 54
+    },
+    {
+      "start": 442.576,
+      "end": 442.95,
+      "index": 55
+    }
+  ],
+  "boundary": {
+    "boundaryLabel": "pyscenedetect_ensemble_pyscene",
+    "usedEnsemble": true,
+    "resolvedDetector": "ensemble",
+    "extraCutsMerged": 0,
+    "mergeGapSec": 0.22,
+    "boundaryDetectorEnv": "pyscenedetect_ensemble_pyscene",
+    "extraBoundaryCutsJsonEnv": ""
+  },
+  "evalAgainstGold": {
+    "goldPath": "/home/paperspace/MetroVision/eval/gold/gold-ran-2026-04-10.json",
+    "toleranceSec": 0.5,
+    "truePositives": 45,
+    "falsePositives": 10,
+    "falseNegatives": 26,
+    "precision": 0.8181818181818182,
+    "recall": 0.6338028169014085,
+    "f1": 0.7142857142857142
+  }
+}
