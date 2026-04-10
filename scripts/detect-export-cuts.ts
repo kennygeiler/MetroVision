@@ -15,6 +15,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path";
 
 import { evalBoundaryCuts } from "@/lib/boundary-eval";
+import { extractCutsSecFromEvalJson } from "@/lib/eval-cut-json";
 import { boundaryMergeEpsilonSec } from "@/lib/boundary-ensemble";
 import {
   clipDetectedSplitsToWindow,
@@ -151,19 +152,6 @@ function loadJsonArrayCuts(filePath: string): number[] {
     .map((x) => roundTime(x));
 }
 
-function extractGoldCuts(data: unknown): number[] {
-  if (Array.isArray(data)) {
-    return data.map(Number).filter((x) => Number.isFinite(x) && x >= 0);
-  }
-  if (data && typeof data === "object" && "cutsSec" in data) {
-    const c = (data as { cutsSec: unknown }).cutsSec;
-    if (Array.isArray(c)) {
-      return c.map(Number).filter((x) => Number.isFinite(x) && x >= 0);
-    }
-  }
-  throw new Error("Gold file: expected number[] or { cutsSec: number[] }");
-}
-
 function splitsToCutsSec(splits: DetectedSplit[]): number[] {
   const sorted = [...splits].sort((a, b) => a.start - b.start);
   if (sorted.length < 2) return [];
@@ -211,7 +199,7 @@ async function main() {
     const goldRaw = JSON.parse(
       readFileSync(path.resolve(args.goldPath), "utf-8"),
     ) as unknown;
-    const goldCuts = extractGoldCuts(goldRaw);
+    const goldCuts = extractCutsSecFromEvalJson(goldRaw);
     const ev = evalBoundaryCuts(goldCuts, cutsSec, args.tol);
     evalAgainstGold = {
       goldPath: path.resolve(args.goldPath),

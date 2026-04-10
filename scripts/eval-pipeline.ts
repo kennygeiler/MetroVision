@@ -8,23 +8,11 @@
 import { readFileSync } from "node:fs";
 
 import { evalBoundaryCuts } from "@/lib/boundary-eval";
+import { extractCutsSecFromEvalJson } from "@/lib/eval-cut-json";
 import { evalTaxonomySlots, type GoldShotSegment } from "@/lib/slot-eval";
 
 function loadJson(filePath: string): unknown {
   return JSON.parse(readFileSync(filePath, "utf8")) as unknown;
-}
-
-function extractCuts(data: unknown): number[] {
-  if (Array.isArray(data)) {
-    return data.map(Number).filter((x) => Number.isFinite(x) && x >= 0);
-  }
-  if (data && typeof data === "object" && "cutsSec" in data) {
-    const c = (data as { cutsSec: unknown }).cutsSec;
-    if (Array.isArray(c)) {
-      return c.map(Number).filter((x) => Number.isFinite(x) && x >= 0);
-    }
-  }
-  throw new Error("Expected a number[] or an object with cutsSec: number[]");
 }
 
 function extractShots(data: unknown): GoldShotSegment[] | null {
@@ -77,8 +65,8 @@ function main() {
 
   const g = loadJson(gold);
   const p = loadJson(pred);
-  const gCuts = extractCuts(g);
-  const pCuts = extractCuts(p);
+  const gCuts = extractCutsSecFromEvalJson(g);
+  const pCuts = extractCutsSecFromEvalJson(p);
   const boundary = evalBoundaryCuts(gCuts, pCuts, tol);
 
   console.info(

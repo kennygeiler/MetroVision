@@ -68,6 +68,9 @@ These are **not** environment variables; they travel with `POST /api/ingest-film
 5. **TransNet threshold × merge-gap grid** (reuses each TransNet JSON per threshold):  
    `npm run eval:sweep-transnet -- --video path.mp4 --gold eval/gold/....json [--start 0] [--end 780] [--thresholds 0.4,0.5,0.6] [--merge-gaps 0.22,0.35] --device cpu --out eval/runs/report.md`  
    Requires **PyScene on PATH** and **TransNet** (`transnetv2-pytorch`).
+6. **FN-window refinement (second detect pass)** — merge extra interior cuts from short windows around each unmatched gold time into baseline predicted `cutsSec`:  
+   `pnpm detect:refine-fn-windows -- <videoPath> --gold eval/gold/....json --pred eval/predicted/....json [--pad 2] [--max-windows N] [--out refined.json]`  
+   See `scripts/detect-refine-fn-windows.ts` and **`docs/tuning-flow.md`**.
 
 Tolerance **`--tol`** (seconds): a predicted cut matches a gold cut if their times differ by at most this amount (greedy matching).
 

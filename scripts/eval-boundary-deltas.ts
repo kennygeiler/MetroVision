@@ -10,22 +10,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { evalBoundaryCuts } from "@/lib/boundary-eval";
+import { extractCutsSecFromEvalJson } from "@/lib/eval-cut-json";
 
 function loadJsonSync(filePath: string): unknown {
   return JSON.parse(readFileSync(filePath, "utf8")) as unknown;
-}
-
-function extractCuts(data: unknown): number[] {
-  if (Array.isArray(data)) {
-    return data.map(Number).filter((x) => Number.isFinite(x) && x >= 0);
-  }
-  if (data && typeof data === "object" && "cutsSec" in data) {
-    const c = (data as { cutsSec: unknown }).cutsSec;
-    if (Array.isArray(c)) {
-      return c.map(Number).filter((x) => Number.isFinite(x) && x >= 0);
-    }
-  }
-  throw new Error("Expected a number[] or an object with cutsSec: number[]");
 }
 
 function median(xs: number[]): number {
@@ -154,7 +142,7 @@ function parseArgs(argv: string[]) {
 function main() {
   const { gold, preds, tol, out } = parseArgs(process.argv.slice(2));
   const goldPath = path.resolve(gold);
-  const goldCuts = extractCuts(loadJsonSync(goldPath));
+  const goldCuts = extractCutsSecFromEvalJson(loadJsonSync(goldPath));
 
   const parts: string[] = [];
   parts.push("# Boundary timing — matched gold vs predicted cuts");
@@ -170,7 +158,7 @@ function main() {
 
   for (const p of preds) {
     const predPath = path.resolve(p);
-    const predCuts = extractCuts(loadJsonSync(predPath));
+    const predCuts = extractCutsSecFromEvalJson(loadJsonSync(predPath));
     parts.push(sectionMarkdown(predPath, tol, goldCuts, predCuts));
   }
 

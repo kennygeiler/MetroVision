@@ -3,22 +3,22 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phases 7–8 planned (RESEARCH + VALIDATION + PLAN.md); execute `/gsd-execute-phase 7` or implement plans manually
-last_updated: "2026-04-10T23:00:00.000Z"
-last_activity: 2026-04-10 — `/gsd-plan-phase` 7 & 8: eval-cut-json + boundary-misses markdown; refine-fn-windows CLI + docs plans
+stopped_at: Phases 7–8 executed (eval-cut-json, boundary-misses --out/--markdown, detect:refine-fn-windows, docs); next Phase 9 or Ran FN experiments
+last_updated: "2026-04-10T23:45:00.000Z"
+last_activity: 2026-04-10 — Implemented 07-01→08-02: mergeInteriorCutSec, refine CLI, shared eval JSON loader + sweep scripts aligned
 progress:
   total_phases: 11
-  completed_phases: 6
+  completed_phases: 8
   total_plans: 6
   completed_plans: 19
-  percent: 55
+  percent: 73
 ---
 
 # Project State
 
-**Current focus:** **Phase 7** — shot-boundary FN analysis (roadmap planning TBD; CLI `eval:boundary-misses` already exists). **`/gsd-plan-phase 7`** to break down remaining scope.
+**Current focus:** **Phase 9** — fusion policy (unplanned) or operator experiments with **`detect:refine-fn-windows`** on real video.
 
-**Milestone core (phases 1–6):** complete. **Boundary track (7–11):** goals on roadmap; plans not written for 7–11 yet.
+**Milestone core (phases 1–6):** complete. **Boundary track:** Phases **7–8** complete; **9–11** not planned.
 
 ## Accumulated Context
 

@@ -20,8 +20,8 @@ This milestone delivers phased hardening and alignment work traced to `.planning
 - [x] **Phase 4: Rate limits & heavy-work boundaries** — Worker/RAG/agent Gemini limiting; semantic search fallback; `process-scene` stance vs AC-01/AC-20
 - [x] **Phase 5: Fragile modules** — Taxonomy TS/Python parity; D3 and large client components
 - [x] **Phase 6: Tests & observability** — Baseline automated tests, CI, structured logging
-- [ ] **Phase 7: Shot boundary FN analysis** — List gold cuts with no predicted match within tolerance (CLI: `eval:boundary-misses`)
-- [ ] **Phase 8: Shot boundary local refinement** — Second-pass detection on FN windows
+- [x] **Phase 7: Shot boundary FN analysis** — List gold cuts with no predicted match within tolerance (CLI: `eval:boundary-misses`)
+- [x] **Phase 8: Shot boundary local refinement** — Second-pass detection on FN windows
 - [ ] **Phase 9: Shot boundary fusion policy** — Consensus and prune auxiliary detector peaks
 - [ ] **Phase 10: Shot boundary HITL** — In-app review queue for per-film tuning
 - [ ] **Phase 11: Shot boundary eval corpus** — Multi-film gold and F1 calibration targets
@@ -182,8 +182,8 @@ Plans:
 
 Plans:
 
-- [ ] 07-01: Shared `extractCutsSecFromEvalJson` + Vitest (`src/lib/eval-cut-json.ts`)
-- [ ] 07-02: `eval:boundary-misses --markdown` / `--out` + doc cross-links
+- [x] 07-01: Shared `extractCutsSecFromEvalJson` + Vitest (`src/lib/eval-cut-json.ts`)
+- [x] 07-02: `eval:boundary-misses --markdown` / `--out` + doc cross-links
 
 ### Phase 8: Shot boundary local refinement — second-pass detection on FN windows
 
@@ -195,8 +195,8 @@ Plans:
 
 Plans:
 
-- [ ] 08-01: `mergeInteriorCutSec` helper + `pnpm detect:refine-fn-windows` script
-- [ ] 08-02: Document refinement CLI in `docs/tuning-flow.md`, `eval/runs/README.md`, `AGENTS.md` (+ optional `pipeline-analysis.md`)
+- [x] 08-01: `mergeInteriorCutSec` helper + `pnpm detect:refine-fn-windows` script
+- [x] 08-02: Document refinement CLI in `docs/tuning-flow.md`, `eval/runs/README.md`, `AGENTS.md` (+ optional `pipeline-analysis.md`)
 
 ### Phase 9: Shot boundary fusion policy — consensus and prune auxiliary detector peaks
 
@@ -242,8 +242,8 @@ Plans:
 | 4 | Rate limits & heavy-work boundaries | 4/4 | Complete | 2026-04-07 |
 | 5 | Fragile modules | 2/2 | Complete | 2026-04-07 |
 | 6 | Tests & observability | 3/3 | Complete | 2026-04-10 |
-| 7 | Shot boundary FN analysis | 0/2 | Planned — not executed | — |
-| 8 | Shot boundary local refinement | 0/2 | Planned — not executed | — |
+| 7 | Shot boundary FN analysis | 2/2 | Complete | 2026-04-10 |
+| 8 | Shot boundary local refinement | 2/2 | Complete | 2026-04-10 |
 | 9 | Shot boundary fusion policy | 0/TBD | Not planned | — |
 | 10 | Shot boundary HITL | 0/TBD | Not planned | — |
 | 11 | Shot boundary eval corpus | 0/TBD | Not planned | — |

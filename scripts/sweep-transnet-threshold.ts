@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 import { boundaryMergeEpsilonSec } from "@/lib/boundary-ensemble";
 import { evalBoundaryCuts } from "@/lib/boundary-eval";
+import { extractCutsSecFromEvalJson } from "@/lib/eval-cut-json";
 import {
   clipDetectedSplitsToWindow,
   detectShotsForIngest,
@@ -42,19 +43,6 @@ function parseNumList(s: string): number[] {
     .split(",")
     .map((x) => Number(x.trim()))
     .filter((n) => Number.isFinite(n));
-}
-
-function extractGoldCuts(data: unknown): number[] {
-  if (Array.isArray(data)) {
-    return data.map(Number).filter((x) => Number.isFinite(x) && x >= 0);
-  }
-  if (data && typeof data === "object" && "cutsSec" in data) {
-    const c = (data as { cutsSec: unknown }).cutsSec;
-    if (Array.isArray(c)) {
-      return c.map(Number).filter((x) => Number.isFinite(x) && x >= 0);
-    }
-  }
-  throw new Error("Gold: expected number[] or { cutsSec: number[] }");
 }
 
 function loadJsonArrayCuts(filePath: string): number[] {
@@ -202,7 +190,9 @@ async function main() {
     throw new Error("Need at least one threshold and one merge gap");
   }
 
-  const goldCuts = extractGoldCuts(JSON.parse(readFileSync(opts.gold, "utf-8")) as unknown);
+  const goldCuts = extractCutsSecFromEvalJson(
+    JSON.parse(readFileSync(opts.gold, "utf-8")) as unknown,
+  );
   const tmpDir = mkdtempSync(path.join(tmpdir(), "metrovision-transnet-sweep-"));
   const transnetFiles = new Map<number, string>();
 

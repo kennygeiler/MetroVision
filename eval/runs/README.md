@@ -19,6 +19,32 @@ pnpm detect:export-cuts -- /path/to/Ran_1985.mp4 --start 0 --end 780 \
 
 Match `--start` / `--end` to the segment encoded in that gold file (runtime / last shot end in the JSON).
 
+## FN / FP report (markdown)
+
+After you have gold + baseline predicted JSON, write a scrub-friendly miss list into this folder:
+
+```bash
+pnpm eval:boundary-misses -- eval/gold/your-gold.json eval/predicted/your-pred.json \
+  --tol 0.5 --markdown --out eval/runs/2026-04-10-your-film-misses.md
+```
+
+Compare before/after refinement with **`pnpm eval:pipeline`** on the same files.
+
+## FN-window refinement (optional)
+
+Re-detect around missed gold times (one PyScene pass per FN; use **`--max-windows`** while iterating):
+
+```bash
+pnpm detect:refine-fn-windows -- /path/to/clip.mp4 \
+  --gold eval/gold/your-gold.json \
+  --pred eval/predicted/baseline.json \
+  --pad 2 --max-windows 10 \
+  --start 0 --end 780 \
+  --out eval/predicted/your-refined.json
+```
+
+Stderr prints baseline vs refined P/R/F1. Then run **`pnpm eval:pipeline -- eval/gold/... eval/predicted/your-refined.json --tol 0.5`**.
+
 - **`ledger.jsonl`**: one JSON object per line (append-only). Safe to `tail` or import into a spreadsheet.
 - **`RUN.template.json`**: copy to a dated filename and fill for richer narrative + command history.
 
@@ -52,5 +78,6 @@ Match `--start` / `--end` to the segment encoded in that gold file (runtime / la
 - **`2026-04-10-transnet-threshold-sweep.md`** — `eval:sweep-transnet` grid (threshold × merge gap) + **distance-to-reliable** notes.
 - **`NEXT-RUN.md`** — copy-paste command for the **next** boundary experiment after each logged baseline.
 - `pnpm detect:export-cuts` / `npm run detect:export-cuts` — see `scripts/detect-export-cuts.ts`.
+- `pnpm detect:refine-fn-windows` — see `scripts/detect-refine-fn-windows.ts`.
 - `pnpm eval:pipeline` — compare any two gold/predicted JSON files.
 - `docs/pipeline-analysis.md` — env vars and interpretation.

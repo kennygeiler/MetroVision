@@ -31,9 +31,9 @@ Use the **same** gold file and **same** source video timebase for every comparis
 |-------|---------|------------------|-------------------------|
 | **1. Sample** | Bound CPU/time; stable eval window | `ingestStartSec` / `ingestEndSec` on ingest; `detect:export-cuts --start/--end` | User picks **start/end** or **preset lengths** (e.g. first N min); store **window** on a **tuning session** |
 | **2. Human gold** | Ground-truth cut instants on **film timeline** | **`/eval/gold-annotate`**, export JSON; or `eval/gold/*.json` in repo | Same UI path; persist as **`eval_artifacts`** (`kind=gold`) linked to **`filmId`** + **sessionId** |
-| **3. Auto predict** | Same detector policy as production | **`npm run detect:export-cuts`** on worker-capable host with **PATH** + env | **Server job** (worker or app route): run **`detectShotsForIngest`** only; store **`eval_artifacts`** (`kind=predicted`) + **provenance** (`boundaryLabel`, merge gap, detector env) |
-| **4. Score** | F1 + timing bias + miss lists | **`npm run eval:pipeline`**, **`npm run eval:boundary-deltas`**, **`npm run eval:boundary-misses`** | API: **`evalBoundaryCuts`** (includes **`unmatchedGoldSec`**, **`unmatchedPredSec`**) + delta stats |
-| **5. Adjust** | One knob per iteration | Env: **`METROVISION_BOUNDARY_MERGE_GAP_SEC`**, **`METROVISION_BOUNDARY_DETECTOR`**, **`extraBoundaryCuts`**, TransNet file | **Tuning profile** per film or per user: named presets (e.g. *Dense cuts*, *Default*); **diff** against last run |
+| **3. Auto predict** | Same detector policy as production | **`npm run detect:export-cuts`** on worker-capable host with **PATH** + env; optional **`npm run detect:refine-fn-windows`** (second pass on FN windows — expensive) | **Server job** (worker or app route): run **`detectShotsForIngest`** only; store **`eval_artifacts`** (`kind=predicted`) + **provenance** (`boundaryLabel`, merge gap, detector env) |
+| **4. Score** | F1 + timing bias + miss lists | **`npm run eval:pipeline`**, **`npm run eval:boundary-deltas`**, **`npm run eval:boundary-misses`** (add **`--markdown --out eval/runs/....md`** to log FN/FP) | API: **`evalBoundaryCuts`** (includes **`unmatchedGoldSec`**, **`unmatchedPredSec`**) + delta stats |
+| **5. Adjust** | One knob per iteration | Env: **`METROVISION_BOUNDARY_MERGE_GAP_SEC`**, **`METROVISION_BOUNDARY_DETECTOR`**, **`extraBoundaryCuts`**, TransNet file; refinement CLI merges extra cuts with same epsilon | **Tuning profile** per film or per user: named presets (e.g. *Dense cuts*, *Default*); **diff** against last run |
 | **6. Log** | Audit trail for product + support | **`eval/runs/ledger.jsonl`**, **`eval/runs/*.json`**, **`2026-04-10-ran-boundary-timing.md`** | **`tuning_runs`** table or **`eval_artifacts`** rows + **summary JSON**; UI **history** timeline |
 
 ---
@@ -64,9 +64,11 @@ For **productization**, each run should record (minimum):
 | Artifact API | **`/api/eval/artifacts`** — `src/app/api/eval/artifacts/**` |
 | DB | **`eval_artifacts`** — `src/db/schema.ts` |
 | Detect-only (no DB) | **`npm run detect:export-cuts`** — `scripts/detect-export-cuts.ts` |
+| FN-window refinement | **`npm run detect:refine-fn-windows`** — `scripts/detect-refine-fn-windows.ts` (`--gold`, `--pred`, `--pad`, **`--max-windows`**) |
 | F1 | **`npm run eval:pipeline`** — `scripts/eval-pipeline.ts` |
 | Matched-pair timing | **`npm run eval:boundary-deltas`** — `scripts/eval-boundary-deltas.ts` |
-| FN / FP cut lists | **`npm run eval:boundary-misses`** — `scripts/eval-boundary-misses.ts` |
+| FN / FP cut lists | **`npm run eval:boundary-misses`** — `scripts/eval-boundary-misses.ts` (`--json`, **`--markdown`**, **`--out`**) |
+| Eval JSON shape | **`src/lib/eval-cut-json.ts`** — `extractCutsSecFromEvalJson` (shared by eval CLIs) |
 | Operator ledger | **`eval/runs/ledger.jsonl`**, **`eval/runs/*.json`**, **`eval/runs/*-boundary-timing.md`** |
 
 ---
@@ -86,3 +88,4 @@ For **productization**, each run should record (minimum):
 |------|------|
 | 2026-04-10 | Initial tuning-flow doc; Ran eval path documented in **`eval/runs/`** and **`eval/gold/README.md`**. |
 | 2026-04-10 | Decision point (TransNet sweep vs ensemble); Phases 7–11 on roadmap; **`eval:boundary-misses`** + **`unmatchedGoldSec`/`unmatchedPredSec`** on **`evalBoundaryCuts`**. |
+| 2026-04-10 | Phase 7–8 execution: **`eval-cut-json`**, **`eval:boundary-misses --markdown/--out`**, **`detect:refine-fn-windows`**, **`mergeInteriorCutSec`**. |

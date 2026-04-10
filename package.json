@@ -32,7 +32,8 @@
     "eval:boundary-deltas": "tsx scripts/eval-boundary-deltas.ts",
     "eval:boundary-misses": "tsx scripts/eval-boundary-misses.ts",
     "eval:sweep-transnet": "tsx scripts/sweep-transnet-threshold.ts",
-    "detect:export-cuts": "tsx scripts/detect-export-cuts.ts"
+    "detect:export-cuts": "tsx scripts/detect-export-cuts.ts",
+    "detect:refine-fn-windows": "tsx scripts/detect-refine-fn-windows.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1015.0",
