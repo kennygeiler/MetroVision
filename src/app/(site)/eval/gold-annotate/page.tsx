@@ -5,9 +5,9 @@ import { GoldAnnotateWorkspace } from "@/components/eval/gold-annotate-workspace
 import { getAllFilms } from "@/db/queries";
 
 export const metadata: Metadata = {
-  title: "Gold eval annotation",
+  title: "Human verified cuts",
   description:
-    "Internal session for annotating ground-truth shot cuts; bookmark URL to resume. Not indexed.",
+    "Internal session for annotating human verified shot cuts; bookmark URL to resume. Not indexed.",
   robots: { index: false, follow: false },
 };
 

@@ -1,5 +1,5 @@
 /**
- * Second-pass boundary detect on short film-absolute windows around each false-negative gold time;
+ * Second-pass boundary detect on short film-absolute windows around each false-negative human verified cut time;
  * merges new cut instants into baseline predicted cuts (same merge epsilon as ingest).
  *
  * Cost: one detect pass per FN window (use --max-windows to cap). Requires local video + PyScene/env like detect-export-cuts.
@@ -34,16 +34,16 @@ Usage:
   pnpm detect:refine-fn-windows -- <videoPath> --gold PATH --pred PATH [options]
 
 Required:
-  --gold PATH          eval JSON (number[] or { cutsSec })
+  --gold PATH          human verified cuts JSON (number[] or { cutsSec })
   --pred PATH          baseline predicted JSON
 
 Options:
   --pad SEC            half-width of each FN window (default: 2)
-  --tol SEC            eval tolerance vs gold (default: 0.5)
-  --start SEC          clip gold/pred timeline lower bound (optional)
+  --tol SEC            eval tolerance vs human verified cuts (default: 0.5)
+  --start SEC          clip human verified / pred timeline lower bound (optional)
   --end SEC            clip upper bound (optional; default: probe duration)
   --detector adaptive|content   (default: adaptive)
-  --max-windows N      process at most N FN gold times (ascending order)
+  --max-windows N      process at most N FN human verified times (ascending order)
   --out PATH           write refined JSON (stdout if omitted)
 `);
   process.exit(1);
@@ -138,18 +138,18 @@ async function main() {
   const resolved = resolveVideoPathOrUrl(args.videoPath);
   const goldRaw = JSON.parse(readFileSync(path.resolve(args.goldPath), "utf8")) as unknown;
   const predRaw = JSON.parse(readFileSync(path.resolve(args.predPath), "utf8")) as unknown;
-  const goldCuts = extractCutsSecFromEvalJson(goldRaw);
+  const humanVerifiedCuts = extractCutsSecFromEvalJson(goldRaw);
   const baselinePred = extractCutsSecFromEvalJson(predRaw);
 
   const duration = await probeVideoDurationSec(resolved);
-  const maxCue = Math.max(0, ...goldCuts, ...baselinePred);
+  const maxCue = Math.max(0, ...humanVerifiedCuts, ...baselinePred);
   const clipStart = args.timeline.startSec ?? 0;
   let clipEnd = args.timeline.endSec;
   if (clipEnd === undefined) {
     clipEnd =
       duration > 0 ? duration : Math.max(maxCue + args.pad + 60, args.pad * 4);
   }
-  // Gold windows (e.g. 0–780) may exceed a short source file; ingest rejects empty segments.
+  // Human verified windows (e.g. 0–780) may exceed a short source file; ingest rejects empty segments.
   if (duration > 0 && clipEnd > duration) {
     clipEnd = duration;
   }
@@ -159,7 +159,7 @@ async function main() {
     );
   }
 
-  const evBase = evalBoundaryCuts(goldCuts, baselinePred, args.tol);
+  const evBase = evalBoundaryCuts(humanVerifiedCuts, baselinePred, args.tol);
   const fnCenters = [...evBase.unmatchedGoldSec].sort((a, b) => a - b);
   const toProcess =
     args.maxWindows !== undefined
@@ -180,7 +180,7 @@ async function main() {
   }
 
   const mergedCuts = mergeInteriorCutSec(baselinePred, extras);
-  const evRefined = evalBoundaryCuts(goldCuts, mergedCuts, args.tol);
+  const evRefined = evalBoundaryCuts(humanVerifiedCuts, mergedCuts, args.tol);
 
   console.error(
     `[detect-refine-fn-windows] baseline: P=${evBase.precision.toFixed(4)} R=${evBase.recall.toFixed(4)} F1=${evBase.f1.toFixed(4)} (FN=${evBase.falseNegatives})`,

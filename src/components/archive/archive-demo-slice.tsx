@@ -119,7 +119,7 @@ export function ArchiveDemoSlice({
                 >
                   Tuning workspace
                 </Link>{" "}
-                — presets, gold revisions, worker detect, and boundary eval
+                — presets, human verified cuts (revision history), worker detect, and boundary eval
                 runs;{" "}
                 <Link
                   href="/tuning"

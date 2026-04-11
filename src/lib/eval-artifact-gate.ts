@@ -1,5 +1,5 @@
 /**
- * Operator gate for creating / listing eval artifacts (gold & predicted JSON).
+ * Operator gate for creating / listing eval artifacts (human verified cuts & predicted JSON).
  * - Development: if METROVISION_EVAL_ARTIFACT_ADMIN_SECRET is unset, POST/GET list are allowed (local only).
  * - Production: secret must be set; client must send Authorization: Bearer <secret>.
  *

@@ -90,7 +90,10 @@ export async function POST(request: Request) {
   const kind = o.kind;
   if (kind !== "gold" && kind !== "predicted") {
     return NextResponse.json(
-      { error: 'kind must be "gold" or "predicted".' },
+      {
+        error:
+          'kind must be "gold" (human verified cuts) or "predicted".',
+      },
       { status: 400 },
     );
   }

@@ -31,7 +31,7 @@ const workflowSteps = [
     step: "03",
     title: "Tune boundaries",
     description:
-      "Version global boundary-cut presets in the database, record gold revisions, run detect on the ingest worker, and score predicted cuts in-app—without mutating process env. Assign a preset per film for reproducible worker ingest.",
+      "Version global boundary-cut presets in the database, keep a versioned history of human verified cuts, run detect on the ingest worker, and score predicted cuts in-app—without mutating process env. Assign a preset per film for reproducible worker ingest.",
     links: [
       { href: "/tuning/workspace", label: "Tuning workspace" },
       { href: "/tuning", label: "Cemented profile & evidence" },
@@ -322,7 +322,7 @@ export default async function Home() {
           <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
             A single taxonomy and database surface for composition research,
             tooling prototypes, and teaching—including an in-app loop for
-            shot-boundary presets, gold, and eval alongside the CLI workflow.
+            shot-boundary presets, human verified cuts, and eval alongside the CLI workflow.
           </p>
         </div>
 

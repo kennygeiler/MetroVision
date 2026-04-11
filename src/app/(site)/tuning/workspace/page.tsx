@@ -6,7 +6,7 @@ import { getAllFilms } from "@/db/queries";
 export const metadata: Metadata = {
   title: "Boundary tuning workspace",
   description:
-    "Global cut presets, gold revision history, worker detect, and eval runs.",
+    "Global cut presets, human verified cuts revision history, worker detect, and eval runs.",
 };
 
 export default async function TuningWorkspacePage() {
@@ -31,10 +31,10 @@ export default async function TuningWorkspacePage() {
           Tuning workspace
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--color-text-secondary)]">
-          Boundary-cut presets are <strong>global</strong>. Gold revisions are{" "}
-          <strong>versioned</strong>. Run detection on the{" "}
+          Boundary-cut presets are <strong>global</strong>. Human verified cuts
+          are stored as <strong>versioned</strong> revisions. Run detection on the{" "}
           <strong>TS worker</strong> (not Vercel), then score against DB-backed
-          gold.
+          human verified cuts.
         </p>
         <p className="mt-4">
           <a

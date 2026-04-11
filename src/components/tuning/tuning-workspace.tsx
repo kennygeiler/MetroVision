@@ -14,7 +14,7 @@ type PresetRow = {
   isArchived: boolean;
 };
 
-type GoldRevision = {
+type HumanVerifiedCutsRevision = {
   id: string;
   filmId: string;
   windowStartSec: number | null;
@@ -40,7 +40,7 @@ export function TuningWorkspace({ films }: { films: FilmOption[] }) {
   const [presets, setPresets] = useState<PresetRow[]>([]);
   const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
   const [filmId, setFilmId] = useState(films[0]?.id ?? "");
-  const [revisions, setRevisions] = useState<GoldRevision[]>([]);
+  const [revisions, setRevisions] = useState<HumanVerifiedCutsRevision[]>([]);
   const [runs, setRuns] = useState<EvalRunRow[]>([]);
   const [goldRevisionId, setGoldRevisionId] = useState("");
   const [presetId, setPresetId] = useState("");
@@ -66,7 +66,7 @@ export function TuningWorkspace({ films }: { films: FilmOption[] }) {
   const loadRevisions = useCallback(async () => {
     if (!filmId) return;
     const res = await fetch(`/api/eval-gold-revisions?filmId=${encodeURIComponent(filmId)}`);
-    const data = (await res.json()) as { revisions?: GoldRevision[] };
+    const data = (await res.json()) as { revisions?: HumanVerifiedCutsRevision[] };
     const list = data.revisions ?? [];
     setRevisions(list);
     setGoldRevisionId((prev) =>
@@ -172,7 +172,9 @@ export METROVISION_BOUNDARY_MERGE_GAP_SEC=${gap}`;
 
   async function runEval() {
     if (!goldRevisionId || !predCuts.length) {
-      setStatus("Need a gold revision and predicted cuts (run boundary detect first).");
+      setStatus(
+        "Select a human verified cuts revision and predicted cuts (run boundary detect first).",
+      );
       return;
     }
     setBusy(true);
@@ -287,10 +289,10 @@ export METROVISION_BOUNDARY_MERGE_GAP_SEC=${gap}`;
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-          Gold revisions
+          Human verified cuts
         </h2>
         <p className="text-sm text-[var(--color-text-secondary)]">
-          Create new human gold in{" "}
+          Create or update human verified cuts in{" "}
           <Link
             href="/eval/gold-annotate"
             className="text-[var(--color-text-accent)] underline"
@@ -324,7 +326,7 @@ export METROVISION_BOUNDARY_MERGE_GAP_SEC=${gap}`;
               <label className="inline-flex cursor-pointer items-center gap-2">
                 <input
                   type="radio"
-                  name="goldRev"
+                  name="humanVerifiedCutsRev"
                   checked={goldRevisionId === r.id}
                   onChange={() => setGoldRevisionId(r.id)}
                 />
@@ -399,7 +401,7 @@ export METROVISION_BOUNDARY_MERGE_GAP_SEC=${gap}`;
           onClick={() => void runEval()}
           className="rounded-full border border-[var(--color-border-accent)] px-4 py-2 text-sm text-[var(--color-text-accent)]"
         >
-          Score vs gold + save run
+          Score vs human verified cuts + save run
         </button>
         {lastEval && typeof lastEval === "object" && lastEval !== null && "eval" in lastEval ? (
           <pre className="max-h-56 overflow-auto rounded-lg bg-[var(--color-surface-primary)] p-4 font-mono text-[11px]">

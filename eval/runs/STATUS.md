@@ -1,6 +1,6 @@
 # Boundary eval — current status (living notes)
 
-**Purpose:** Single place for **where we are** on shot-boundary evaluation: canonical gold/pred files, latest numbers, decisions, and **benchmark targets**. Update this when a run changes the baseline or when strategy shifts.
+**Purpose:** Single place for **where we are** on shot-boundary evaluation: canonical human verified / predicted files, latest numbers, decisions, and **benchmark targets**. Update this when a run changes the baseline or when strategy shifts.
 
 **Deeper narrative:** [`docs/tuning-flow.md`](../docs/tuning-flow.md) · **Env / workflow:** [`docs/pipeline-analysis.md`](../docs/pipeline-analysis.md) §3 · **Finish Ran + tuning roadmap:** [`.planning/tuning-roadmap-ran-completion.md`](../../.planning/tuning-roadmap-ran-completion.md). **In-app hub:** `/tuning` (canonical profile + links).
 
@@ -14,25 +14,25 @@
 
 | Knob | Production value | Notes |
 |------|------------------|--------|
-| `METROVISION_BOUNDARY_DETECTOR` | **`pyscenedetect_ensemble_pyscene`** | `pyscenedetect_ensemble` equivalent on Ran1243. **Not** `pyscenedetect_cli` alone (lower F1 on gold). |
+| `METROVISION_BOUNDARY_DETECTOR` | **`pyscenedetect_ensemble_pyscene`** | `pyscenedetect_ensemble` equivalent on Ran1243. **Not** `pyscenedetect_cli` alone (lower F1 vs human verified cuts). |
 | `METROVISION_BOUNDARY_MERGE_GAP_SEC` | **`0.22`** | Sweeps **0.12–0.45** did not change ensemble interior cuts on Ran1243; **0.22** kept as dense-cut default. |
 | Extra cuts / TransNet | **None** for baseline | Add only with a real auxiliary detector; **`merge_flat`** when merging. |
 | `detect-export-cuts --fusion-policy` | **`merge_flat`** | **`pairwise_min_sources`** can drop **all** interior cuts if nothing pairs within ε/2; **`auxiliary_near_primary`** did not beat baseline on oracle tests. |
-| Gold eval tolerance (`eval:pipeline` / `--gold`) | **`0.5` s** | Optional **0.55 s** for looser reporting only (does not improve detector). |
-| Canonical media | **`s3://metrovision-superai/films/ran-1985/source/Ran1243.mov`** | Duration **~763.4 s**; must cover gold through **~764 s**. |
+| Eval tolerance (`eval:pipeline` / `--gold` path) | **`0.5` s** | Optional **0.55 s** for looser reporting only (does not improve detector). |
+| Canonical media | **`s3://metrovision-superai/films/ran-1985/source/Ran1243.mov`** | Duration **~763.4 s**; must cover human verified cuts through **~764 s**. |
 | Reference predicted JSON | **`eval/predicted/ran1243-ensemble-gap022-20260410.json`** | **P 0.784 / R 0.817 / F1 0.800** @ tol **0.5**. |
 
 **Worker / Railway:** Set the two `METROVISION_*` env vars above to match this row before full-film Ran ingest.
 
 ---
 
-## Canonical gold (Ran, hand labels)
+## Canonical human verified cuts (Ran, hand labels)
 
 | Field | Value |
 |-------|--------|
-| **Gold JSON** | [`eval/gold/gold-ran-2026-04-10.json`](../gold/gold-ran-2026-04-10.json) — dense **hard-cut** instants (interior `cutsSec`; see [`eval/gold/README.md`](../gold/README.md)) |
-| **Interior gold cuts** | **71** |
-| **Last gold instant** | **763.222 s** — source file must span **≥ ~764 s** for a fair full-gold eval |
+| **Human verified cuts JSON** | [`eval/gold/gold-ran-2026-04-10.json`](../gold/gold-ran-2026-04-10.json) — dense **hard-cut** instants (interior `cutsSec`; see [`eval/gold/README.md`](../gold/README.md)) |
+| **Interior human verified cuts** | **71** |
+| **Last human verified instant** | **763.222 s** — source file must span **≥ ~764 s** for a fair full-reference eval |
 | **Eval window (CLI)** | **`--start 0 --end 780`** (or higher if the last shot extends past 780 s) |
 | **Match tolerance** | **`0.5 s`** (`evalBoundaryCuts` greedy one-to-one — same as `pnpm eval:pipeline` / `detect-export-cuts --gold`) |
 | **Primary metric** | **F1** at fixed tol; report **P/R/TP/FP/FN** together |
@@ -41,7 +41,7 @@
 
 ## Primary baseline — length-matched source (authoritative)
 
-**Requirement:** Video **duration must cover the gold timeline** (~764 s). A short transcode (e.g. ~443 s “ranshort”) leaves **~26 gold cuts with no possible match** in the last third of the timeline — metrics look like a **recall crash** even when detector settings are unchanged.
+**Requirement:** Video **duration must cover the human verified timeline** (~764 s). A short transcode (e.g. ~443 s “ranshort”) leaves **~26 human verified cuts with no possible match** in the last third of the timeline — metrics look like a **recall crash** even when detector settings are unchanged.
 
 **Canonical media (S3, updated long clip aligned to gold):**
 

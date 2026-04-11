@@ -1,5 +1,5 @@
 /**
- * List false-negative gold cuts and false-positive predictions (same greedy matching as eval:pipeline).
+ * List false-negative human verified cuts and false-positive predictions (same greedy matching as eval:pipeline).
  *
  *   pnpm eval:boundary-misses -- eval/gold/foo.json eval/predicted/foo.json [--tol 0.5] [--json] [--markdown] [--out PATH]
  */
@@ -35,7 +35,7 @@ function parseArgs(argv: string[]) {
     }
   }
   if (files.length < 2) {
-    console.error(`Usage: eval:boundary-misses -- <gold.json> <predicted.json> [options]
+    console.error(`Usage: eval:boundary-misses -- <human-verified-cuts.json> <predicted.json> [options]
 
 Options:
   --tol SEC       match tolerance (default: 0.5)
@@ -79,19 +79,23 @@ function buildPlainText(
   ev: ReturnType<typeof evalBoundaryCuts>,
 ): string {
   const lines: string[] = [];
-  lines.push(`Gold: ${goldPath}`);
+  lines.push(`Human verified cuts: ${goldPath}`);
   lines.push(`Pred: ${predPath}`);
   lines.push(`Tolerance: ${ev.toleranceSec}s`);
   lines.push(
     `P=${ev.precision.toFixed(4)} R=${ev.recall.toFixed(4)} F1=${ev.f1.toFixed(4)} TP=${ev.truePositives} FP=${ev.falsePositives} FN=${ev.falseNegatives}`,
   );
   lines.push("");
-  lines.push(`False negatives (gold, no pred within tol): ${ev.unmatchedGoldSec.length}`);
+  lines.push(
+    `False negatives (human verified cut, no pred within tol): ${ev.unmatchedGoldSec.length}`,
+  );
   for (const t of ev.unmatchedGoldSec) {
     lines.push(`  ${t}`);
   }
   lines.push("");
-  lines.push(`False positives (pred, no gold within tol): ${ev.unmatchedPredSec.length}`);
+  lines.push(
+    `False positives (pred, no human verified cut within tol): ${ev.unmatchedPredSec.length}`,
+  );
   for (const t of ev.unmatchedPredSec) {
     lines.push(`  ${t}`);
   }
@@ -104,16 +108,16 @@ function buildMarkdown(
   ev: ReturnType<typeof evalBoundaryCuts>,
 ): string {
   const lines: string[] = [];
-  lines.push("# Boundary misses (gold vs predicted)");
+  lines.push("# Boundary misses (human verified cuts vs predicted)");
   lines.push("");
-  lines.push(`- **Gold:** \`${goldPath}\``);
+  lines.push(`- **Human verified cuts:** \`${goldPath}\``);
   lines.push(`- **Pred:** \`${predPath}\``);
   lines.push(`- **Tolerance:** ${ev.toleranceSec}s`);
   lines.push(
     `- **P / R / F1:** ${ev.precision.toFixed(4)} / ${ev.recall.toFixed(4)} / ${ev.f1.toFixed(4)} (TP=${ev.truePositives} FP=${ev.falsePositives} FN=${ev.falseNegatives})`,
   );
   lines.push("");
-  lines.push("## False negatives (gold)");
+  lines.push("## False negatives (human verified cuts)");
   lines.push("");
   for (const t of ev.unmatchedGoldSec) {
     lines.push(`- ${t}`);
@@ -138,9 +142,9 @@ function main() {
   const { goldPath, predPath, tol, jsonOut, markdownOut, outPath } = parseArgs(
     process.argv.slice(2),
   );
-  const goldCuts = extractCutsSecFromEvalJson(loadJson(goldPath));
+  const humanVerifiedCuts = extractCutsSecFromEvalJson(loadJson(goldPath));
   const predCuts = extractCutsSecFromEvalJson(loadJson(predPath));
-  const ev = evalBoundaryCuts(goldCuts, predCuts, tol);
+  const ev = evalBoundaryCuts(humanVerifiedCuts, predCuts, tol);
 
   let body: string;
   if (jsonOut) {

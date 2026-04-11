@@ -38,7 +38,7 @@ export default function TuningPage() {
         </h1>
         <p className="mt-4 text-base leading-8 text-[var(--color-text-secondary)]">
           Canonical shot-boundary settings for Ran (validated on length-matched
-          media and hand gold). Align the ingest worker env with this table
+          media and hand-cut human verified cuts). Align the ingest worker env with this table
           before full-film runs. Composition and classification tuning are
           separate.
         </p>
@@ -70,7 +70,7 @@ export default function TuningPage() {
                 </td>
                 <td className="py-3 text-[var(--color-text-secondary)]">
                   Dual PyScene + merge. Single adaptive/content scored lower on
-                  Ran gold.
+                  Ran human verified cuts.
                 </td>
               </tr>
               <tr className="border-b border-[var(--color-border-subtle)] align-top">
@@ -79,7 +79,7 @@ export default function TuningPage() {
                 </td>
                 <td className="py-3 pr-4 font-mono text-xs">0.22</td>
                 <td className="py-3 text-[var(--color-text-secondary)]">
-                  Dense hard-cut gold default; wider gaps did not change ensemble
+                  Dense hard-cut human verified default; wider gaps did not change ensemble
                   cuts on Ran1243.
                 </td>
               </tr>
@@ -136,14 +136,14 @@ export default function TuningPage() {
               >
                 Tuning workspace
               </Link>{" "}
-              — global presets, gold history, worker detect, eval runs
+              — global presets, human verified cuts history, worker detect, eval runs
             </li>
             <li>
               <Link
                 href="/eval/gold-annotate"
                 className="text-[var(--color-text-accent)] underline-offset-4 hover:underline"
               >
-                Gold annotate
+                Human verified cuts
               </Link>{" "}
               — hand-cut instants
             </li>
@@ -228,7 +228,7 @@ pnpm detect:export-cuts -- /path/to/Ran1243.mov --start 0 --end 780 \\
           Next product steps
         </h2>
         <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-          In-app HITL boundary review and multi-film gold are roadmap Phases
+          In-app HITL boundary review and multi-film human verified cuts are roadmap Phases
           10–11 (see{" "}
           <DocLink path=".planning/ROADMAP.md" label=".planning/ROADMAP.md" />).
           This page documents the CLI and env contract until those ship.

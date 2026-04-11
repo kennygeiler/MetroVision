@@ -370,7 +370,7 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 
 // ---------------------------------------------------------------------------
-// Private eval artifacts (gold / predicted JSON) — not committed to git
+// Private eval artifacts (human verified cuts / predicted JSON; kind column still uses "gold") — not committed to git
 // ---------------------------------------------------------------------------
 
 export const evalArtifacts = pgTable("eval_artifacts", {
@@ -388,7 +388,7 @@ export type EvalArtifact = typeof evalArtifacts.$inferSelect;
 export type NewEvalArtifact = typeof evalArtifacts.$inferInsert;
 
 // ---------------------------------------------------------------------------
-// Phase 10: Boundary cut tuning — global presets, gold revisions, eval runs
+// Phase 10: Boundary cut tuning — global presets, human verified cuts revisions (eval_gold_revisions), eval runs
 // ---------------------------------------------------------------------------
 
 export const boundaryCutPresets = pgTable("boundary_cut_presets", {

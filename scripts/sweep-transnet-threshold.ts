@@ -1,5 +1,5 @@
 /**
- * TransNet threshold sweep × merge-gap grid vs gold (F1 / tp / fp / fn).
+ * TransNet threshold sweep × merge-gap grid vs human verified cuts (F1 / tp / fp / fn).
  *
  * Runs `python3 -m pipeline.transnet_cuts` once per threshold, then reuses that JSON
  * while varying METROVISION_BOUNDARY_MERGE_GAP_SEC + PyScene ensemble (same as detect-export-cuts).
@@ -190,7 +190,7 @@ async function main() {
     throw new Error("Need at least one threshold and one merge gap");
   }
 
-  const goldCuts = extractCutsSecFromEvalJson(
+  const humanVerifiedCuts = extractCutsSecFromEvalJson(
     JSON.parse(readFileSync(opts.gold, "utf-8")) as unknown,
   );
   const tmpDir = mkdtempSync(path.join(tmpdir(), "metrovision-transnet-sweep-"));
@@ -213,7 +213,7 @@ async function main() {
 
     // Baseline: no TransNet
     const base = await runMergedDetect(opts.video, opts.timeline, [], opts.detector);
-    const ev0 = evalBoundaryCuts(goldCuts, base.cutsSec, opts.tol);
+    const ev0 = evalBoundaryCuts(humanVerifiedCuts, base.cutsSec, opts.tol);
     rows.push({
       mergeGap: effectiveGap,
       transnetThreshold: "—",
@@ -232,7 +232,7 @@ async function main() {
       const f = transnetFiles.get(t)!;
       const extra = loadJsonArrayCuts(f);
       const merged = await runMergedDetect(opts.video, opts.timeline, extra, opts.detector);
-      const ev = evalBoundaryCuts(goldCuts, merged.cutsSec, opts.tol);
+      const ev = evalBoundaryCuts(humanVerifiedCuts, merged.cutsSec, opts.tol);
       rows.push({
         mergeGap: effectiveGap,
         transnetThreshold: String(t),
@@ -259,7 +259,9 @@ async function main() {
   md.push("");
   md.push(`- **Generated:** ${new Date().toISOString()}`);
   md.push(`- **Video:** \`${path.relative(REPO_ROOT, opts.video) || opts.video}\``);
-  md.push(`- **Gold:** \`${path.relative(REPO_ROOT, opts.gold) || opts.gold}\` (${goldCuts.length} interior cuts)`);
+  md.push(
+    `- **Human verified cuts:** \`${path.relative(REPO_ROOT, opts.gold) || opts.gold}\` (${humanVerifiedCuts.length} interior cuts)`,
+  );
   md.push(
     `- **Window:** start=${opts.timeline.startSec ?? "∅"} end=${opts.timeline.endSec ?? "∅"} · **tol**=${opts.tol}s`,
   );
@@ -294,10 +296,10 @@ async function main() {
     "1. **Operational:** `scenedetect` on PATH; `boundaryLabel` shows **ensemble**, not `ffmpeg_scene` fallback.",
   );
   md.push(
-    "2. **Stability:** Same gold + same clip → metrics reproducible within small drift when env is pinned.",
+    "2. **Stability:** Same human verified cuts file + same clip → metrics reproducible within small drift when env is pinned.",
   );
   md.push(
-    "3. **Quality (example bars):** F1 **≥ 0.80** and recall **≥ 0.75** at your chosen **tol** (e.g. 0.5 s) on a **representative** hand-cut gold — stricter if you need frame-level agreement.",
+    "3. **Quality (example bars):** F1 **≥ 0.80** and recall **≥ 0.75** at your chosen **tol** (e.g. 0.5 s) on a **representative** hand-cut reference — stricter if you need frame-level agreement.",
   );
   md.push("");
   md.push(
@@ -305,7 +307,7 @@ async function main() {
   );
   md.push("");
   md.push(
-    "**Full-film reliability** also needs: provenance on every ingest, optional HITL on ambiguous segments, and the same **timebase** between gold and source.",
+    "**Full-film reliability** also needs: provenance on every ingest, optional HITL on ambiguous segments, and the same **timebase** between human verified cuts and source.",
   );
   md.push("");
 

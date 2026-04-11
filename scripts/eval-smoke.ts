@@ -1,5 +1,5 @@
 /**
- * CI-friendly boundary eval on tiny in-repo gold vs predicted files.
+ * CI-friendly boundary eval on tiny in-repo human verified cuts vs predicted files.
  *
  *   pnpm eval:smoke
  */
@@ -25,9 +25,9 @@ function loadCuts(relPath: string): number[] {
 }
 
 const tol = 0.5;
-const gold = loadCuts("eval/gold/smoke.json");
+const humanVerifiedCuts = loadCuts("eval/gold/smoke.json");
 const pred = loadCuts("eval/predicted/smoke.json");
-const r = evalBoundaryCuts(gold, pred, tol);
+const r = evalBoundaryCuts(humanVerifiedCuts, pred, tol);
 
 if (r.falseNegatives > 0 || r.falsePositives > 0 || r.f1 < 1) {
   console.error("[eval:smoke] FAILED", r);

@@ -1,6 +1,6 @@
 # Pipeline analysis — boundaries, environment, and evaluation
 
-This document ties together **shot-boundary detection** configuration (worker / Next ingest), how to **verify** which strategy ran, and how to **measure** boundary quality against human gold (hard cuts).
+This document ties together **shot-boundary detection** configuration (worker / Next ingest), how to **verify** which strategy ran, and how to **measure** boundary quality against **human verified cuts** (hard cuts).
 
 For deploy and SSE/CORS details, see [production-ingest.md](./production-ingest.md).
 
@@ -13,7 +13,7 @@ Set these on the **service that runs ingest** (typically the **Railway worker**)
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | **`METROVISION_BOUNDARY_DETECTOR`** | `pyscenedetect_cli` | **`pyscenedetect_cli`** — single PySceneDetect run; request body **`detector`** chooses `content` or `adaptive`. **`pyscenedetect_ensemble_pyscene`** or **`pyscenedetect_ensemble`** — run **adaptive + content** in parallel, merge cut endpoints with NMS-style clustering (see §2). |
-| **`METROVISION_BOUNDARY_MERGE_GAP_SEC`** | `0.35` | Seconds within which nearby cut times are **merged** into one boundary. **Lower** (e.g. `0.2`–`0.25`) preserves more hard cuts for gold that marks **every** edit; **too low** increases duplicate/spurious cuts. |
+| **`METROVISION_BOUNDARY_MERGE_GAP_SEC`** | `0.35` | Seconds within which nearby cut times are **merged** into one boundary. **Lower** (e.g. `0.2`–`0.25`) preserves more hard cuts when human verified cuts mark **every** edit; **too low** increases duplicate/spurious cuts. |
 | **`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`** | *(unset)* | Host path to a JSON **array of numbers** (cut times in **seconds**, film-absolute). Merged with detector output after the same clustering step. Optional if you use request **`extraBoundaryCuts`** instead. |
 | **`METROVISION_FFMPEG_SCENE_THRESHOLD`** | `0.32` | When ingest uses FFmpeg **`scene`** filter for cuts: sensitivity of scene-change score. **Lower** → more cuts (higher recall, more noise). |
 | **`METROVISION_FFMPEG_SCENE_SAMPLE_FPS`** | `4` (non-Vercel), `2` (Vercel) | Max **analysis** frame rate before `scene` detection. **`0`**, **`full`**, or **`off`** = no fps downsampling (slowest, often **highest recall**). |
@@ -52,13 +52,13 @@ These are **not** environment variables; they travel with `POST /api/ingest-film
 
 ---
 
-## 3. Evaluation workflow (gold vs predicted)
+## 3. Evaluation workflow (human verified cuts vs predicted)
 
-**Living baseline and benchmark targets** (Ran gold, tol 0.5 s, registered F1/recall numbers, improvement tiers, TransNet decision): **[`eval/runs/STATUS.md`](../eval/runs/STATUS.md)**. Log per-run details in **`eval/runs/README.md`** (ledger, FN/FP markdown).
+**Living baseline and benchmark targets** (Ran human verified cuts, tol 0.5 s, registered F1/recall numbers, improvement tiers, TransNet decision): **[`eval/runs/STATUS.md`](../eval/runs/STATUS.md)**. Log per-run details in **`eval/runs/README.md`** (ledger, FN/FP markdown).
 
 **Phase 9 (fusion):** When merging **primary** detector interior cuts with **auxiliary** peaks (file/env **`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`**, request **`extraBoundaryCuts`**, **`detect-export-cuts --extra-cuts`**), ingest uses **`fuseBoundaryCutStreams`** in **`src/lib/boundary-fusion.ts`**. Policies: **`merge_flat`** (historical one-pass ε-cluster), **`auxiliary_near_primary`**, **`pairwise_min_sources`**. **`detect-export-cuts`** exposes **`--fusion-policy`**; **`detectShotsForIngest`** accepts **`boundaryFusionPolicy`** (default **`merge_flat`**). Plans: [`.planning/phases/09-shot-boundary-fusion-policy-consensus-and-prune-auxiliary-detector-peaks/`](../.planning/phases/09-shot-boundary-fusion-policy-consensus-and-prune-auxiliary-detector-peaks/).
 
-1. **Gold JSON** — Human labels in `eval/gold/<film>.json` with **`cutsSec`** (and optionally per-shot slots). Shape: `eval/gold/template.json`.
+1. **Human verified cuts JSON** — Human labels in `eval/gold/<film>.json` with **`cutsSec`** (and optionally per-shot slots). Shape: `eval/gold/template.json`.
 2. **Predicted JSON** — Either:
    - After full ingest, export DB shots: `pnpm eval:export-film -- <filmId>` → `eval/predicted/<id>.json`, or
    - **Detect-only (no DB, no Gemini)** — same boundary code as ingest:  
@@ -66,23 +66,23 @@ These are **not** environment variables; they travel with `POST /api/ingest-film
      See `scripts/detect-export-cuts.ts` and `eval/runs/README.md` for run logging.
 3. **Metrics** —  
    `pnpm eval:pipeline -- eval/gold/<film>.json eval/predicted/<id>.json --tol 0.5`  
-   Add **`--slots`** if gold includes composition slots.
+   Add **`--slots`** if the human verified file includes composition slots.
 4. **Matched-pair timing (not F1)** — mean/median **|pred−gt|**, signed bias, histogram:  
    `npm run eval:boundary-deltas -- --gold eval/gold/....json --pred eval/predicted/....json [--pred p2.json] --tol 0.5 --out eval/runs/report.md`
 5. **TransNet threshold × merge-gap grid** (reuses each TransNet JSON per threshold):  
    `npm run eval:sweep-transnet -- --video path.mp4 --gold eval/gold/....json [--start 0] [--end 780] [--thresholds 0.4,0.5,0.6] [--merge-gaps 0.22,0.35] --device cpu --out eval/runs/report.md`  
    Requires **PyScene on PATH** and **TransNet** (`transnetv2-pytorch`).
-6. **FN-window refinement (second detect pass)** — merge extra interior cuts from short windows around each unmatched gold time into baseline predicted `cutsSec`:  
+6. **FN-window refinement (second detect pass)** — merge extra interior cuts from short windows around each unmatched human verified time into baseline predicted `cutsSec`:  
    `pnpm detect:refine-fn-windows -- <videoPath> --gold eval/gold/....json --pred eval/predicted/....json [--pad 2] [--max-windows N] [--out refined.json]`  
    See `scripts/detect-refine-fn-windows.ts` and **`docs/tuning-flow.md`**.
 
-Tolerance **`--tol`** (seconds): a predicted cut matches a gold cut if their times differ by at most this amount (greedy matching).
+Tolerance **`--tol`** (seconds): a predicted cut matches a human verified cut if their times differ by at most this amount (greedy matching).
 
 ---
 
 ## 4. First boundary eval — writeup
 
-**Setting:** Gold standard = **every hard cut** (shot-level edits), not scene-level groupings. Comparison used **`toleranceSec: 0.5`**.
+**Setting:** Reference = **every hard cut** (shot-level edits), not scene-level groupings. Comparison used **`toleranceSec: 0.5`**.
 
 **Counts**
 
@@ -164,14 +164,14 @@ Record **`ingest_provenance`** (`pipeline_version`, `taxonomy_hash`, **`boundary
 
 **Decision:** Treat **FN analysis** (list every unmatched gold time, scrub video, classify failure mode) as the **next primary loop**, then **local second-pass / alternate cues**, **fusion policy**, and **HITL** — see **`docs/tuning-flow.md`** and **`.planning/ROADMAP.md` Phases 7–11**.
 
-**Tooling:** **`pnpm eval:boundary-misses -- eval/gold/....json eval/predicted/....json [--tol 0.5] [--json]`** — same greedy matching as **`eval:pipeline`**; **`evalBoundaryCuts`** exposes **`unmatchedGoldSec`** and **`unmatchedPredSec`**.
+**Tooling:** **`pnpm eval:boundary-misses -- eval/gold/....json eval/predicted/....json [--tol 0.5] [--json]`** — same greedy matching as **`eval:pipeline`**; **`evalBoundaryCuts`** exposes **`unmatchedGoldSec`** and **`unmatchedPredSec`** (JSON field names unchanged).
 
 ---
 
 ## 7. References
 
 - `src/lib/boundary-ensemble.ts` — merge gap, extra cuts file, detector mode string.
-- `src/lib/boundary-eval.ts` — greedy match, F1, unmatched gold/pred arrays.
+- `src/lib/boundary-eval.ts` — greedy match, F1, unmatched human verified / pred arrays (`unmatchedGoldSec` / `unmatchedPredSec` in JSON).
 - `src/lib/ingest-pipeline.ts` — `detectShotsForIngest`, `detectShotsEnsemble`, FFmpeg scene helpers.
 - `scripts/eval-pipeline.ts` — boundary precision / recall / F1 CLI.
 - `scripts/eval-boundary-misses.ts` — FN/FP cut listing CLI.

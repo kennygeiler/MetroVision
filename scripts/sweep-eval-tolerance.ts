@@ -1,7 +1,7 @@
 /**
  * Scan tolerance values for two static eval JSON files (local what-if).
  *
- *   pnpm eval:sweep-tol -- eval/gold/smoke.json eval/predicted/smoke.json
+ *   pnpm eval:sweep-tol -- eval/gold/smoke.json eval/predicted/smoke.json  (human verified cuts JSON first)
  */
 import { readFileSync } from "node:fs";
 
@@ -16,17 +16,17 @@ function main() {
   const [goldPath, predPath] = process.argv.slice(2);
   if (!goldPath || !predPath) {
     console.error(
-      "Usage: pnpm eval:sweep-tol -- <gold.json> <predicted.json>",
+      "Usage: pnpm eval:sweep-tol -- <human-verified-cuts.json> <predicted.json>",
     );
     process.exit(1);
   }
 
-  const gCuts = extractCutsSecFromEvalJson(loadJson(goldPath));
+  const humanVerifiedCuts = extractCutsSecFromEvalJson(loadJson(goldPath));
   const pCuts = extractCutsSecFromEvalJson(loadJson(predPath));
 
   for (let tol = 0.05; tol <= 1.01; tol += 0.05) {
     const t = Math.round(tol * 100) / 100;
-    const r = evalBoundaryCuts(gCuts, pCuts, t);
+    const r = evalBoundaryCuts(humanVerifiedCuts, pCuts, t);
     console.info(
       JSON.stringify({
         tol: t,

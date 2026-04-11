@@ -78,7 +78,7 @@ Options:
   --extra-cuts PATH        JSON array of film-absolute cut seconds (merged this run only)
   --fusion-policy POLICY   merge_flat | auxiliary_near_primary | pairwise_min_sources (default: merge_flat)
   --out PATH               write JSON file; default: stdout
-  --gold PATH              gold JSON (cutsSec) — compute metrics and embed in output
+  --gold PATH              human verified cuts JSON (cutsSec) — compute metrics and embed in output
   --tol SEC                tolerance for --gold (default: 0.5)
   --ledger                 append one JSON line to eval/runs/ledger.jsonl
   --run-id ID              label for ledger / metadata
@@ -227,8 +227,8 @@ async function main() {
     const goldRaw = JSON.parse(
       readFileSync(path.resolve(args.goldPath), "utf-8"),
     ) as unknown;
-    const goldCuts = extractCutsSecFromEvalJson(goldRaw);
-    const ev = evalBoundaryCuts(goldCuts, cutsSec, args.tol);
+    const humanVerifiedCuts = extractCutsSecFromEvalJson(goldRaw);
+    const ev = evalBoundaryCuts(humanVerifiedCuts, cutsSec, args.tol);
     evalAgainstGold = {
       goldPath: path.resolve(args.goldPath),
       toleranceSec: args.tol,
@@ -240,7 +240,7 @@ async function main() {
       f1: ev.f1,
     };
     console.error(
-      `[detect-export-cuts] vs gold: P=${ev.precision.toFixed(3)} R=${ev.recall.toFixed(3)} F1=${ev.f1.toFixed(3)} (tol=${args.tol}s) tp=${ev.truePositives} fp=${ev.falsePositives} fn=${ev.falseNegatives}`,
+      `[detect-export-cuts] vs human verified cuts: P=${ev.precision.toFixed(3)} R=${ev.recall.toFixed(3)} F1=${ev.f1.toFixed(3)} (tol=${args.tol}s) tp=${ev.truePositives} fp=${ev.falsePositives} fn=${ev.falseNegatives}`,
     );
   }
 

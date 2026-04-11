@@ -1,5 +1,5 @@
 /**
- * Gold-vs-predicted **hard cut** times (seconds). One-to-one matching within tolerance.
+ * **Human verified cuts** vs predicted **hard cut** times (seconds). One-to-one matching within tolerance.
  * Cuts are transition instants (not shot starts if you include 0 — exclude 0 and duration for metrics on interior cuts only).
  */
 
@@ -12,9 +12,9 @@ export type BoundaryEvalResult = {
   f1: number;
   toleranceSec: number;
   matchedPairs: Array<{ gt: number; pred: number; deltaSec: number }>;
-  /** Gold cut times (normalized) with no predicted match within tolerance. */
+  /** Human verified cut times (normalized) with no predicted match within tolerance. (JSON field name remains `unmatchedGoldSec`.) */
   unmatchedGoldSec: number[];
-  /** Predicted cut times (normalized) with no gold match within tolerance. */
+  /** Predicted cut times (normalized) with no human verified cut match within tolerance. */
   unmatchedPredSec: number[];
 };
 
@@ -33,16 +33,16 @@ export function normalizeCutList(cuts: number[], dedupeEps = 0.05): number[] {
 }
 
 /**
- * One-to-one greedy matching: each GT pairs with at most one pred within `toleranceSec`.
- * Unmatched predictions count as FP; unmatched GT as FN.
+ * One-to-one greedy matching: each human verified instant pairs with at most one pred within `toleranceSec`.
+ * Unmatched predictions count as FP; unmatched human verified cuts as FN.
  */
 export function evalBoundaryCuts(
-  goldCuts: number[],
+  humanVerifiedCuts: number[],
   predCuts: number[],
   toleranceSec: number,
 ): BoundaryEvalResult {
   const tol = Math.max(0, toleranceSec);
-  const gt = normalizeCutList(goldCuts);
+  const gt = normalizeCutList(humanVerifiedCuts);
   const pred = normalizeCutList(predCuts);
 
   if (gt.length === 0 && pred.length === 0) {

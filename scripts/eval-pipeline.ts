@@ -1,9 +1,9 @@
 /**
- * Compare gold vs predicted boundary cuts (and optional slot accuracy).
+ * Compare human verified cuts vs predicted boundary cuts (and optional slot accuracy).
  *
  *   pnpm eval:pipeline -- eval/gold/my-film.json eval/predicted/run-a.json --tol 0.5 --slots
  *
- * Gold / predicted JSON: either a raw number[] or { "cutsSec": number[], "shots": [...] }.
+ * Human verified / predicted JSON: either a raw number[] or { "cutsSec": number[], "shots": [...] }.
  */
 import { readFileSync } from "node:fs";
 
@@ -58,16 +58,16 @@ function main() {
   const { gold, pred, tol, iou, slots } = parseArgs();
   if (!gold || !pred) {
     console.error(
-      "Usage: pnpm eval:pipeline -- <gold.json> <predicted.json> [--tol 0.5] [--iou 0.35] [--slots]",
+      "Usage: pnpm eval:pipeline -- <human-verified-cuts.json> <predicted.json> [--tol 0.5] [--iou 0.35] [--slots]",
     );
     process.exit(1);
   }
 
   const g = loadJson(gold);
   const p = loadJson(pred);
-  const gCuts = extractCutsSecFromEvalJson(g);
+  const humanVerifiedCuts = extractCutsSecFromEvalJson(g);
   const pCuts = extractCutsSecFromEvalJson(p);
-  const boundary = evalBoundaryCuts(gCuts, pCuts, tol);
+  const boundary = evalBoundaryCuts(humanVerifiedCuts, pCuts, tol);
 
   console.info(
     JSON.stringify(

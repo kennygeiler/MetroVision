@@ -27,12 +27,18 @@ export async function POST(request: NextRequest) {
     const goldRevisionId =
       typeof body.goldRevisionId === "string" ? body.goldRevisionId.trim() : "";
     if (!goldRevisionId) {
-      return Response.json({ error: "goldRevisionId is required" }, { status: 400 });
+      return Response.json(
+        { error: "goldRevisionId is required (UUID of a human verified cuts revision)" },
+        { status: 400 },
+      );
     }
 
-    const goldRev = await getEvalGoldRevisionById(goldRevisionId);
-    if (!goldRev) {
-      return Response.json({ error: "Gold revision not found" }, { status: 404 });
+    const humanCutsRevision = await getEvalGoldRevisionById(goldRevisionId);
+    if (!humanCutsRevision) {
+      return Response.json(
+        { error: "Human verified cuts revision not found" },
+        { status: 404 },
+      );
     }
 
     const predRaw = body.predictedCutsSec;
@@ -63,8 +69,8 @@ export async function POST(request: NextRequest) {
       if (!p) return Response.json({ error: "Preset not found" }, { status: 404 });
     }
 
-    const goldCuts = extractCutsSecFromEvalJson(goldRev.payload);
-    const result = evalBoundaryCuts(goldCuts, predCuts, tol);
+    const humanVerifiedCuts = extractCutsSecFromEvalJson(humanCutsRevision.payload);
+    const result = evalBoundaryCuts(humanVerifiedCuts, predCuts, tol);
 
     const metrics = {
       precision: result.precision,
@@ -76,7 +82,7 @@ export async function POST(request: NextRequest) {
     };
 
     const run = await insertBoundaryEvalRun({
-      filmId: goldRev.filmId,
+      filmId: humanCutsRevision.filmId,
       goldRevisionId,
       presetId,
       predictedPayload: { cutsSec: predCuts },

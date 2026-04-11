@@ -29,7 +29,7 @@ describe("evalBoundaryCuts", () => {
     expect(r.unmatchedPredSec).toEqual([50]);
   });
 
-  it("lists unmatched gold when one pred pairs to closest gold only", () => {
+  it("lists unmatched human verified cut when one pred pairs to closest only", () => {
     const r = evalBoundaryCuts([10, 11], [10.15], 0.5);
     expect(r.truePositives).toBe(1);
     expect(r.falseNegatives).toBe(1);

@@ -232,7 +232,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
   const [compareTolSec, setCompareTolSec] = useState(0.5);
   /** Same as `pnpm eval:pipeline --iou` for --slots. */
   const [slotIouMin, setSlotIouMin] = useState(0.35);
-  /** Gold `shots` from last import, for slot metrics vs DB predicted. */
+  /** Human verified `shots` from last import, for slot metrics vs DB predicted. */
   const [importedGoldShots, setImportedGoldShots] = useState<GoldShotSegment[] | null>(null);
   const [evalReportFeedback, setEvalReportFeedback] = useState<string | null>(null);
 
@@ -715,9 +715,9 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
     const payload = buildGoldExportPayload();
     const filmTitle = String(payload.filmTitle ?? "annotation");
     const createdAt = String(payload.createdAt ?? new Date().toISOString());
-    const slug = slugifyPart(filmTitle) || "gold";
+    const slug = slugifyPart(filmTitle) || "cuts";
     const stamp = createdAt.slice(0, 10);
-    const filename = `gold-${slug}-${stamp}.json`;
+    const filename = `human-verified-cuts-${slug}-${stamp}.json`;
 
     const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], {
       type: "application/json",
@@ -827,7 +827,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
           className="text-3xl font-bold tracking-[var(--letter-spacing-tight)] sm:text-4xl"
           style={{ fontFamily: "var(--font-heading)" }}
         >
-          Gold eval annotation
+          Human verified cuts
         </h1>
         <p className="max-w-3xl text-sm leading-7 text-[var(--color-text-secondary)]">
           Bookmark this URL to resume. Cuts are stored in <code className="font-mono text-xs">localStorage</code>{" "}
@@ -1220,7 +1220,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
             </Button>
           </div>
           <p className="font-mono text-[10px] text-[var(--color-text-tertiary)]">
-            Import accepts gold/predicted exports: <code className="rounded border px-0.5">cutsSec</code> array or a raw{" "}
+            Import accepts human verified / predicted exports: <code className="rounded border px-0.5">cutsSec</code> array or a raw{" "}
             <code className="rounded border px-0.5">number[]</code>. Fills this bookmarked session (localStorage); optional{" "}
             <code className="rounded border px-0.5">annotatorNote</code> is applied only if the note field is empty.
           </p>
@@ -1242,13 +1242,13 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
               onChange={(e) => setNote(e.target.value)}
               rows={3}
               className="rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 py-2 text-sm text-[var(--color-text-primary)]"
-              placeholder="e.g. gold v1, only hard cuts, time base = feature start"
+              placeholder="e.g. v1 human verified cuts, only hard cuts, time base = feature start"
             />
           </div>
 
           <Button type="button" variant="default" className="w-full rounded-full" onClick={downloadJson}>
             <Download className="size-4" />
-            Download gold JSON
+            Download human verified cuts JSON
           </Button>
 
           <div
@@ -1299,7 +1299,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
                 onClick={() => void saveEvalArtifactToServer("gold")}
               >
                 <CloudUpload className="size-4" />
-                Save gold to DB
+                Save human verified cuts to DB
               </Button>
               <Button
                 type="button"
@@ -1366,7 +1366,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
           </p>
         ) : !filmId ? (
           <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
-            Select a <strong>Film</strong> in the dropdown above. This block compares your session’s gold{" "}
+            Select a <strong>Film</strong> in the dropdown above. This block compares your session’s human verified cuts{" "}
             <code className="font-mono text-xs">cutsSec</code> to predicted interior cuts from ingested shots (same
             matcher as <code className="font-mono text-xs">pnpm eval:pipeline</code>).
           </p>
@@ -1480,7 +1480,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
 
           {importedGoldShots?.length ? (
             <p className="font-mono text-[10px] text-[var(--color-text-secondary)]">
-              Slot eval: <span className="tabular-nums">{importedGoldShots.length}</span> gold{" "}
+              Slot eval: <span className="tabular-nums">{importedGoldShots.length}</span> human verified{" "}
               <code className="font-mono text-[10px]">shots[]</code> from last import vs{" "}
               <span className="tabular-nums">{predShotSegments.length}</span> DB shots (IoU ≥{" "}
               {slotIouMin}
@@ -1536,7 +1536,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
 
           <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] p-4">
             <CutTimelineStrip
-              label="Gold (this session)"
+              label="Human verified cuts (this session)"
               times={normalizeCutList(cuts)}
               maxSec={compareMaxSec}
               markerClass="bg-[var(--color-accent-base)]"
@@ -1555,7 +1555,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
           {boundaryStats && boundaryStats.matchedPairs.length > 0 ? (
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-                Matched pairs (δ = pred − gold)
+                Matched pairs (δ = pred − human verified)
               </p>
               <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-xs">
                 {boundaryStats.matchedPairs
@@ -1585,7 +1585,7 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
                 Missed vs DB (FN) · {fnList.length}
               </p>
               <p className="mt-1 font-mono text-[11px] text-[var(--color-text-secondary)]">
-                Gold cuts with no predicted cut within {compareTolSec}s.
+                Human verified cuts with no predicted cut within {compareTolSec}s.
               </p>
               <ul className="mt-2 max-h-32 overflow-y-auto font-mono text-xs tabular-nums text-[var(--color-text-primary)]">
                 {fnList.map((t) => (
@@ -1598,10 +1598,10 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
           {fpList.length > 0 ? (
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-signal-amber)]">
-                Extra vs gold (FP) · {fpList.length}
+                Extra vs human verified (FP) · {fpList.length}
               </p>
               <p className="mt-1 font-mono text-[11px] text-[var(--color-text-secondary)]">
-                Predicted cuts with no gold cut within {compareTolSec}s.
+                Predicted cuts with no human verified cut within {compareTolSec}s.
               </p>
               <ul className="mt-2 max-h-32 overflow-y-auto font-mono text-xs tabular-nums text-[var(--color-text-primary)]">
                 {fpList.map((t) => (

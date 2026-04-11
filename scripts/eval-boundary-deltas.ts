@@ -1,5 +1,5 @@
 /**
- * Matched-pair timing stats for gold vs predicted cuts (complements F1).
+ * Matched-pair timing stats for human verified cuts vs predicted cuts (complements F1).
  *
  *   npm run eval:boundary-deltas -- --gold eval/gold/a.json --pred eval/predicted/b.json --tol 0.5
  *   npm run eval:boundary-deltas -- --gold eval/gold/a.json --pred p1.json --pred p2.json --out eval/runs/report.md
@@ -56,10 +56,10 @@ function histogramAbs(abs: number[], tol: number): { label: string; count: numbe
 function sectionMarkdown(
   predPath: string,
   tol: number,
-  goldCuts: number[],
+  humanVerifiedCuts: number[],
   predCuts: number[],
 ): string {
-  const ev = evalBoundaryCuts(goldCuts, predCuts, tol);
+  const ev = evalBoundaryCuts(humanVerifiedCuts, predCuts, tol);
   const pairs = ev.matchedPairs.map(({ gt, pred, deltaSec }) => ({
     gt,
     pred,
@@ -76,7 +76,7 @@ function sectionMarkdown(
   lines.push("| Metric | Value |");
   lines.push("|--------|-------|");
   lines.push(`| Tolerance (match window) | ${tol} s |`);
-  lines.push(`| Gold interior cuts | ${goldCuts.length} |`);
+  lines.push(`| Human verified interior cuts | ${humanVerifiedCuts.length} |`);
   lines.push(`| Pred interior cuts | ${predCuts.length} |`);
   lines.push(`| TP / FP / FN | ${ev.truePositives} / ${ev.falsePositives} / ${ev.falseNegatives} |`);
   lines.push(`| Precision / Recall / F1 | ${ev.precision.toFixed(4)} / ${ev.recall.toFixed(4)} / ${ev.f1.toFixed(4)} |`);
@@ -86,7 +86,7 @@ function sectionMarkdown(
   lines.push(`| Median (pred−gt), signed | ${median(signed).toFixed(4)} s |`);
   lines.push("");
   lines.push(
-    "*Signed mean: **positive** ⇒ predicted cut is **later** than gold on average; **negative** ⇒ predicted is **earlier** (e.g. human reaction lag marking after the splice).*",
+    "*Signed mean: **positive** ⇒ predicted cut is **later** than human verified cut on average; **negative** ⇒ predicted is **earlier** (e.g. human reaction lag marking after the splice).*",
   );
   lines.push("");
   lines.push("#### |pred−gt| histogram (matched pairs)");
@@ -99,7 +99,7 @@ function sectionMarkdown(
   lines.push("");
   lines.push("#### All matched pairs");
   lines.push("");
-  lines.push("| # | gold (s) | pred (s) | \\|Δ\\| (s) | pred−gt (s) |");
+  lines.push("| # | human verified (s) | pred (s) | \\|Δ\\| (s) | pred−gt (s) |");
   lines.push("|---|----------|----------|---------|-------------|");
   pairs.forEach((p, i) => {
     lines.push(
@@ -128,7 +128,7 @@ function parseArgs(argv: string[]) {
 
   if (!gold || preds.length === 0) {
     console.error(
-      "Usage: npm run eval:boundary-deltas -- --gold <gold.json> --pred <pred.json> [--pred <p2.json>] [--tol 0.5] [--out report.md]",
+      "Usage: npm run eval:boundary-deltas -- --gold <human-verified-cuts.json> --pred <pred.json> [--pred <p2.json>] [--tol 0.5] [--out report.md]",
     );
     process.exit(1);
   }
@@ -142,13 +142,15 @@ function parseArgs(argv: string[]) {
 function main() {
   const { gold, preds, tol, out } = parseArgs(process.argv.slice(2));
   const goldPath = path.resolve(gold);
-  const goldCuts = extractCutsSecFromEvalJson(loadJsonSync(goldPath));
+  const humanVerifiedCuts = extractCutsSecFromEvalJson(loadJsonSync(goldPath));
 
   const parts: string[] = [];
-  parts.push("# Boundary timing — matched gold vs predicted cuts");
+  parts.push("# Boundary timing — matched human verified cuts vs predicted cuts");
   parts.push("");
   parts.push(`- **Generated:** ${new Date().toISOString()}`);
-  parts.push(`- **Gold:** \`${path.relative(process.cwd(), goldPath) || goldPath}\``);
+  parts.push(
+    `- **Human verified cuts:** \`${path.relative(process.cwd(), goldPath) || goldPath}\``,
+  );
   parts.push(`- **Match tolerance:** ${tol} s (same as boundary eval F1)`);
   parts.push("");
   parts.push(
@@ -159,7 +161,7 @@ function main() {
   for (const p of preds) {
     const predPath = path.resolve(p);
     const predCuts = extractCutsSecFromEvalJson(loadJsonSync(predPath));
-    parts.push(sectionMarkdown(predPath, tol, goldCuts, predCuts));
+    parts.push(sectionMarkdown(predPath, tol, humanVerifiedCuts, predCuts));
   }
 
   const md = `${parts.join("\n")}\n`;
