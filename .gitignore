@@ -55,3 +55,6 @@ pipeline/output/
 # video files
 *.mov
 *.mp4
+
+# local knob-sweep predicted JSON (regenerate via eval/runs docs)
+eval/predicted/ran1243-knob-*.json

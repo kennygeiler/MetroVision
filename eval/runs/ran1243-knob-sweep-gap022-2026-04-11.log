@@ -1,0 +1,168 @@
+========== 01-ensemble-pyscene-flat ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-01-ensemble-pyscene-flat.json --fusion-policy merge_flat
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-01-ensemble-pyscene-flat.json --fusion-policy merge_flat
+
+[detect-export-cuts] vs gold: P=0.784 R=0.817 F1=0.800 (tol=0.5s) tp=58 fp=16 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-01-ensemble-pyscene-flat.json (74 interior cuts, 75 shots)
+[detect-export-cuts] vs gold: P=0.784 R=0.817 F1=0.800 (tol=0.5s) tp=58 fp=16 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-01-ensemble-pyscene-flat.json (74 interior cuts, 75 shots)
+
+========== 02-ensemble-alias-flat ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-02-ensemble-alias-flat.json --fusion-policy merge_flat
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-02-ensemble-alias-flat.json --fusion-policy merge_flat
+
+[detect-export-cuts] vs gold: P=0.784 R=0.817 F1=0.800 (tol=0.5s) tp=58 fp=16 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-02-ensemble-alias-flat.json (74 interior cuts, 75 shots)
+[detect-export-cuts] vs gold: P=0.784 R=0.817 F1=0.800 (tol=0.5s) tp=58 fp=16 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-02-ensemble-alias-flat.json (74 interior cuts, 75 shots)
+
+========== 03-cli-adaptive-flat ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_cli npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --detector adaptive --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-03-cli-adaptive-flat.json --fusion-policy merge_flat
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --detector adaptive --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-03-cli-adaptive-flat.json --fusion-policy merge_flat
+
+[detect-export-cuts] vs gold: P=0.791 R=0.746 F1=0.768 (tol=0.5s) tp=53 fp=14 fn=18
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-03-cli-adaptive-flat.json (67 interior cuts, 68 shots)
+[detect-export-cuts] vs gold: P=0.791 R=0.746 F1=0.768 (tol=0.5s) tp=53 fp=14 fn=18
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-03-cli-adaptive-flat.json (67 interior cuts, 68 shots)
+
+========== 04-cli-content-flat ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_cli npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --detector content --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-04-cli-content-flat.json --fusion-policy merge_flat
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --detector content --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-04-cli-content-flat.json --fusion-policy merge_flat
+
+[detect-export-cuts] vs gold: P=0.794 R=0.761 F1=0.777 (tol=0.5s) tp=54 fp=14 fn=17
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-04-cli-content-flat.json (68 interior cuts, 69 shots)
+[detect-export-cuts] vs gold: P=0.794 R=0.761 F1=0.777 (tol=0.5s) tp=54 fp=14 fn=17
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-04-cli-content-flat.json (68 interior cuts, 69 shots)
+
+========== 05-ensemble-fnextras-flat ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-fn-unmatched-gold-sec.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-05-ensemble-fnextras-flat.json --fusion-policy merge_flat
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-fn-unmatched-gold-sec.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-05-ensemble-fnextras-flat.json --fusion-policy merge_flat
+
+[detect-export-cuts] vs gold: P=0.816 R=1.000 F1=0.899 (tol=0.5s) tp=71 fp=16 fn=0
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-05-ensemble-fnextras-flat.json (87 interior cuts, 88 shots)
+[detect-export-cuts] vs gold: P=0.816 R=1.000 F1=0.899 (tol=0.5s) tp=71 fp=16 fn=0
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-05-ensemble-fnextras-flat.json (87 interior cuts, 88 shots)
+
+========== 06-ensemble-fnextras-auxnear ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-fn-unmatched-gold-sec.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-06-ensemble-fnextras-auxnear.json --fusion-policy auxiliary_near_primary
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-fn-unmatched-gold-sec.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-06-ensemble-fnextras-auxnear.json --fusion-policy auxiliary_near_primary
+
+[detect-export-cuts] vs gold: P=0.784 R=0.817 F1=0.800 (tol=0.5s) tp=58 fp=16 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-06-ensemble-fnextras-auxnear.json (74 interior cuts, 75 shots)
+[detect-export-cuts] vs gold: P=0.784 R=0.817 F1=0.800 (tol=0.5s) tp=58 fp=16 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-06-ensemble-fnextras-auxnear.json (74 interior cuts, 75 shots)
+
+========== 07-ensemble-fnextras-pairwise ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-fn-unmatched-gold-sec.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-07-ensemble-fnextras-pairwise.json --fusion-policy pairwise_min_sources
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-fn-unmatched-gold-sec.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-07-ensemble-fnextras-pairwise.json --fusion-policy pairwise_min_sources
+
+[detect-export-cuts] vs gold: P=1.000 R=0.000 F1=0.000 (tol=0.5s) tp=0 fp=0 fn=71
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-07-ensemble-fnextras-pairwise.json (0 interior cuts, 1 shots)
+[detect-export-cuts] vs gold: P=1.000 R=0.000 F1=0.000 (tol=0.5s) tp=0 fp=0 fn=71
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-07-ensemble-fnextras-pairwise.json (0 interior cuts, 1 shots)
+
+========== 08-ensemble-noise-flat ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-noise-extra-cuts.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-08-ensemble-noise-flat.json --fusion-policy merge_flat
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-noise-extra-cuts.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-08-ensemble-noise-flat.json --fusion-policy merge_flat
+
+[detect-export-cuts] vs gold: P=0.734 R=0.817 F1=0.773 (tol=0.5s) tp=58 fp=21 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-08-ensemble-noise-flat.json (79 interior cuts, 80 shots)
+[detect-export-cuts] vs gold: P=0.734 R=0.817 F1=0.773 (tol=0.5s) tp=58 fp=21 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-08-ensemble-noise-flat.json (79 interior cuts, 80 shots)
+
+========== 09-ensemble-noise-auxnear ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-noise-extra-cuts.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-09-ensemble-noise-auxnear.json --fusion-policy auxiliary_near_primary
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-noise-extra-cuts.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-09-ensemble-noise-auxnear.json --fusion-policy auxiliary_near_primary
+
+[detect-export-cuts] vs gold: P=0.784 R=0.817 F1=0.800 (tol=0.5s) tp=58 fp=16 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-09-ensemble-noise-auxnear.json (74 interior cuts, 75 shots)
+[detect-export-cuts] vs gold: P=0.784 R=0.817 F1=0.800 (tol=0.5s) tp=58 fp=16 fn=13
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-09-ensemble-noise-auxnear.json (74 interior cuts, 75 shots)
+
+========== 10-ensemble-noise-pairwise ==========
+CMD: env METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene npm run detect:export-cuts -- /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-noise-extra-cuts.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-10-ensemble-noise-pairwise.json --fusion-policy pairwise_min_sources
+
+> metrovision@0.1.0 detect:export-cuts
+> tsx scripts/detect-export-cuts.ts /tmp/Ran1243.mov --start 0 --end 780 --extra-cuts eval/fixtures/ran1243-noise-extra-cuts.json --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 --out eval/predicted/ran1243-knob-10-ensemble-noise-pairwise.json --fusion-policy pairwise_min_sources
+
+[detect-export-cuts] vs gold: P=1.000 R=0.000 F1=0.000 (tol=0.5s) tp=0 fp=0 fn=71
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-10-ensemble-noise-pairwise.json (0 interior cuts, 1 shots)
+[detect-export-cuts] vs gold: P=1.000 R=0.000 F1=0.000 (tol=0.5s) tp=0 fp=0 fn=71
+[detect-export-cuts] wrote /home/paperspace/MetroVision/eval/predicted/ran1243-knob-10-ensemble-noise-pairwise.json (0 interior cuts, 1 shots)
+
+
+=== Phase B: scoring tolerance only (same pred as run 01, no re-detect) ===
+--- eval:pipeline tol=0.25 pred=01-ensemble-pyscene-flat ---
+
+> metrovision@0.1.0 eval:pipeline
+> tsx scripts/eval-pipeline.ts eval/gold/gold-ran-2026-04-10.json eval/predicted/ran1243-knob-01-ensemble-pyscene-flat.json --tol 0.25
+
+{
+  "boundary": {
+    "toleranceSec": 0.25,
+    "truePositives": 14,
+    "falsePositives": 60,
+    "falseNegatives": 57,
+    "precision": 0.1891891891891892,
+    "recall": 0.19718309859154928,
+
+--- eval:pipeline tol=0.35 pred=01-ensemble-pyscene-flat ---
+
+> metrovision@0.1.0 eval:pipeline
+> tsx scripts/eval-pipeline.ts eval/gold/gold-ran-2026-04-10.json eval/predicted/ran1243-knob-01-ensemble-pyscene-flat.json --tol 0.35
+
+{
+  "boundary": {
+    "toleranceSec": 0.35,
+    "truePositives": 30,
+    "falsePositives": 44,
+    "falseNegatives": 41,
+    "precision": 0.40540540540540543,
+    "recall": 0.4225352112676056,
+
+--- eval:pipeline tol=0.45 pred=01-ensemble-pyscene-flat ---
+
+> metrovision@0.1.0 eval:pipeline
+> tsx scripts/eval-pipeline.ts eval/gold/gold-ran-2026-04-10.json eval/predicted/ran1243-knob-01-ensemble-pyscene-flat.json --tol 0.45
+
+{
+  "boundary": {
+    "toleranceSec": 0.45,
+    "truePositives": 54,
+    "falsePositives": 20,
+    "falseNegatives": 17,
+    "precision": 0.7297297297297297,
+    "recall": 0.7605633802816901,
+
+--- eval:pipeline tol=0.55 pred=01-ensemble-pyscene-flat ---
+
+> metrovision@0.1.0 eval:pipeline
+> tsx scripts/eval-pipeline.ts eval/gold/gold-ran-2026-04-10.json eval/predicted/ran1243-knob-01-ensemble-pyscene-flat.json --tol 0.55
+
+{
+  "boundary": {
+    "toleranceSec": 0.55,
+    "truePositives": 59,
+    "falsePositives": 15,
+    "falseNegatives": 12,
+    "precision": 0.7972972972972973,
+    "recall": 0.8309859154929577,
+

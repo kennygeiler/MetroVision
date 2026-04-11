@@ -101,6 +101,7 @@ These match a **~443 s** source; **gold still lists cuts up to ~763 s**, so **FN
 | **Local refine (Phase 8)** | `detect:refine-fn-windows` (second pass on FN windows); script fixed for **`probeVideoDurationSec`** import and **clip end capped to probed duration**. On short clip + first N FN windows, refine did **not** improve F1 (added FP). |
 | **Source alignment** | Confirmed **Ran1243** (~763 s) matches gold extent; **primary** benchmark updated to that run. |
 | **Merge-gap sweep (2026-04-11)** | On Ran1243, **ensemble** metrics unchanged for **gap 0.12–0.45** (same 74 interior cuts); **single** PyScene adaptive/content **worse** F1 — see [`ran1243-merge-gap-sweep-2026-04-11.md`](ran1243-merge-gap-sweep-2026-04-11.md) + [`.log`](ran1243-merge-gap-sweep-2026-04-11.log). |
+| **Multi-knob sweep (2026-04-11)** | **Gap fixed 0.22:** detector modes, **fusion** × FN-oracle / noise extras, **`eval:pipeline` tol** — best prod setup unchanged (**ensemble + merge_flat**); **`pairwise_min_sources`** can wipe all interior cuts. See [`ran1243-knob-sweep-gap022-2026-04-11.md`](ran1243-knob-sweep-gap022-2026-04-11.md) + [`.log`](ran1243-knob-sweep-gap022-2026-04-11.log). Fixtures: [`eval/fixtures/`](../fixtures/README.md). |
 
 ---
 
