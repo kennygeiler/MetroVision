@@ -731,6 +731,9 @@ export async function searchShots(query: string, options?: SearchShotsOptions) {
     );
   }
 
+  console.warn(
+    `[searchShots] ILIKE text search path (query length=${normalizedQuery.length} chars). Not ideal at large corpus scale — ensure embeddings backfill and monitor this prefix.`,
+  );
   return searchShotsWithIlike(normalizedQuery);
 }
 

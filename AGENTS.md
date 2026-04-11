@@ -19,7 +19,9 @@ pnpm db:studio        # Open Drizzle Studio
 pnpm check:schema-drift  # Ingest-related Drizzle tables present (`src/db/schema.ts` shared with worker)
 pnpm check:taxonomy      # src/lib/taxonomy.ts vs pipeline/taxonomy.py (AC-02)
 pnpm check:worker        # `tsc --noEmit -p worker/tsconfig.json` (Express worker types)
-pnpm test                # Vitest (unit tests; CI runs this too)
+pnpm test                # Vitest (unit + ingest/worker HTTP contract tests; `vitest.setup.ts` sets a placeholder `DATABASE_URL` for route imports)
+pnpm test:ingest-contracts  # Only `ingest-film-stream-contract` + `worker-http.integration` (fast gate for ingest/uptime regressions)
+pnpm worker:reachability-smoke  # Cron/uptime: `INGEST_WORKER_URL` or `WORKER_HEALTH_URL` → GET `/health`, exit 0/1
 # CI (`.github/workflows/ci.yml`): `lint`, `check:taxonomy`, `check:schema-drift`, `test`, `eval:smoke`, `build` (with placeholder `DATABASE_URL` + `NEXT_PUBLIC_SITE_URL`), `check:worker`
 
 # TS Ingest Worker (Express, runs separately)
@@ -165,6 +167,8 @@ Optional env vars (see `.planning/codebase/INTEGRATIONS.md`):
 - **`METROVISION_PROCESS_SCENE_SECRET`** — If set, `POST /api/process-scene` requires **`x-metrovision-process-scene-secret`**. The route is **disabled on Vercel** (`503`); use the worker ingest path for hosted workflows.
 - **`METROVISION_ALLOW_API_KEY_QUERY`** — Set to `true` only to temporarily allow v1 API keys via `?api_key=`; prefer Bearer.
 - **`METROVISION_EVAL_ARTIFACT_ADMIN_SECRET`** — If set (required in **`NODE_ENV=production`** for uploads/list), **`POST /api/eval/artifacts`** and **`GET /api/eval/artifacts`** (metadata list) require **`Authorization: Bearer`** with the same value. Fetches **`GET /api/eval/artifacts/[id]?t=...`** use only the per-row token. Apply migration **`drizzle/0007_eval_artifacts.sql`** (or **`pnpm db:push`**).
+- **`METROVISION_WORKER_INGEST_SECRET`** — If set on **both** Next and the Express worker, **`POST /api/ingest-film/stream`** on the worker and **`POST /api/boundary-detect`** require header **`x-metrovision-worker-ingest`** with the same value. Next’s ingest proxy adds this header automatically from this env when delegating to the worker.
+- **`METROVISION_UPLOAD_ROUTE_SECRET`** — If set, **`POST /api/upload-video`** requires **`x-metrovision-upload-route`** (browser upload flows cannot supply it without exposing the secret — use **`videoUrl`** / S3 paths in production, or leave unset on trusted networks). Optional **`METROVISION_UPLOAD_MAX_BYTES`** caps upload size (default **2 GiB**).
 
 ## Known Issues
 

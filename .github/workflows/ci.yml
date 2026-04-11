@@ -30,3 +30,10 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
           NEXT_PUBLIC_SITE_URL: https://metrovision.vercel.app
       - run: pnpm check:worker
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python pipeline classify import smoke
+        run: |
+          pip install --quiet google-genai python-dotenv psycopg2-binary
+          cd pipeline && python3 -c "import classify; import taxonomy; print('pipeline classify ok')"

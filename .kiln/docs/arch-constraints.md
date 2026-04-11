@@ -10,8 +10,8 @@ Hard constraints that planners and builders must respect. Violating any of these
 - **Consequence of violation**: 504 Gateway Timeout, partial DB writes, orphaned uploads (PF-004)
 
 ### AC-02: Taxonomy Sync Between TS and Python
-- **Constraint**: Camera movement taxonomy slugs must be identical in `src/lib/taxonomy.ts` and `pipeline/taxonomy.py`. Any change requires updating both files in the same commit.
-- **Consequence of violation**: Silent data corruption -- shots stored with movement types the web app does not recognize (PF-001)
+- **Constraint**: **Composition** taxonomy slugs (framing, depth, blocking, symmetry, dominant lines, lighting, color temperature, shot size, angles, duration category) must stay identical in `src/lib/taxonomy.ts` and `pipeline/taxonomy.py`. Any change requires updating both files in the same commit. CI runs `pnpm check:taxonomy` / `taxonomy-parity.yml`. Legacy camera **movement** enums were removed from the shared taxonomy; do not reintroduce them without a migration and parity update.
+- **Consequence of violation**: Silent data corruption — shots stored with slugs the web app does not recognize (PF-001)
 
 ### AC-03: pgvector Extension Before Migration
 - **Constraint**: `CREATE EXTENSION IF NOT EXISTS vector;` must run in Neon SQL editor BEFORE any `drizzle-kit push` that includes vector columns.

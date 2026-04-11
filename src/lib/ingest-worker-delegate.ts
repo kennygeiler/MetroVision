@@ -6,6 +6,8 @@
  * Disable: `METROVISION_DELEGATE_INGEST=0`
  */
 
+import { workerIngestHeadersForProxy } from "@/lib/worker-route-secret";
+
 const PROXY_TIMEOUT_MS = 890_000;
 
 /**
@@ -62,7 +64,10 @@ export async function forwardIngestFilmStreamToWorker(
     try {
       workerRes = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...workerIngestHeadersForProxy(),
+        },
         body: bodyText,
         signal: ac.signal,
       });

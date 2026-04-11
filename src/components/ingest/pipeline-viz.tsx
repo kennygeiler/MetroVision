@@ -221,49 +221,6 @@ async function fetchIngestLiveDbSnapshot(filmTitle: string, year: number): Promi
 }
 
 // ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
-const STYLES = `
-  @keyframes expose {
-    0% { clip-path: inset(100% 0 0 0); }
-    100% { clip-path: inset(0 0 0 0); }
-  }
-  @keyframes shimmer {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.7; }
-  }
-  @keyframes flashReveal {
-    0% { opacity: 0; filter: brightness(3); }
-    30% { opacity: 1; filter: brightness(2); }
-    100% { opacity: 1; filter: brightness(1); }
-  }
-  @keyframes pulseDot {
-    0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
-    50% { box-shadow: 0 0 8px 3px currentColor; opacity: 0.8; }
-  }
-  @keyframes filmGrain {
-    0% { background-position: 0 0; }
-    100% { background-position: 100% 100%; }
-  }
-  .frame-pending { background: #1a1a22; border-color: #2a2a33; opacity: 0.4; }
-  .frame-extracting { box-shadow: 0 0 12px rgba(92,184,214,0.2); }
-  .frame-extracting .frame-fill {
-    background: linear-gradient(to top, rgba(92,184,214,0.25), transparent);
-    animation: expose 0.4s ease-out forwards;
-  }
-  .frame-classifying { box-shadow: 0 0 12px rgba(155,124,214,0.2); }
-  .frame-classifying .frame-fill {
-    background: linear-gradient(135deg, rgba(155,124,214,0.15), rgba(92,184,214,0.1));
-    animation: shimmer 1.2s ease-in-out infinite;
-  }
-  .frame-classified .frame-fill { animation: flashReveal 0.5s ease-out forwards; }
-  .frame-written { border-bottom: 2px solid #5cd69b !important; }
-  .step-progress-track { height: 3px; border-radius: 2px; background: #1a1a22; overflow: hidden; }
-  .step-progress-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease-out; }
-`;
-
-// ---------------------------------------------------------------------------
 // ETA Hook
 // ---------------------------------------------------------------------------
 
@@ -415,7 +372,7 @@ function DetectionAnimation({ elapsed, eta }: { elapsed: number; eta: number }) 
       {/* Film grain */}
       <div className="pointer-events-none absolute inset-0 opacity-[0.03]" style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-        animation: "filmGrain 0.5s steps(10) infinite",
+        animation: "pipeline-viz-film-grain 0.5s steps(10) infinite",
       }} />
       {/* Gate corners */}
       <div className="pointer-events-none absolute inset-0">
@@ -856,9 +813,7 @@ export function PipelineViz({
   }
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: STYLES }} />
-      <div className="space-y-6">
+    <div className="space-y-6">
 
         {/* ─── Header ─── */}
         <div className="flex items-end justify-between gap-4">
@@ -961,7 +916,10 @@ export function PipelineViz({
                     style={{
                       backgroundColor: stepColor,
                       boxShadow: step.status === "active" ? `0 0 6px ${stepColor}` : "none",
-                      animation: step.status === "active" ? "pulseDot 1.5s ease-in-out infinite" : "none",
+                      animation:
+                        step.status === "active"
+                          ? "pipeline-viz-pulse-dot 1.5s ease-in-out infinite"
+                          : "none",
                       color: `${stepColor}88`,
                     }}
                   />
@@ -1201,8 +1159,7 @@ export function PipelineViz({
             ) : null}
           </div>
         ) : null}
-      </div>
-    </>
+    </div>
   );
 }
 

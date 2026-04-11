@@ -13,13 +13,12 @@ import {
   presetConfigToDetectOptions,
 } from "../../src/lib/boundary-cut-preset.js";
 import { interiorCutSecFromSplits } from "../../src/lib/boundary-eval.js";
+import { interopNamespace } from "../../src/lib/esm-interop.js";
+import { checkWorkerIngestSecret } from "../../src/lib/worker-route-secret.js";
 
-const ffmpegBin = (ffmpegBinModule as { default?: typeof ffmpegBinModule }).default
-  ?? ffmpegBinModule;
-const ingestPipeline = (ingestPipelineModule as { default?: typeof ingestPipelineModule }).default
-  ?? ingestPipelineModule;
-const boundaryEnsemble = (boundaryEnsembleModule as { default?: typeof boundaryEnsembleModule })
-  .default ?? boundaryEnsembleModule;
+const ffmpegBin = interopNamespace(ffmpegBinModule);
+const ingestPipeline = interopNamespace(ingestPipelineModule);
+const boundaryEnsemble = interopNamespace(boundaryEnsembleModule);
 
 const { probeVideoDurationSec } = ffmpegBin;
 const {
@@ -52,6 +51,12 @@ async function resolveLocalOrHttpVideo(raw: string): Promise<string> {
  * Returns predicted interior cut times (film-absolute when timeline used) + boundary label.
  */
 export async function boundaryDetectHandler(req: Request, res: Response) {
+  const gate = checkWorkerIngestSecret((n) => req.get(n));
+  if (!gate.ok) {
+    res.status(gate.status).json(gate.body);
+    return;
+  }
+
   try {
     const body = req.body as Record<string, unknown>;
     const videoPathRaw =

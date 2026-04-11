@@ -11,6 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:ingest-contracts": "vitest run src/lib/__tests__/ingest-film-stream-contract.test.ts src/lib/__tests__/worker-http.integration.test.ts",
+    "worker:reachability-smoke": "tsx scripts/worker-reachability-smoke.ts",
     "check:schema-drift": "tsx scripts/check-schema-drift.ts",
     "check:taxonomy": "tsx scripts/check-taxonomy-parity.ts",
     "check:worker": "tsc --noEmit -p worker/tsconfig.json",
@@ -67,15 +69,19 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/supertest": "^7.2.0",
     "drizzle-kit": "^0.31.9",
     "eslint": "^9",
     "eslint-config-next": "15.5.12",
+    "supertest": "^7.2.2",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^3.2.4"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["ffmpeg-static"]
+    "onlyBuiltDependencies": [
+      "ffmpeg-static"
+    ]
   }
 }

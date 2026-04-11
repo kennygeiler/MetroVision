@@ -148,13 +148,21 @@ def _process_film(conn: Any, film_id: str, film_info: dict[str, Any]) -> int:
         classification = classify_shot(shot["clip_path"])
         classification["classification_source"] = "gemini"
 
-        # Validate taxonomy slugs before accumulating
         for field in (
-            "movement_type", "direction", "speed", "shot_size",
-            "angle_vertical", "angle_horizontal", "duration_cat",
+            "framing",
+            "depth",
+            "blocking",
+            "symmetry",
+            "dominant_lines",
+            "lighting_direction",
+            "lighting_quality",
+            "color_temperature",
+            "shot_size",
+            "angle_vertical",
+            "angle_horizontal",
+            "duration_cat",
         ):
             validate_taxonomy_slug(field, classification.get(field))
-        validate_taxonomy_slug("angle_special", classification.get("angle_special"))
 
         enriched_shots.append(
             {

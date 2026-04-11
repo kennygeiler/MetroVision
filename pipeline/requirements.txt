@@ -1,5 +1,5 @@
 scenedetect[opencv]
-google-generativeai
+google-genai
 anthropic
 httpx
 python-dotenv

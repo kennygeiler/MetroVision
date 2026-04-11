@@ -22,25 +22,19 @@ import {
   parseBoundaryCutPresetConfig,
   presetConfigToDetectOptions,
 } from "../../src/lib/boundary-cut-preset.js";
+import { interopNamespace } from "../../src/lib/esm-interop.js";
 import { logServerEvent } from "../../src/lib/server-log.js";
+import { checkWorkerIngestSecret } from "../../src/lib/worker-route-secret.js";
 
-const ffmpegBin = (ffmpegBinModule as { default?: typeof ffmpegBinModule }).default
-  ?? ffmpegBinModule;
-const ingestPipeline = (ingestPipelineModule as { default?: typeof ingestPipelineModule }).default
-  ?? ingestPipelineModule;
-const provenance = (pipelineProvenance as { default?: typeof pipelineProvenance }).default
-  ?? pipelineProvenance;
-const boundaryEnsemble = (boundaryEnsembleModule as { default?: typeof boundaryEnsembleModule })
-  .default ?? boundaryEnsembleModule;
-const tmdb = (tmdbModule as { default?: typeof tmdbModule }).default ?? tmdbModule;
-const openaiEmbedding = (openaiEmbeddingModule as { default?: typeof openaiEmbeddingModule })
-  .default ?? openaiEmbeddingModule;
-const sceneGrouping = (sceneGroupingModule as { default?: typeof sceneGroupingModule }).default
-  ?? sceneGroupingModule;
-const ingestReset = (ingestResetModule as { default?: typeof ingestResetModule }).default
-  ?? ingestResetModule;
-const ingestRunRecord = (ingestRunRecordModule as { default?: typeof ingestRunRecordModule })
-  .default ?? ingestRunRecordModule;
+const ffmpegBin = interopNamespace(ffmpegBinModule);
+const ingestPipeline = interopNamespace(ingestPipelineModule);
+const provenance = interopNamespace(pipelineProvenance);
+const boundaryEnsemble = interopNamespace(boundaryEnsembleModule);
+const tmdb = interopNamespace(tmdbModule);
+const openaiEmbedding = interopNamespace(openaiEmbeddingModule);
+const sceneGrouping = interopNamespace(sceneGroupingModule);
+const ingestReset = interopNamespace(ingestResetModule);
+const ingestRunRecord = interopNamespace(ingestRunRecordModule);
 const { getFfmpegPath, probeVideoDurationSec } = ffmpegBin;
 const { buildIngestProvenance, initialReviewStatusForShot } = provenance;
 const {
@@ -187,6 +181,12 @@ async function resolveWorkerIngestSource(
 }
 
 export async function ingestFilmHandler(req: Request, res: Response) {
+  const gate = checkWorkerIngestSecret((n) => req.get(n));
+  if (!gate.ok) {
+    res.status(gate.status).json(gate.body);
+    return;
+  }
+
   const body = req.body;
 
   if (!body.videoPath && !body.videoUrl) {

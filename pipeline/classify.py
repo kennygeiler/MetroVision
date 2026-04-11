@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Final, Optional
 
 from google import genai
 from google.genai import types
@@ -12,97 +13,132 @@ from google.genai import types
 try:
     from .config import GEMINI_MODEL_NAME, GOOGLE_API_KEY, require_env
     from .taxonomy import (
-        DIRECTIONS,
+        BLOCKING_TYPES,
+        COLOR_TEMPERATURES,
+        DEPTH_TYPES,
+        DOMINANT_LINES,
         DURATION_CATEGORIES,
+        FRAMINGS,
         HORIZONTAL_ANGLES,
-        MOVEMENT_TYPES,
+        LIGHTING_DIRECTIONS,
+        LIGHTING_QUALITIES,
         SHOT_SIZES,
-        SPECIAL_ANGLES,
-        SPEEDS,
+        SYMMETRY_TYPES,
         VERTICAL_ANGLES,
     )
 except ImportError:
     from config import GEMINI_MODEL_NAME, GOOGLE_API_KEY, require_env
     from taxonomy import (
-        DIRECTIONS,
+        BLOCKING_TYPES,
+        COLOR_TEMPERATURES,
+        DEPTH_TYPES,
+        DOMINANT_LINES,
         DURATION_CATEGORIES,
+        FRAMINGS,
         HORIZONTAL_ANGLES,
-        MOVEMENT_TYPES,
+        LIGHTING_DIRECTIONS,
+        LIGHTING_QUALITIES,
         SHOT_SIZES,
-        SPECIAL_ANGLES,
-        SPEEDS,
+        SYMMETRY_TYPES,
         VERTICAL_ANGLES,
     )
 
 
-DEFAULT_CLASSIFICATION = {
-    "movement_type": "static",
-    "direction": "none",
-    "speed": "moderate",
+def _slug_keys(d: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(d.keys())
+
+
+_FRAMING_VALUES: Final = _slug_keys(FRAMINGS)
+_DEPTH_VALUES: Final = _slug_keys(DEPTH_TYPES)
+_BLOCKING_VALUES: Final = _slug_keys(BLOCKING_TYPES)
+_SYMMETRY_VALUES: Final = _slug_keys(SYMMETRY_TYPES)
+_DOMINANT_LINES_VALUES: Final = _slug_keys(DOMINANT_LINES)
+_LIGHTING_DIR_VALUES: Final = _slug_keys(LIGHTING_DIRECTIONS)
+_LIGHTING_QUAL_VALUES: Final = _slug_keys(LIGHTING_QUALITIES)
+_COLOR_TEMP_VALUES: Final = _slug_keys(COLOR_TEMPERATURES)
+_SHOT_SIZE_VALUES: Final = _slug_keys(SHOT_SIZES)
+_VERTICAL_ANGLE_VALUES: Final = _slug_keys(VERTICAL_ANGLES)
+_HORIZONTAL_ANGLE_VALUES: Final = _slug_keys(HORIZONTAL_ANGLES)
+_DURATION_VALUES: Final = _slug_keys(DURATION_CATEGORIES)
+
+
+DEFAULT_CLASSIFICATION: dict[str, Any] = {
+    "framing": "centered",
+    "depth": "medium",
+    "blocking": "single",
+    "symmetry": "balanced",
+    "dominant_lines": "none",
+    "lighting_direction": "natural",
+    "lighting_quality": "soft",
+    "color_temperature": "neutral",
+    "foreground_elements": [],
+    "background_elements": [],
     "shot_size": "medium",
     "angle_vertical": "eye_level",
     "angle_horizontal": "frontal",
-    "angle_special": None,
     "duration_cat": "standard",
-    "is_compound": False,
-    "compound_parts": [],
-    "description": "",
-    "mood": "",
-    "lighting": "",
+    "description": "Classification unavailable — fallback applied",
+    "mood": "neutral",
+    "lighting": "unknown",
+    "subjects": [],
+    "scene_title": "Unclassified",
+    "scene_description": "",
+    "location": "unknown",
+    "interior_exterior": "interior",
+    "time_of_day": "day",
     "confidence": 0.3,
 }
 
-_MOVEMENT_TYPE_VALUES = tuple(MOVEMENT_TYPES.keys())
-_DIRECTION_VALUES = tuple(DIRECTIONS.keys())
-_SPEED_VALUES = tuple(SPEEDS.keys())
-_SHOT_SIZE_VALUES = tuple(SHOT_SIZES.keys())
-_VERTICAL_ANGLE_VALUES = tuple(VERTICAL_ANGLES.keys())
-_HORIZONTAL_ANGLE_VALUES = tuple(HORIZONTAL_ANGLES.keys())
-_SPECIAL_ANGLE_VALUES = tuple(SPECIAL_ANGLES.keys())
-_DURATION_VALUES = tuple(DURATION_CATEGORIES.keys())
 
-PROMPT_TEMPLATE = """You are a cinematography analysis expert. Analyze this video clip and classify it using ONLY these exact values:
+PROMPT_TEMPLATE = """Shot composition analysis (single clip).
 
-Movement types: {movement_types}
+Analyze the COMPOSITION of this shot — what is in the frame, how it is arranged, and how it is lit.
 
-Directions: {directions}
+Return ONLY valid JSON (no markdown) with these keys:
+"framing","depth","blocking","symmetry","dominant_lines","lighting_direction","lighting_quality","color_temperature","foreground_elements","background_elements","shot_size","angle_vertical","angle_horizontal","duration_cat","description","mood","lighting","subjects","scene_title","scene_description","location","interior_exterior","time_of_day"
 
-Speeds: {speeds}
+Valid slug values (use exactly these strings):
+framing: {framings}
+depth: {depths}
+blocking: {blockings}
+symmetry: {symmetries}
+dominant_lines: {dominant_lines}
+lighting_direction: {lighting_dirs}
+lighting_quality: {lighting_quals}
+color_temperature: {color_temps}
+shot_size: {shot_sizes}
+angle_vertical: {vertical_angles}
+angle_horizontal: {horizontal_angles}
+duration_cat: {duration_cats}
 
-Shot sizes: {shot_sizes}
-
-Vertical angles: {vertical_angles}
-Horizontal angles: {horizontal_angles}
-Special angles: {special_angles} (or null if none apply)
-
-Duration categories: {duration_categories}
-
-Rules:
-- Use ONLY taxonomy values from the lists above.
-- If the clip appears static, use "static" and direction "none".
-- Set is_compound to true only when more than one movement is clearly present.
-- compound_parts must contain at most 3 objects, each with exact keys "type" and "direction".
-- Respond with ONLY valid JSON and no markdown.
+foreground_elements and background_elements: arrays of short strings.
+subjects: array of strings.
+Other text fields: plain strings.
 
 Clip duration (seconds): {clip_duration:.3f}
-
-JSON shape:
-{{
-  "movement_type": "...",
-  "direction": "...",
-  "speed": "...",
-  "shot_size": "...",
-  "angle_vertical": "...",
-  "angle_horizontal": "...",
-  "angle_special": null or "...",
-  "duration_cat": "...",
-  "is_compound": false,
-  "compound_parts": [],
-  "description": "Brief scene description",
-  "mood": "Scene mood/atmosphere",
-  "lighting": "Lighting description"
-}}
 """
+
+
+def _coerce_slug(raw: Any, allowed: tuple[str, ...], fallback: str) -> str:
+    if not isinstance(raw, str):
+        return fallback
+    n = raw.strip().lower().replace(" ", "_")
+    if n in allowed:
+        return n
+    stripped = re.sub(r"[-]", "_", re.sub(r"_shot$", "", n))
+    if stripped in allowed:
+        return stripped
+    return fallback
+
+
+def _coerce_str_list(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for x in raw:
+        if isinstance(x, str) and x.strip():
+            out.append(x.strip())
+    return out
 
 
 def _probe_duration_seconds(video_path: str) -> float:
@@ -138,70 +174,73 @@ def _extract_json_block(response_text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
-def _validate_value(
-    payload: dict[str, Any], key: str, allowed: tuple[str, ...], default: Optional[str]
-) -> Optional[str]:
-    value = payload.get(key)
-    if value in allowed:
-        return value
-    return default
-
-
-def _normalize_compound_parts(payload: dict[str, Any]) -> list[dict[str, str]]:
-    raw_parts = payload.get("compound_parts")
-    if not isinstance(raw_parts, list):
-        return []
-
-    normalized: list[dict[str, str]] = []
-    for part in raw_parts[:3]:
-        if not isinstance(part, dict):
-            continue
-
-        movement_type = part.get("type")
-        direction = part.get("direction")
-        if movement_type in _MOVEMENT_TYPE_VALUES and direction in _DIRECTION_VALUES:
-            normalized.append({"type": movement_type, "direction": direction})
-
-    return normalized
-
-
 def _normalize_response(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(DEFAULT_CLASSIFICATION)
+    del normalized["confidence"]
 
-    # Track how many taxonomy fields fell back to defaults
-    _taxonomy_fields: list[tuple[str, tuple[str, ...], str | None]] = [
-        ("movement_type", _MOVEMENT_TYPE_VALUES, "static"),
-        ("direction", _DIRECTION_VALUES, "none"),
-        ("speed", _SPEED_VALUES, "moderate"),
-        ("shot_size", _SHOT_SIZE_VALUES, "medium"),
-        ("angle_vertical", _VERTICAL_ANGLE_VALUES, "eye_level"),
-        ("angle_horizontal", _HORIZONTAL_ANGLE_VALUES, "frontal"),
-        ("duration_cat", _DURATION_VALUES, "standard"),
-    ]
-
-    defaulted = 0
-    for key, allowed, default in _taxonomy_fields:
-        value = payload.get(key)
-        if value in allowed:
-            normalized[key] = value
-        else:
-            normalized[key] = default
-            defaulted += 1
-
-    normalized["angle_special"] = _validate_value(
-        payload, "angle_special", _SPECIAL_ANGLE_VALUES, None
+    normalized["framing"] = _coerce_slug(payload.get("framing"), _FRAMING_VALUES, "centered")
+    normalized["depth"] = _coerce_slug(payload.get("depth"), _DEPTH_VALUES, "medium")
+    normalized["blocking"] = _coerce_slug(payload.get("blocking"), _BLOCKING_VALUES, "single")
+    normalized["symmetry"] = _coerce_slug(payload.get("symmetry"), _SYMMETRY_VALUES, "balanced")
+    normalized["dominant_lines"] = _coerce_slug(
+        payload.get("dominant_lines"), _DOMINANT_LINES_VALUES, "none"
     )
-    normalized["description"] = str(payload.get("description") or "").strip()
-    normalized["mood"] = str(payload.get("mood") or "").strip()
-    normalized["lighting"] = str(payload.get("lighting") or "").strip()
+    normalized["lighting_direction"] = _coerce_slug(
+        payload.get("lighting_direction"), _LIGHTING_DIR_VALUES, "natural"
+    )
+    normalized["lighting_quality"] = _coerce_slug(
+        payload.get("lighting_quality"), _LIGHTING_QUAL_VALUES, "soft"
+    )
+    normalized["color_temperature"] = _coerce_slug(
+        payload.get("color_temperature"), _COLOR_TEMP_VALUES, "neutral"
+    )
+    normalized["foreground_elements"] = _coerce_str_list(payload.get("foreground_elements"))
+    normalized["background_elements"] = _coerce_str_list(payload.get("background_elements"))
+    normalized["shot_size"] = _coerce_slug(payload.get("shot_size"), _SHOT_SIZE_VALUES, "medium")
+    normalized["angle_vertical"] = _coerce_slug(
+        payload.get("angle_vertical"), _VERTICAL_ANGLE_VALUES, "eye_level"
+    )
+    normalized["angle_horizontal"] = _coerce_slug(
+        payload.get("angle_horizontal"), _HORIZONTAL_ANGLE_VALUES, "frontal"
+    )
+    normalized["duration_cat"] = _coerce_slug(
+        payload.get("duration_cat"), _DURATION_VALUES, "standard"
+    )
 
-    compound_parts = _normalize_compound_parts(payload)
-    normalized["compound_parts"] = compound_parts
-    normalized["is_compound"] = bool(payload.get("is_compound")) and bool(compound_parts)
+    normalized["description"] = str(payload.get("description") or "").strip() or normalized[
+        "description"
+    ]
+    normalized["mood"] = str(payload.get("mood") or "").strip() or "neutral"
+    normalized["lighting"] = str(payload.get("lighting") or "").strip() or "unknown"
+    normalized["subjects"] = _coerce_str_list(payload.get("subjects"))
+    normalized["scene_title"] = str(payload.get("scene_title") or "").strip() or "Unclassified"
+    normalized["scene_description"] = str(payload.get("scene_description") or "").strip()
+    normalized["location"] = str(payload.get("location") or "").strip() or "unknown"
+    normalized["interior_exterior"] = (
+        str(payload.get("interior_exterior") or "").strip() or "interior"
+    )
+    normalized["time_of_day"] = str(payload.get("time_of_day") or "").strip() or "day"
 
-    # Confidence: start at 1.0, penalize each field that fell back to default
-    confidence = max(1.0 - defaulted * 0.12, 0.1)
-    normalized["confidence"] = round(confidence, 3)
+    taxonomy_keys = (
+        "framing",
+        "depth",
+        "blocking",
+        "symmetry",
+        "dominant_lines",
+        "lighting_direction",
+        "lighting_quality",
+        "color_temperature",
+        "shot_size",
+        "angle_vertical",
+        "angle_horizontal",
+        "duration_cat",
+    )
+    missing = sum(
+        1
+        for k in taxonomy_keys
+        if k not in payload or payload[k] is None or (isinstance(payload[k], str) and not payload[k].strip())
+    )
+    normalized["confidence"] = round(max(1.0 - missing * 0.07, 0.28), 3)
 
     return normalized
 
@@ -216,14 +255,18 @@ def classify_shot(clip_path: str) -> dict[str, Any]:
         clip_duration = 0.0
 
     prompt = PROMPT_TEMPLATE.format(
-        movement_types=", ".join(_MOVEMENT_TYPE_VALUES),
-        directions=", ".join(_DIRECTION_VALUES),
-        speeds=", ".join(_SPEED_VALUES),
+        framings=", ".join(_FRAMING_VALUES),
+        depths=", ".join(_DEPTH_VALUES),
+        blockings=", ".join(_BLOCKING_VALUES),
+        symmetries=", ".join(_SYMMETRY_VALUES),
+        dominant_lines=", ".join(_DOMINANT_LINES_VALUES),
+        lighting_dirs=", ".join(_LIGHTING_DIR_VALUES),
+        lighting_quals=", ".join(_LIGHTING_QUAL_VALUES),
+        color_temps=", ".join(_COLOR_TEMP_VALUES),
         shot_sizes=", ".join(_SHOT_SIZE_VALUES),
         vertical_angles=", ".join(_VERTICAL_ANGLE_VALUES),
         horizontal_angles=", ".join(_HORIZONTAL_ANGLE_VALUES),
-        special_angles=", ".join(_SPECIAL_ANGLE_VALUES),
-        duration_categories=", ".join(_DURATION_VALUES),
+        duration_cats=", ".join(_DURATION_VALUES),
         clip_duration=clip_duration,
     )
 
@@ -239,7 +282,6 @@ def classify_shot(clip_path: str) -> dict[str, Any]:
         try:
             uploaded = client.files.upload(file=clip_path)
 
-            # Wait for file to be processed
             while uploaded.state.name == "PROCESSING":
                 time.sleep(2)
                 uploaded = client.files.get(name=uploaded.name)
@@ -255,7 +297,8 @@ def classify_shot(clip_path: str) -> dict[str, Any]:
                     response_mime_type="application/json",
                 ),
             )
-            payload = _extract_json_block(response.text)
+            text = response.text or ""
+            payload = _extract_json_block(text)
             return _normalize_response(payload)
         except Exception as exc:
             last_error = exc
@@ -275,4 +318,6 @@ def classify_shot(clip_path: str) -> dict[str, Any]:
     )
     if last_error is not None:
         print(f"Last Gemini error: {last_error}")
-    return dict(DEFAULT_CLASSIFICATION)
+    out = dict(DEFAULT_CLASSIFICATION)
+    out["confidence"] = 0.3
+    return out

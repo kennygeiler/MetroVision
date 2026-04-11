@@ -189,4 +189,97 @@
       var(--color-border-strong)
     );
   }
+
+  /* PipelineViz — static animation/helpers (avoid client dangerouslySetInnerHTML) */
+  @keyframes pipeline-viz-pulse-dot {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 currentColor;
+      opacity: 1;
+    }
+    50% {
+      box-shadow: 0 0 8px 3px currentColor;
+      opacity: 0.8;
+    }
+  }
+  @keyframes pipeline-viz-film-grain {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      background-position: 100% 100%;
+    }
+  }
+  @keyframes pipeline-viz-expose {
+    0% {
+      clip-path: inset(100% 0 0 0);
+    }
+    100% {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+  @keyframes pipeline-viz-shimmer {
+    0%,
+    100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+  @keyframes pipeline-viz-flash-reveal {
+    0% {
+      opacity: 0;
+      filter: brightness(3);
+    }
+    30% {
+      opacity: 1;
+      filter: brightness(2);
+    }
+    100% {
+      opacity: 1;
+      filter: brightness(1);
+    }
+  }
+
+  .frame-pending {
+    background: #1a1a22;
+    border-color: #2a2a33;
+    opacity: 0.4;
+  }
+  .frame-extracting {
+    box-shadow: 0 0 12px rgba(92, 184, 214, 0.2);
+  }
+  .frame-extracting .frame-fill {
+    background: linear-gradient(to top, rgba(92, 184, 214, 0.25), transparent);
+    animation: pipeline-viz-expose 0.4s ease-out forwards;
+  }
+  .frame-classifying {
+    box-shadow: 0 0 12px rgba(155, 124, 214, 0.2);
+  }
+  .frame-classifying .frame-fill {
+    background: linear-gradient(
+      135deg,
+      rgba(155, 124, 214, 0.15),
+      rgba(92, 184, 214, 0.1)
+    );
+    animation: pipeline-viz-shimmer 1.2s ease-in-out infinite;
+  }
+  .frame-classified .frame-fill {
+    animation: pipeline-viz-flash-reveal 0.5s ease-out forwards;
+  }
+  .frame-written {
+    border-bottom: 2px solid #5cd69b !important;
+  }
+  .step-progress-track {
+    height: 3px;
+    border-radius: 2px;
+    background: #1a1a22;
+    overflow: hidden;
+  }
+  .step-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease-out;
+  }
 }
