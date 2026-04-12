@@ -13,13 +13,13 @@ CREATE TABLE IF NOT EXISTS "ingest_async_jobs" (
   "created_at" timestamp with time zone DEFAULT now(),
   "updated_at" timestamp with time zone DEFAULT now()
 );
-
+--> statement-breakpoint
 ALTER TABLE "ingest_async_jobs"
   ADD CONSTRAINT "ingest_async_jobs_film_id_films_id_fk"
   FOREIGN KEY ("film_id") REFERENCES "public"."films"("id") ON DELETE set null ON UPDATE no action;
-
+--> statement-breakpoint
 ALTER TABLE "ingest_async_jobs"
   ADD CONSTRAINT "ingest_async_jobs_ingest_run_id_ingest_runs_id_fk"
   FOREIGN KEY ("ingest_run_id") REFERENCES "public"."ingest_runs"("id") ON DELETE set null ON UPDATE no action;
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "ingest_async_jobs_status_created_idx" ON "ingest_async_jobs" ("status", "created_at");

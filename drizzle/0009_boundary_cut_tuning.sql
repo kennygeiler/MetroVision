@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS "boundary_cut_presets" (
   "created_at" timestamp with time zone DEFAULT now(),
   "updated_at" timestamp with time zone DEFAULT now()
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "eval_gold_revisions" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "film_id" uuid NOT NULL REFERENCES "films"("id") ON DELETE CASCADE,
@@ -22,11 +22,11 @@ CREATE TABLE IF NOT EXISTS "eval_gold_revisions" (
   "created_by" text,
   "created_at" timestamp with time zone DEFAULT now()
 );
-
+--> statement-breakpoint
 ALTER TABLE "eval_gold_revisions"
   ADD CONSTRAINT "eval_gold_revisions_replaces_fk"
   FOREIGN KEY ("replaces_revision_id") REFERENCES "eval_gold_revisions"("id") ON DELETE SET NULL;
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "boundary_eval_runs" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "film_id" uuid NOT NULL REFERENCES "films"("id") ON DELETE CASCADE,
@@ -40,5 +40,5 @@ CREATE TABLE IF NOT EXISTS "boundary_eval_runs" (
   "provenance" jsonb,
   "created_at" timestamp with time zone DEFAULT now()
 );
-
+--> statement-breakpoint
 ALTER TABLE "films" ADD COLUMN IF NOT EXISTS "boundary_cut_preset_id" uuid REFERENCES "boundary_cut_presets"("id") ON DELETE SET NULL;
