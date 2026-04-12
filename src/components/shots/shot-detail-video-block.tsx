@@ -25,6 +25,7 @@ export function ShotDetailVideoBlock({ shot, nextShotId }: ShotDetailVideoBlockP
         nextShotId={nextShotId}
         videoRef={videoRef}
         hasVideoClip={Boolean(shot.videoUrl)}
+        videoUrlKey={shot.videoUrl}
       />
     </div>
   );

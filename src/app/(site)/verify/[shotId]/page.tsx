@@ -113,7 +113,7 @@ export default async function VerifyShotPage({
         </ol>
       </div>
 
-      <ShotPlayer shot={shot} variant="verify" />
+      <ShotPlayer shot={shot} />
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
         <VerificationPanel shot={shot} />

@@ -85,5 +85,17 @@ export function getDurationCategoryDisplayName(slug: DurationCategorySlug | null
 }
 
 export function formatShotDuration(duration: number) {
-  return `${duration.toFixed(1)}s`;
+  if (!Number.isFinite(duration) || duration < 0) {
+    return "—";
+  }
+  if (duration <= 60) {
+    return `${duration.toFixed(1)}s`;
+  }
+  const mins = Math.floor(duration / 60);
+  const secs = duration - mins * 60;
+  const roundedSecs = Number(secs.toFixed(3));
+  if (roundedSecs < 0.05) {
+    return `${mins}m`;
+  }
+  return `${mins}m ${roundedSecs.toFixed(1)}s`;
 }

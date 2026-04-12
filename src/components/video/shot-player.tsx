@@ -12,12 +12,11 @@ import type { ShotWithDetails } from "@/lib/types";
 
 type ShotPlayerProps = {
   shot: ShotWithDetails;
-  variant?: "default" | "verify";
   /** When set, attached to the underlying `<video>` for timeline sync (e.g. boundary HITL). */
   videoRef?: RefObject<HTMLVideoElement | null>;
 };
 
-export function ShotPlayer({ shot, variant = "default", videoRef }: ShotPlayerProps) {
+export function ShotPlayer({ shot, videoRef }: ShotPlayerProps) {
   const [showOverlay, setShowOverlay] = useState(true);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -167,13 +166,6 @@ export function ShotPlayer({ shot, variant = "default", videoRef }: ShotPlayerPr
 
         {showOverlay ? <MetadataOverlay shot={shot} /> : null}
       </div>
-
-      {variant === "verify" ? (
-        <p className="text-sm leading-7 text-[var(--color-text-secondary)]">
-          Toggle <strong className="font-medium text-[var(--color-text-primary)]">Show labels</strong> to compare the
-          composition block with your ratings. The panel stays above the player timeline.
-        </p>
-      ) : null}
     </div>
   );
 }

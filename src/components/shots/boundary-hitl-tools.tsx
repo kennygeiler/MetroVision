@@ -18,6 +18,8 @@ type BoundaryHitlToolsProps = {
   nextShotId: string | null;
   videoRef?: RefObject<HTMLVideoElement | null>;
   hasVideoClip?: boolean;
+  /** Bumps sync when the clip URL changes (remount). */
+  videoUrlKey?: string | null;
 };
 
 function isEditableTarget(target: EventTarget | null) {
@@ -39,6 +41,7 @@ export function BoundaryHitlTools({
   nextShotId,
   videoRef,
   hasVideoClip = false,
+  videoUrlKey = null,
 }: BoundaryHitlToolsProps) {
   const router = useRouter();
   const [splitAt, setSplitAt] = useState("");
@@ -50,53 +53,31 @@ export function BoundaryHitlTools({
   const mediaAnchor = clipMediaAnchorStartTc ?? startTc;
   const usePlayhead = Boolean(hasVideoClip && videoRef && mediaAnchor != null);
 
+  // Poll `currentTime`: `timeupdate` is sparse while playing and `seeking` often fires before the
+  // element’s `currentTime` matches the scrub handle, so the split field goes stale without polling.
   useEffect(() => {
-    if (!usePlayhead) {
+    if (!usePlayhead || !videoRef || mediaAnchor == null) {
       return;
     }
 
-    let cleared = false;
-    let detachListeners: (() => void) | null = null;
-    let ticks = 0;
-
-    const poll = window.setInterval(() => {
-      ticks += 1;
-      if (cleared || ticks > 250) {
-        window.clearInterval(poll);
+    let alive = true;
+    const syncFromVideo = () => {
+      const video = videoRef.current;
+      if (!alive || !video) {
         return;
       }
+      const next = (mediaAnchor + video.currentTime).toFixed(3);
+      setSplitAt((prev) => (prev === next ? prev : next));
+    };
 
-      const video = videoRef?.current;
-      if (!video) {
-        return;
-      }
-
-      window.clearInterval(poll);
-
-      const sync = () => {
-        if (cleared || mediaAnchor == null) {
-          return;
-        }
-        setSplitAt((mediaAnchor + video.currentTime).toFixed(3));
-      };
-
-      sync();
-      for (const ev of ["timeupdate", "seeking", "seeked", "pause", "ended"] as const) {
-        video.addEventListener(ev, sync);
-      }
-      detachListeners = () => {
-        for (const ev of ["timeupdate", "seeking", "seeked", "pause", "ended"] as const) {
-          video.removeEventListener(ev, sync);
-        }
-      };
-    }, 40);
+    const intervalId = window.setInterval(syncFromVideo, 60);
+    syncFromVideo();
 
     return () => {
-      cleared = true;
-      window.clearInterval(poll);
-      detachListeners?.();
+      alive = false;
+      window.clearInterval(intervalId);
     };
-  }, [usePlayhead, videoRef, mediaAnchor, shotId]);
+  }, [usePlayhead, videoRef, mediaAnchor, shotId, videoUrlKey]);
 
   const readSplitSec = useCallback((): number | null => {
     if (usePlayhead && videoRef?.current && mediaAnchor != null) {
