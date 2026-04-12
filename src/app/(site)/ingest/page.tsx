@@ -504,8 +504,7 @@ function IngestPageContent() {
         </h1>
         <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
           Select a video file and the pipeline will detect shots, classify composition metadata (framing,
-          depth, scale, lighting cues, and related fields), group scenes, and upload assets — visualized in
-          real time.
+          depth, scale, lighting cues, and related fields), and upload assets — visualized in real time.
         </p>
         <div
           className="mt-6 rounded-[var(--radius-xl)] border p-4"
@@ -772,7 +771,7 @@ function IngestPageContent() {
           <p className="max-w-prose font-mono text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
             Shot boundaries use PySceneDetect adaptive mode. For dual-detector + NMS on the server, set{" "}
             <code className="font-mono text-[10px]">METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene</code>.
-            Automatic scene rows are model grouping for navigation only.
+            The classifier may attach an optional per-shot title string from the model; the archive is organized as shots only.
           </p>
           <p className="max-w-prose font-mono text-[10px] leading-relaxed text-[var(--color-text-secondary)]">
             Deployed on Vercel: set <code className="text-[10px]">INGEST_WORKER_URL</code> or{" "}

@@ -14,7 +14,7 @@ import type { ShotSizeSlug } from "@/lib/taxonomy";
 export const metadata: Metadata = {
   title: "Browse",
   description:
-    "Browse the MetroVision archive — films, scenes, and shots with shot-level composition metadata and verification state.",
+    "Browse the MetroVision archive — films and shot-level composition metadata with verification state.",
 };
 
 type BrowsePageProps = {

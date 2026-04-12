@@ -28,7 +28,7 @@ export function FilmTimeline({ shots, scenes, compact = false }: FilmTimelinePro
     );
   }
 
-  // Build scene boundary positions (cumulative duration)
+  // Optional shot-group dividers (legacy: grouped by DB scene rows)
   const sceneBoundaries: number[] = [];
   if (scenes && scenes.length > 1) {
     let cumulative = 0;
@@ -84,7 +84,7 @@ export function FilmTimeline({ shots, scenes, compact = false }: FilmTimelinePro
             );
           })}
 
-          {/* Scene boundary dividers */}
+          {/* Optional group dividers */}
           {sceneBoundaries.map((pct, i) => (
             <div
               key={i}

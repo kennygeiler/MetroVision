@@ -16,9 +16,7 @@ export type FilmEvalExportPayload = {
 
 /** Same shape as `pnpm eval:export-film` — single source for CLI + API + UI download. */
 export function buildFilmEvalExportPayload(film: FilmWithDetails): FilmEvalExportPayload {
-  const shots = film.scenes
-    .flatMap((s) => s.shots)
-    .sort((a, b) => (a.startTc ?? 0) - (b.startTc ?? 0));
+  const shots = [...film.shots].sort((a, b) => (a.startTc ?? 0) - (b.startTc ?? 0));
 
   const cutsSec: number[] = [];
   for (let i = 1; i < shots.length; i++) {

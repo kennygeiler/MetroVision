@@ -75,14 +75,6 @@ export function FilmCard({ film }: FilmCardProps) {
         <div className="flex gap-4">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-              Scenes
-            </p>
-            <p className="mt-1 text-lg font-semibold text-[var(--color-text-primary)]">
-              {film.sceneCount}
-            </p>
-          </div>
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
               Shots
             </p>
             <p className="mt-1 text-lg font-semibold text-[var(--color-text-primary)]">

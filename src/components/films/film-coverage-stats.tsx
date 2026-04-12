@@ -127,21 +127,13 @@ export function FilmCoverageStats({ stats }: Props) {
         >
           Coverage Summary
         </h3>
-        <div className="mt-4 grid grid-cols-2 gap-6 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-6 sm:grid-cols-3">
           <div>
             <p className="text-3xl font-bold text-[var(--color-text-primary)]">
               {stats.shotCount}
             </p>
             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
               Total shots
-            </p>
-          </div>
-          <div>
-            <p className="text-3xl font-bold text-[var(--color-text-primary)]">
-              {stats.sceneCount}
-            </p>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-              Scenes
             </p>
           </div>
           <div>

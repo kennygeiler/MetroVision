@@ -25,7 +25,6 @@ import {
   beginClassificationDiagBatch,
 } from "@/lib/ingest-pipeline";
 import { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } from "@/lib/tmdb";
-import { planContiguousScenesByNormalizedTitle } from "@/lib/scene-grouping";
 import {
   mergeBoundaryCutSources,
   parseInlineBoundaryCuts,
@@ -354,7 +353,7 @@ export async function POST(request: Request) {
         const classifications = classifyResults.map((r) => r.classification);
         emit({ type: "step", step: "classify", status: "complete", message: `${splits.length} shots classified`, duration: (Date.now() - t3) / 1000 });
 
-        // Step 4: Group scenes
+        // Step 4: Film record + clear prior ingest artifacts (shots are not grouped into screenplay scenes)
         emit({
           type: "step",
           step: "group",
@@ -388,32 +387,14 @@ export async function POST(request: Request) {
 
         await resetFilmIngestArtifacts(db, filmId);
         ingestRunId = await createIngestRunRecord(db, filmId);
-        emit({ type: "step", step: "group", status: "active", message: "Grouping shots into scenes…" });
 
-        const scenePlans = planContiguousScenesByNormalizedTitle(classifications);
-        const sceneIdByShotIndex = new Map<number, string>();
-        let sceneNumber = 0;
-        for (const plan of scenePlans) {
-          sceneNumber++;
-          const firstIdx = plan.shotIndices[0]!;
-          const lastIdx = plan.shotIndices[plan.shotIndices.length - 1]!;
-          const firstShot = classifications[firstIdx]!;
-          const startTc = splits[firstIdx]!.start;
-          const endTc = splits[lastIdx]!.end;
-          const [inserted] = await db.insert(schema.scenes).values({
-            filmId, sceneNumber, title: plan.displayTitle,
-            description: firstShot.scene_description || null,
-            location: firstShot.location || null,
-            interiorExterior: firstShot.interior_exterior || null,
-            timeOfDay: firstShot.time_of_day || null,
-            startTc, endTc, totalDuration: endTc - startTc,
-          }).returning({ id: schema.scenes.id });
-          for (const idx of plan.shotIndices) {
-            sceneIdByShotIndex.set(idx, inserted.id);
-          }
-        }
-
-        emit({ type: "step", step: "group", status: "complete", message: `${scenePlans.length} scenes created`, duration: (Date.now() - t4) / 1000 });
+        emit({
+          type: "step",
+          step: "group",
+          status: "complete",
+          message: "Film record ready for shot writes",
+          duration: (Date.now() - t4) / 1000,
+        });
 
         if (ingestRunId) await setIngestRunStage(db, ingestRunId, "write");
         // Step 5: Upload to S3 + Write to DB (parallel)
@@ -440,7 +421,7 @@ export async function POST(request: Request) {
           const asset = uploadedAssets[i];
           const classification = classifications[i];
           const clsMeta = classifyResults[i];
-          const sceneId = sceneIdByShotIndex.get(i) ?? null;
+          const sceneId = null;
           const durationSec = roundTime(split.end - split.start);
           const reviewStatus = initialReviewStatusForShot(
             durationSec,
@@ -519,9 +500,9 @@ export async function POST(request: Request) {
 
         emit({ type: "step", step: "write", status: "complete", message: `${shotCount} shots written`, duration: (Date.now() - t5) / 1000 });
         if (ingestRunId) {
-          await completeIngestRunRecord(db, ingestRunId, shotCount, scenePlans.length);
+          await completeIngestRunRecord(db, ingestRunId, shotCount, 0);
         }
-        emit({ type: "complete", filmId, filmTitle: filmTitleStr, shotCount, sceneCount: scenePlans.length });
+        emit({ type: "complete", filmId, filmTitle: filmTitleStr, shotCount, sceneCount: 0 });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Pipeline failed";
         if (ingestRunId) {

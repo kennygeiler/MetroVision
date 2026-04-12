@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { FilmHeader } from "@/components/films/film-header";
 import { FilmCoverageStats } from "@/components/films/film-coverage-stats";
 import { FilmTimeline } from "@/components/films/film-timeline";
-import { SceneCard } from "@/components/films/scene-card";
+import { ShotCard } from "@/components/shots/shot-card";
 import {
   getFilmById,
   getFilmCoverageStats,
@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!film) return { title: "Film Not Found" };
   return {
     title: `${film.title} — ${film.director}`,
-    description: `Shot-level composition archive for ${film.title} (${film.year}) by ${film.director}. ${film.shotCount} shots across ${film.sceneCount} scenes.`,
+    description: `Shot-level composition archive for ${film.title} (${film.year}) by ${film.director}. ${film.shotCount} analyzed shots.`,
   };
 }
 
@@ -37,7 +37,7 @@ export default async function FilmDetailPage({ params }: Props) {
 
   if (!film) notFound();
 
-  const allShots = film.scenes.flatMap((s) => s.shots);
+  const allShots = film.shots;
   const weakClassificationCount = countShotsNeedingReliableClassification(allShots);
   const yearStr =
     film.year != null && Number.isFinite(film.year) ? String(film.year) : "";
@@ -116,7 +116,7 @@ export default async function FilmDetailPage({ params }: Props) {
           </p>
         )}
         <div className="mt-4">
-          <FilmTimeline shots={allShots} scenes={film.scenes} />
+          <FilmTimeline shots={allShots} />
         </div>
       </section>
 
@@ -135,19 +135,19 @@ export default async function FilmDetailPage({ params }: Props) {
         </div>
       </section>
 
-      {/* Scene List */}
+      {/* Shot list */}
       <section>
         <h2
           className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-accent)]"
         >
-          Scenes ({film.sceneCount})
+          Shots ({film.shotCount})
         </h2>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-          Scene breakdown with shot coverage patterns.
+          Story order; open a shot for full composition metadata and playback.
         </p>
-        <div className="mt-4 space-y-4">
-          {film.scenes.map((scene) => (
-            <SceneCard key={scene.id} scene={scene} />
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {allShots.map((shot) => (
+            <ShotCard key={shot.id} shot={shot} />
           ))}
         </div>
       </section>

@@ -36,15 +36,9 @@ export async function GET(request: Request) {
     .from(schema.shots)
     .where(eq(schema.shots.filmId, film.id));
 
-  const [sceneRow] = await db
-    .select({ c: count() })
-    .from(schema.scenes)
-    .where(eq(schema.scenes.filmId, film.id));
-
   return NextResponse.json({
     found: true as const,
     filmId: film.id,
     shotCount: Number(shotRow?.c ?? 0),
-    sceneCount: Number(sceneRow?.c ?? 0),
   });
 }

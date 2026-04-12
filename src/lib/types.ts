@@ -268,10 +268,10 @@ export type FilmWithDetails = {
   overview: string | null;
   runtime: number | null;
   genres: string[];
-  sceneCount: number;
   shotCount: number;
   totalDuration: number;
-  scenes: SceneWithShots[];
+  /** All shots for this film, story order. */
+  shots: ShotWithDetails[];
   /** Worker ingest uses this preset when `boundaryCutPresetId` is not passed on the request. */
   boundaryCutPresetId: string | null;
   boundaryCutPresetName: string | null;
@@ -289,7 +289,6 @@ export type FilmCard = {
   director: string;
   year: number | null;
   posterUrl: string | null;
-  sceneCount: number;
   shotCount: number;
   totalDuration: number;
   /** Shots with template fallback classification or `needs_review` (see film timeline / re-ingest). */
@@ -301,7 +300,6 @@ export type FilmCoverageStats = {
   framingFrequency: Record<string, number>;
   averageShotLength: number;
   shotCount: number;
-  sceneCount: number;
   totalDuration: number;
 };
 
@@ -340,7 +338,6 @@ export type VizFilm = {
   title: string;
   director: string;
   shotCount: number;
-  sceneCount: number;
 };
 
 export type VisualizationData = {

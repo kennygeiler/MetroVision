@@ -24,7 +24,7 @@ async function main() {
   }
 
   const payload = buildFilmEvalExportPayload(film);
-  const shotCount = film.scenes.reduce((n, s) => n + s.shots.length, 0);
+  const shotCount = film.shots.length;
 
   const outPath =
     outArg ?? path.join("eval", "predicted", `${film.id}.json`);

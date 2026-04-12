@@ -14,7 +14,6 @@ import * as pipelineProvenance from "../../src/lib/pipeline-provenance.js";
 import * as boundaryEnsembleModule from "../../src/lib/boundary-ensemble.js";
 import * as tmdbModule from "../../src/lib/tmdb.js";
 import * as openaiEmbeddingModule from "../../src/lib/openai-embedding.js";
-import * as sceneGroupingModule from "../../src/lib/scene-grouping.js";
 import * as ingestResetModule from "../../src/lib/ingest-reset.js";
 import * as ingestRunRecordModule from "../../src/lib/ingest-run-record.js";
 import {
@@ -29,7 +28,6 @@ const provenance = interopNamespace(pipelineProvenance);
 const boundaryEnsemble = interopNamespace(boundaryEnsembleModule);
 const tmdb = interopNamespace(tmdbModule);
 const openaiEmbedding = interopNamespace(openaiEmbeddingModule);
-const sceneGrouping = interopNamespace(sceneGroupingModule);
 const ingestReset = interopNamespace(ingestResetModule);
 const ingestRunRecord = interopNamespace(ingestRunRecordModule);
 const { getFfmpegPath, probeVideoDurationSec } = ffmpegBin;
@@ -58,7 +56,6 @@ const {
 } = boundaryEnsemble;
 const { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } = tmdb;
 const { generateTextEmbedding } = openaiEmbedding;
-const { planContiguousScenesByNormalizedTitle } = sceneGrouping;
 const { resetFilmIngestArtifacts } = ingestReset;
 const {
   completeIngestRunRecord,
@@ -583,7 +580,7 @@ export async function runWorkerIngestFilmPipeline(
   });
   await pushProgress({
     stage: "group",
-    message: "Grouping scenes…",
+    message: "Preparing film record…",
     totalShots: splits.length,
     extractDone: splits.length,
     classifyDone: splits.length,
@@ -634,48 +631,13 @@ export async function runWorkerIngestFilmPipeline(
   emit({
     type: "step",
     step: "group",
-    status: "active",
-    message: "Grouping shots into scenes…",
-  });
-
-  const scenePlans = planContiguousScenesByNormalizedTitle(classifications);
-  const sceneIdByShotIndex = new Map<number, string>();
-  let sceneNum = 0;
-  for (const plan of scenePlans) {
-    sceneNum++;
-    const firstIdx = plan.shotIndices[0]!;
-    const lastIdx = plan.shotIndices[plan.shotIndices.length - 1]!;
-    const first = classifications[firstIdx]!;
-    const [ins] = await db
-      .insert(schema.scenes)
-      .values({
-        filmId,
-        sceneNumber: sceneNum,
-        title: plan.displayTitle,
-        description: first.scene_description || null,
-        location: first.location || null,
-        interiorExterior: first.interior_exterior || null,
-        timeOfDay: first.time_of_day || null,
-        startTc: splits[firstIdx]!.start,
-        endTc: splits[lastIdx]!.end,
-        totalDuration: splits[lastIdx]!.end - splits[firstIdx]!.start,
-      })
-      .returning({ id: schema.scenes.id });
-    for (const idx of plan.shotIndices) {
-      sceneIdByShotIndex.set(idx, ins.id);
-    }
-  }
-
-  emit({
-    type: "step",
-    step: "group",
     status: "complete",
-    message: `${scenePlans.length} scenes`,
+    message: "Film record ready for shot writes",
     duration: (Date.now() - t4) / 1000,
   });
   await pushProgress({
     stage: "group",
-    message: `${scenePlans.length} scenes`,
+    message: "Film record ready",
     totalShots: splits.length,
     extractDone: splits.length,
     classifyDone: splits.length,
@@ -735,7 +697,7 @@ export async function runWorkerIngestFilmPipeline(
     const asset = uploadedAssets[i];
     const cls = classifications[i];
     const clsMeta = classifyResults[i];
-    const sceneId = sceneIdByShotIndex.get(i) ?? null;
+    const sceneId = null;
     const durationSec = roundTime(split.end - split.start);
     const reviewStatus = initialReviewStatusForShot(durationSec, clsMeta.usedFallback);
     const classificationSource = clsMeta.usedFallback ? "gemini_fallback" : "gemini";
@@ -843,14 +805,14 @@ export async function runWorkerIngestFilmPipeline(
     duration: (Date.now() - t5) / 1000,
   });
   if (ctx.ingestRunId) {
-    await completeIngestRunRecord(db, ctx.ingestRunId, shotCount, scenePlans.length);
+    await completeIngestRunRecord(db, ctx.ingestRunId, shotCount, 0);
   }
   emit({
     type: "complete",
     filmId,
     filmTitle: filmTitleStr,
     shotCount,
-    sceneCount: scenePlans.length,
+    sceneCount: 0,
   });
   await pushProgress({
     stage: "complete",
@@ -865,6 +827,6 @@ export async function runWorkerIngestFilmPipeline(
     filmId,
     filmTitle: filmTitleStr,
     shotCount,
-    sceneCount: scenePlans.length,
+    sceneCount: 0,
   };
 }

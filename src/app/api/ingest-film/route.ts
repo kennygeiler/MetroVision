@@ -20,7 +20,6 @@ import {
   beginClassificationDiagBatch,
 } from "@/lib/ingest-pipeline";
 import { searchTmdbMovieId, fetchTmdbMovieDetails, fetchTmdbCast } from "@/lib/tmdb";
-import { planContiguousScenesByNormalizedTitle } from "@/lib/scene-grouping";
 import { parseInlineBoundaryCuts } from "@/lib/boundary-ensemble";
 import {
   buildIngestProvenance,
@@ -154,29 +153,6 @@ export async function POST(request: Request) {
       filmId = inserted.id;
     }
 
-    const scenePlans = planContiguousScenesByNormalizedTitle(classifications);
-    const sceneIdByShotIndex = new Map<number, string>();
-    let sceneNumber = 0;
-    for (const plan of scenePlans) {
-      sceneNumber++;
-      const firstIdx = plan.shotIndices[0]!;
-      const lastIdx = plan.shotIndices[plan.shotIndices.length - 1]!;
-      const firstShot = classifications[firstIdx]!;
-      const startTc = splits[firstIdx]!.start;
-      const endTc = splits[lastIdx]!.end;
-      const [inserted] = await db.insert(schema.scenes).values({
-        filmId, sceneNumber, title: plan.displayTitle,
-        description: firstShot.scene_description || null,
-        location: firstShot.location || null,
-        interiorExterior: firstShot.interior_exterior || null,
-        timeOfDay: firstShot.time_of_day || null,
-        startTc, endTc, totalDuration: endTc - startTc,
-      }).returning({ id: schema.scenes.id });
-      for (const idx of plan.shotIndices) {
-        sceneIdByShotIndex.set(idx, inserted.id);
-      }
-    }
-
     // Write shots
     const searchTexts = splits.map((split, i) =>
       [body.filmTitle, body.director, classifications[i].framing, classifications[i].description, classifications[i].mood].filter(Boolean).join(" "),
@@ -191,7 +167,7 @@ export async function POST(request: Request) {
       const asset = assets[i];
       const classification = classifications[i];
       const clsMeta = classifyResults[i];
-      const sceneId = sceneIdByShotIndex.get(i) ?? null;
+      const sceneId = null;
       const durationSec = roundTime(split.end - split.start);
       const reviewStatus = initialReviewStatusForShot(durationSec, clsMeta.usedFallback);
       const classificationSource = clsMeta.usedFallback ? "gemini_fallback" : "gemini";
@@ -256,7 +232,7 @@ export async function POST(request: Request) {
       filmId,
       filmTitle: body.filmTitle,
       shotCount,
-      sceneCount: scenePlans.length,
+      sceneCount: 0,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ingestion failed";

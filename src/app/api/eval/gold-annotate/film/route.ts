@@ -17,9 +17,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Film not found" }, { status: 404 });
   }
 
-  const shots = film.scenes
-    .flatMap((s) => s.shots)
-    .sort((a, b) => (a.startTc ?? 0) - (b.startTc ?? 0));
+  const shots = [...film.shots].sort((a, b) => (a.startTc ?? 0) - (b.startTc ?? 0));
 
   return NextResponse.json({
     film: {

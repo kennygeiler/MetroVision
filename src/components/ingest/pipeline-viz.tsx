@@ -41,7 +41,7 @@ type FrameState = {
   classifyDuration?: number;
 };
 
-type DbSnapshot = { filmId: string; shotCount: number; sceneCount: number };
+type DbSnapshot = { filmId: string; shotCount: number };
 
 type BackgroundPollSnapshot = {
   status: string;
@@ -59,7 +59,7 @@ type PipelineState = {
   totalShots: number;
   concurrency: number;
   startTime: number;
-  result: { filmId: string; filmTitle: string; shotCount: number; sceneCount: number } | null;
+  result: { filmId: string; filmTitle: string; shotCount: number } | null;
   error: string | null;
   /** Latest counts from DB while SSE may be stalled (poll live-status). */
   dbSnapshot: DbSnapshot | null;
@@ -74,7 +74,7 @@ const STEP_DEFS: { id: StepId; label: string }[] = [
   { id: "lookup", label: "Lookup" },
   { id: "extract", label: "Extract" },
   { id: "classify", label: "Classify" },
-  { id: "group", label: "Group" },
+  { id: "group", label: "Prepare" },
   { id: "write", label: "Write" },
 ];
 
@@ -233,7 +233,7 @@ If you already use a TS worker: check that service’s logs around the disconnec
 
 On Vercel: set INGEST_WORKER_URL or NEXT_PUBLIC_WORKER_URL so ingest proxies to your TS worker. If you force inline ingest (METROVISION_DELEGATE_INGEST=0), long films can still hit serverless limits—narrow ingestStartSec/ingestEndSec or use a short test clip.
 
-You can start a new ingest run; film-level reset will replace prior scene/shot rows for that title when grouping runs.`;
+You can start a new ingest run; film-level reset will replace prior shot rows for that title when the run starts.`;
 
 async function fetchIngestLiveDbSnapshot(filmTitle: string, year: number): Promise<DbSnapshot | null> {
   try {
@@ -245,13 +245,11 @@ async function fetchIngestLiveDbSnapshot(filmTitle: string, year: number): Promi
       found?: boolean;
       filmId?: string;
       shotCount?: number;
-      sceneCount?: number;
     };
     if (!d.found || typeof d.filmId !== "string") return null;
     const shotCount = typeof d.shotCount === "number" ? d.shotCount : 0;
-    const sceneCount = typeof d.sceneCount === "number" ? d.sceneCount : 0;
     if (shotCount <= 0) return null;
-    return { filmId: d.filmId, shotCount, sceneCount };
+    return { filmId: d.filmId, shotCount };
   } catch {
     return null;
   }
@@ -452,7 +450,7 @@ type PipelineVizProps = {
    * Safe to leave the page; resume token is stored in sessionStorage.
    */
   backgroundIngest?: boolean;
-  onComplete?: (result: { filmId: string; shotCount: number; sceneCount: number }) => void;
+  onComplete?: (result: { filmId: string; shotCount: number }) => void;
   onError?: (error: string) => void;
 };
 
@@ -590,7 +588,6 @@ export function PipelineViz({
               filmId: e.filmId as string,
               filmTitle: e.filmTitle as string,
               shotCount: e.shotCount as number,
-              sceneCount: e.sceneCount as number,
             };
             next.result = result;
             onComplete?.(result);
@@ -741,14 +738,12 @@ export function PipelineViz({
 
           if (data.status === "completed" && typeof data.filmId === "string") {
             const shotCount = typeof prog?.shotCount === "number" ? prog.shotCount : 0;
-            const sceneCount = typeof prog?.sceneCount === "number" ? prog.sceneCount : 0;
             setState((s) => ({
               ...s,
               result: {
                 filmId: data.filmId!,
                 filmTitle,
                 shotCount,
-                sceneCount,
               },
               totalShots: totalShots ?? s.totalShots,
               steps: buildStepsFromPipelineStage("complete"),
@@ -765,7 +760,7 @@ export function PipelineViz({
             }));
             if (!asyncCompleteNotifiedRef.current) {
               asyncCompleteNotifiedRef.current = true;
-              onComplete?.({ filmId: data.filmId!, shotCount, sceneCount });
+              onComplete?.({ filmId: data.filmId!, shotCount });
             }
             if (intervalId) window.clearInterval(intervalId);
             return;
@@ -834,16 +829,15 @@ export function PipelineViz({
         );
         if (!r.ok || cancelled) return;
         const data = (await r.json()) as
-          | { found?: boolean; filmId?: string; shotCount?: number; sceneCount?: number; error?: string };
+          | { found?: boolean; filmId?: string; shotCount?: number; error?: string };
         const filmId = data.filmId;
         if (cancelled || !data.found || typeof filmId !== "string") return;
         const shotCount = typeof data.shotCount === "number" ? data.shotCount : 0;
-        const sceneCount = typeof data.sceneCount === "number" ? data.sceneCount : 0;
         setState((prev) => {
           if (prev.result) return prev;
           return {
             ...prev,
-            dbSnapshot: { filmId, shotCount, sceneCount },
+            dbSnapshot: { filmId, shotCount },
           };
         });
       } catch {
@@ -1067,20 +1061,21 @@ export function PipelineViz({
   const etas = useETAs(state, elapsed);
   const pacingInfo = PACING[etas.pacing];
 
-  // Scene brackets
-  const sceneBrackets: { title: string; startIdx: number; endIdx: number }[] = [];
+  // Classifier title streaks (Gemini `scene_title` — optional note per shot, not a screenplay scene)
+  const classifierTitleBrackets: { title: string; startIdx: number; endIdx: number }[] = [];
   if (state.frames.length > 0) {
-    let currentScene = "";
+    let currentTitle = "";
     let startIdx = 0;
     for (let i = 0; i < state.frames.length; i++) {
-      const scene = state.frames[i].sceneTitle ?? "";
-      if (scene && scene !== currentScene) {
-        if (currentScene) sceneBrackets.push({ title: currentScene, startIdx, endIdx: i - 1 });
-        currentScene = scene;
+      const t = state.frames[i].sceneTitle ?? "";
+      if (t && t !== currentTitle) {
+        if (currentTitle) classifierTitleBrackets.push({ title: currentTitle, startIdx, endIdx: i - 1 });
+        currentTitle = t;
         startIdx = i;
       }
     }
-    if (currentScene) sceneBrackets.push({ title: currentScene, startIdx, endIdx: state.frames.length - 1 });
+    if (currentTitle)
+      classifierTitleBrackets.push({ title: currentTitle, startIdx, endIdx: state.frames.length - 1 });
   }
 
   // Step progress percentages
@@ -1185,13 +1180,7 @@ export function PipelineViz({
           >
             <p>
               The database already shows{" "}
-              <strong className="text-[var(--color-text-primary)] tabular-nums">{state.dbSnapshot.shotCount} shots</strong>
-              {state.dbSnapshot.sceneCount > 0 ? (
-                <>
-                  {" "}
-                  and <span className="tabular-nums">{state.dbSnapshot.sceneCount}</span> scenes
-                </>
-              ) : null}{" "}
+              <strong className="text-[var(--color-text-primary)] tabular-nums">{state.dbSnapshot.shotCount} shots</strong>{" "}
               for this title and year, but this view has not received the shot list yet — the live stream may be stalled while the worker still wrote rows. You can open the film to verify.
             </p>
             <Link
@@ -1291,10 +1280,10 @@ export function PipelineViz({
             className="relative overflow-hidden rounded-[var(--radius-xl)] border"
             style={{ backgroundColor: "#0d0d12", borderColor: "color-mix(in oklch, var(--color-border-default) 50%, transparent)" }}
           >
-            {/* Scene brackets */}
-            {sceneBrackets.length > 0 ? (
+            {/* Classifier title streaks */}
+            {classifierTitleBrackets.length > 0 ? (
               <div className="relative flex h-8 items-end overflow-x-auto px-4">
-                {sceneBrackets.map((b, i) => {
+                {classifierTitleBrackets.map((b, i) => {
                   const frameW = 44;
                   const left = b.startIdx * frameW;
                   const width = (b.endIdx - b.startIdx + 1) * frameW - 4;
@@ -1381,7 +1370,7 @@ export function PipelineViz({
           <div className="flex gap-8">
             <StatCounter label="Extracted" value={extracted} total={state.totalShots} eta={etas.stepETAs.extract} color="#5cb8d6" />
             <StatCounter label="Classified" value={classified} total={state.totalShots} eta={etas.stepETAs.classify} color="#9b7cd6" />
-            <StatCounter label="Scenes" value={discoveredScenes.size} />
+            <StatCounter label="Classifier labels" value={discoveredScenes.size} />
             <StatCounter label="Written" value={written} total={state.totalShots} color="#5cd69b" />
           </div>
           {dedupedClassifierLabels.length > 0 ? (
@@ -1402,9 +1391,8 @@ export function PipelineViz({
         {state.result ? (
           <div className="rounded-[var(--radius-xl)] border p-6" style={{ backgroundColor: "rgba(92,214,155,0.06)", borderColor: "rgba(92,214,155,0.3)" }}>
             <h3 className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[#5cd69b]">Film Ingested — {formatTimeCompact(elapsed)}</h3>
-            <div className="mt-4 grid grid-cols-3 gap-4">
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{state.result.shotCount}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Shots analyzed</p></div>
-              <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{state.result.sceneCount}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Scenes discovered</p></div>
               <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{dedupedClassifierLabels.length}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Distinct composition labels</p></div>
             </div>
             <div className="mt-4 flex flex-wrap gap-4 font-mono text-[10px] text-[var(--color-text-tertiary)]">

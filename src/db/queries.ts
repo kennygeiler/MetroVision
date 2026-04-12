@@ -33,7 +33,6 @@ import type {
   FilmCoverageStats,
   FilmTrustSummary,
   FilmWithDetails,
-  SceneWithShots,
   ShotReviewQueueItem,
   ShotWithDetails,
   VerificationCorrectionsMap,
@@ -1304,15 +1303,6 @@ export async function getAllFilms(): Promise<FilmCard[]> {
   const filmIds = rows.map((r) => r.id);
   if (filmIds.length === 0) return [];
 
-  const sceneCounts = await db
-    .select({
-      filmId: schema.scenes.filmId,
-      count: sql<number>`count(*)`.as("count"),
-    })
-    .from(schema.scenes)
-    .where(inArray(schema.scenes.filmId, filmIds))
-    .groupBy(schema.scenes.filmId);
-
   const shotAgg = await db
     .select({
       filmId: schema.shots.filmId,
@@ -1325,7 +1315,6 @@ export async function getAllFilms(): Promise<FilmCard[]> {
     .where(inArray(schema.shots.filmId, filmIds))
     .groupBy(schema.shots.filmId);
 
-  const sceneMap = new Map(sceneCounts.map((r) => [r.filmId, Number(r.count)]));
   const shotMap = new Map(
     shotAgg.map((r) => [
       r.filmId,
@@ -1367,7 +1356,6 @@ export async function getAllFilms(): Promise<FilmCard[]> {
     director: film.director,
     year: film.year ?? null,
     posterUrl: film.posterUrl ?? null,
-    sceneCount: sceneMap.get(film.id) ?? 0,
     shotCount: shotMap.get(film.id)?.count ?? 0,
     totalDuration: shotMap.get(film.id)?.duration ?? 0,
     pipelineAttentionShotCount: attentionMap.get(film.id) ?? 0,
@@ -1395,71 +1383,11 @@ export async function getFilmById(
     boundaryCutPresetName = bp?.name ?? null;
   }
 
-  const sceneRows = await db
-    .select()
-    .from(schema.scenes)
-    .where(eq(schema.scenes.filmId, id))
-    .orderBy(schema.scenes.sceneNumber);
-
   // Query shots by filmId directly instead of filtering by title (avoids N+1)
   const shotRows = await selectJoinedShots()
     .where(eq(schema.shots.filmId, id))
     .orderBy(schema.shots.startTc);
   const allShots = await attachObjectsToShots(shotRows.map(mapShotRow));
-
-  const sceneMap = new Map<string, ShotWithDetails[]>();
-  const ungrouped: ShotWithDetails[] = [];
-
-  for (const shot of allShots) {
-    if (shot.sceneId) {
-      const list = sceneMap.get(shot.sceneId) ?? [];
-      list.push(shot);
-      sceneMap.set(shot.sceneId, list);
-    } else {
-      ungrouped.push(shot);
-    }
-  }
-
-  const scenes: SceneWithShots[] = sceneRows.map((row) => {
-    const shots = sceneMap.get(row.id) ?? [];
-    return {
-      id: row.id,
-      filmId: row.filmId,
-      sceneNumber: row.sceneNumber,
-      title: row.title,
-      description: row.description,
-      startTc: row.startTc,
-      endTc: row.endTc,
-      totalDuration: row.totalDuration,
-      videoUrl: row.videoUrl,
-      thumbnailUrl: row.thumbnailUrl,
-      location: row.location,
-      interiorExterior: row.interiorExterior,
-      timeOfDay: row.timeOfDay,
-      shots,
-      shotCount: shots.length,
-    };
-  });
-
-  if (ungrouped.length > 0) {
-    scenes.push({
-      id: "ungrouped",
-      filmId: id,
-      sceneNumber: scenes.length + 1,
-      title: "Ungrouped Shots",
-      description: null,
-      startTc: null,
-      endTc: null,
-      totalDuration: null,
-      videoUrl: null,
-      thumbnailUrl: null,
-      location: null,
-      interiorExterior: null,
-      timeOfDay: null,
-      shots: ungrouped,
-      shotCount: ungrouped.length,
-    });
-  }
 
   return {
     id: filmRow.id,
@@ -1472,10 +1400,9 @@ export async function getFilmById(
     overview: filmRow.overview ?? null,
     runtime: filmRow.runtime ?? null,
     genres: filmRow.genres ?? [],
-    sceneCount: sceneRows.length,
     shotCount: allShots.length,
     totalDuration: allShots.reduce((sum, s) => sum + s.duration, 0),
-    scenes,
+    shots: allShots,
     boundaryCutPresetId: filmRow.boundaryCutPresetId ?? null,
     boundaryCutPresetName,
   };
@@ -1517,13 +1444,6 @@ export async function getFilmCoverageStats(
     .from(schema.shots)
     .where(eq(schema.shots.filmId, filmId));
 
-  const [sceneCountRow] = await db
-    .select({
-      count: sql<number>`count(*)`.as("count"),
-    })
-    .from(schema.scenes)
-    .where(eq(schema.scenes.filmId, filmId));
-
   return {
     shotSizeDistribution: Object.fromEntries(
       shotSizeRows.map((r) => [r.shotSize ?? "unknown", Number(r.count)]),
@@ -1533,7 +1453,6 @@ export async function getFilmCoverageStats(
     ),
     averageShotLength: Number(aggRow?.avgDuration ?? 0),
     shotCount: Number(aggRow?.shotCount ?? 0),
-    sceneCount: Number(sceneCountRow?.count ?? 0),
     totalDuration: Number(aggRow?.totalDuration ?? 0),
   };
 }
@@ -1611,19 +1530,17 @@ export async function getVisualizationData(): Promise<VisualizationData> {
   });
 
   // Film summaries
-  const filmMap = new Map<string, { id: string; title: string; director: string; shotCount: number; scenes: Set<string> }>();
+  const filmMap = new Map<string, { id: string; title: string; director: string; shotCount: number }>();
   for (const shot of shots) {
     const existing = filmMap.get(shot.filmId);
     if (existing) {
       existing.shotCount++;
-      if (shot.sceneTitle) existing.scenes.add(shot.sceneTitle);
     } else {
       filmMap.set(shot.filmId, {
         id: shot.filmId,
         title: shot.filmTitle,
         director: shot.director,
         shotCount: 1,
-        scenes: new Set(shot.sceneTitle ? [shot.sceneTitle] : []),
       });
     }
   }
@@ -1633,7 +1550,6 @@ export async function getVisualizationData(): Promise<VisualizationData> {
     title: f.title,
     director: f.director,
     shotCount: f.shotCount,
-    sceneCount: f.scenes.size,
   }));
 
   const directors = Array.from(new Set(shots.map((s) => s.director))).sort();
