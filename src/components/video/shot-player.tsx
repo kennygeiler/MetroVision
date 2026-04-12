@@ -4,10 +4,8 @@ import Image from "next/image";
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Eye, EyeOff } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { MetadataOverlay } from "@/components/video/metadata-overlay";
+import { ShotCompositionPanel } from "@/components/video/metadata-overlay";
 import { ShotVideoJs } from "@/components/video/shot-video-js";
 import { ShotVideoTransport } from "@/components/video/shot-video-transport";
 import { getShotPlaybackSegment } from "@/lib/shot-playback-segment";
@@ -23,7 +21,6 @@ type ShotPlayerProps = {
 };
 
 export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPlayerProps) {
-  const [showOverlay, setShowOverlay] = useState(true);
   const [videoAttachTick, setVideoAttachTick] = useState(0);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -96,11 +93,12 @@ export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPla
             "color-mix(in oklch, var(--color-border-default) 82%, transparent)",
         }}
       >
+        <ShotCompositionPanel shot={shot} />
         <div
           className={
             useCustomTransport
-              ? "relative aspect-video overflow-hidden rounded-t-[calc(var(--radius-xl)_+_6px)]"
-              : "relative aspect-video overflow-hidden rounded-[calc(var(--radius-xl)_+_6px)]"
+              ? "relative aspect-video overflow-hidden"
+              : "relative aspect-video overflow-hidden rounded-b-[calc(var(--radius-xl)_+_6px)]"
           }
           style={{
             background:
@@ -157,25 +155,6 @@ export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPla
           </div>
         ) : null}
 
-        <div className="absolute right-4 top-4 z-30 flex flex-wrap justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-full border-[var(--color-border-default)] px-3 text-[var(--color-text-primary)] backdrop-blur-xl hover:bg-[var(--color-surface-tertiary)]"
-            style={{
-              backgroundColor:
-                "color-mix(in oklch, var(--color-surface-primary) 58%, transparent)",
-            }}
-            onClick={() => setShowOverlay((current) => !current)}
-            aria-pressed={showOverlay}
-          >
-            {showOverlay ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-            {showOverlay ? "Hide labels" : "Show labels"}
-          </Button>
-        </div>
-
-        {showOverlay ? <MetadataOverlay shot={shot} /> : null}
         </div>
 
         {playbackSegment ? (

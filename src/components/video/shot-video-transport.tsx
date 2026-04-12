@@ -334,7 +334,7 @@ export function ShotVideoTransport({
 
   return (
     <div
-      className="border-t px-3 py-3"
+      className="rounded-b-[calc(var(--radius-xl)_+_6px)] border-t px-3 py-3"
       style={{
         backgroundColor: "color-mix(in oklch, var(--color-surface-secondary) 88%, transparent)",
         borderColor: "color-mix(in oklch, var(--color-border-default) 72%, transparent)",

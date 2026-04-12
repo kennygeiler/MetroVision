@@ -1,7 +1,5 @@
 "use client";
 
-import { motion, type Variants } from "framer-motion";
-
 import {
   formatShotDuration,
   getBlockingDisplayName,
@@ -14,118 +12,113 @@ import {
   getShotSizeDisplayName,
   getVerticalAngleDisplayName,
 } from "@/lib/shot-display";
+import { getFramingColor } from "@/lib/timeline-colors";
+import { colorForCategorySlug } from "@/lib/viz-colors";
 import type { ShotWithDetails } from "@/lib/types";
 
-type MetadataOverlayProps = {
+type ShotCompositionPanelProps = {
   shot: ShotWithDetails;
 };
 
-/** Keeps the panel above native play / timeline chrome. */
-const SAFE_BOTTOM = "bottom-[max(6.25rem,16%)]" as const;
-
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
-  },
-};
-
-function Row({ label, value }: { label: string; value: string }) {
+function Chip({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
   return (
     <div
-      className="flex flex-col gap-0.5 border-b py-2 first:pt-0 last:border-b-0 last:pb-0"
+      className="rounded-[var(--radius-lg)] border px-3 py-2.5 sm:px-4"
       style={{
-        borderBottomColor:
-          "color-mix(in oklch, var(--color-border-subtle) 75%, transparent)",
+        borderLeftWidth: 4,
+        borderLeftColor: accent,
+        borderTopColor: "color-mix(in oklch, var(--color-border-default) 65%, transparent)",
+        borderRightColor: "color-mix(in oklch, var(--color-border-default) 65%, transparent)",
+        borderBottomColor: "color-mix(in oklch, var(--color-border-default) 65%, transparent)",
+        backgroundColor: `color-mix(in oklch, ${accent} 14%, var(--color-surface-secondary))`,
       }}
     >
-      <span className="text-[10px] font-medium uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+      <p className="font-mono text-[9px] font-semibold uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
         {label}
-      </span>
-      <span
-        className="text-sm font-semibold leading-snug text-[var(--color-text-primary)]"
+      </p>
+      <p
+        className="mt-1 text-sm font-semibold leading-snug text-[var(--color-text-primary)]"
         style={{ fontFamily: "var(--font-heading)" }}
       >
         {value}
-      </span>
+      </p>
     </div>
   );
 }
 
-export function MetadataOverlay({ shot }: MetadataOverlayProps) {
+/** Composition metadata above the player — color keys match timeline / viz taxonomy hues. */
+export function ShotCompositionPanel({ shot }: ShotCompositionPanelProps) {
   const { film, metadata, duration } = shot;
 
-  return (
-    <motion.div
-      initial="hidden"
-      animate="visible"
-      variants={containerVariants}
-      className="pointer-events-none absolute inset-0 overflow-hidden"
-    >
-      <div
-        aria-hidden="true"
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(135deg, color-mix(in oklch, var(--color-surface-primary) 28%, transparent) 0%, transparent 55%)",
-        }}
-      />
+  const framingAccent = getFramingColor(metadata.framing);
+  const shotSizeAccent = colorForCategorySlug(metadata.shotSize, 52, 46);
+  const depthAccent = colorForCategorySlug(metadata.depth, 50, 44);
+  const blockingAccent = colorForCategorySlug(metadata.blocking, 54, 42);
+  const lightingAccent = colorForCategorySlug(metadata.lightingDirection, 48, 46);
+  const durationCatAccent = colorForCategorySlug(metadata.durationCategory, 46, 48);
+  const angleAccent = colorForCategorySlug(metadata.angleVertical, 50, 45);
 
-      <div
-        className={`absolute left-2 top-14 z-10 max-h-full w-[min(100%,20rem)] overflow-y-auto pr-1 sm:left-3 sm:top-16 ${SAFE_BOTTOM}`}
-      >
-        <div
-          className="rounded-[var(--radius-xl)] border p-3 shadow-[var(--shadow-lg)] backdrop-blur-xl sm:p-4"
-          style={{
-            backgroundColor:
-              "color-mix(in oklch, var(--color-surface-primary) 74%, transparent)",
-            borderColor:
-              "color-mix(in oklch, var(--color-border-default) 68%, transparent)",
-          }}
-        >
-          <p className="text-[11px] font-medium uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-            Composition
+  return (
+    <div
+      className="rounded-t-[calc(var(--radius-xl)_+_6px)] border-b px-4 py-4 sm:px-5 sm:py-5"
+      style={{
+        borderBottomColor: "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
+        backgroundColor: "color-mix(in oklch, var(--color-surface-secondary) 55%, transparent)",
+      }}
+    >
+      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-accent)]">
+            Composition record
           </p>
           <p
-            className="mt-1 truncate text-sm font-semibold text-[var(--color-text-primary)]"
+            className="mt-1 text-lg font-semibold text-[var(--color-text-primary)] sm:text-xl"
             style={{ fontFamily: "var(--font-heading)" }}
           >
             {film.title}
           </p>
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            {film.director} · {film.year}
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            {film.director}
+            {film.year != null ? ` · ${film.year}` : null}
           </p>
-          <p className="mt-2 font-mono text-xs tabular-nums text-[var(--color-text-secondary)]">
-            Clip length {formatShotDuration(duration)}
-          </p>
-
-          <div
-            className="mt-3 border-t pt-1"
-            style={{
-              borderTopColor:
-                "color-mix(in oklch, var(--color-border-subtle) 80%, transparent)",
-            }}
-          >
-            <Row label="Framing" value={getFramingDisplayName(metadata.framing)} />
-            <Row label="Shot size" value={getShotSizeDisplayName(metadata.shotSize)} />
-            <Row label="Depth" value={getDepthDisplayName(metadata.depth)} />
-            <Row label="Blocking" value={getBlockingDisplayName(metadata.blocking)} />
-            <Row
-              label="Lighting"
-              value={`${getLightingDirectionDisplayName(metadata.lightingDirection)} · ${getLightingQualityDisplayName(metadata.lightingQuality)}`}
-            />
-            <Row
-              label="Length category"
-              value={getDurationCategoryDisplayName(metadata.durationCategory)}
-            />
-            <Row
-              label="Camera angle"
-              value={`${getVerticalAngleDisplayName(metadata.angleVertical)} · ${getHorizontalAngleDisplayName(metadata.angleHorizontal)}`}
-            />
-          </div>
         </div>
+        <p className="font-mono text-sm tabular-nums text-[var(--color-text-tertiary)]">
+          Clip {formatShotDuration(duration)}
+        </p>
       </div>
-    </motion.div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Chip label="Framing" value={getFramingDisplayName(metadata.framing)} accent={framingAccent} />
+        <Chip label="Shot size" value={getShotSizeDisplayName(metadata.shotSize)} accent={shotSizeAccent} />
+        <Chip label="Depth" value={getDepthDisplayName(metadata.depth)} accent={depthAccent} />
+        <Chip label="Blocking" value={getBlockingDisplayName(metadata.blocking)} accent={blockingAccent} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Chip
+          label="Lighting"
+          value={`${getLightingDirectionDisplayName(metadata.lightingDirection)} · ${getLightingQualityDisplayName(metadata.lightingQuality)}`}
+          accent={lightingAccent}
+        />
+        <Chip
+          label="Length category"
+          value={getDurationCategoryDisplayName(metadata.durationCategory)}
+          accent={durationCatAccent}
+        />
+        <Chip
+          label="Camera angle"
+          value={`${getVerticalAngleDisplayName(metadata.angleVertical)} · ${getHorizontalAngleDisplayName(metadata.angleHorizontal)}`}
+          accent={angleAccent}
+        />
+      </div>
+    </div>
   );
 }
