@@ -16,12 +16,14 @@ watchPatterns = [
   "worker/**",
   "src/lib/**",
   "src/db/**",
+  "drizzle/**",
   "package.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
 ]
 
 [deploy]
+preDeployCommand = ["pnpm db:migrate"]
 startCommand = "pnpm --filter metrovision-worker start"
 healthcheckPath = "/health"
 healthcheckTimeout = 120
