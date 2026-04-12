@@ -91,11 +91,11 @@ export default async function FilmDetailPage({ params }: Props) {
           director, year replaces prior shots).{" "}
           <Link
             href={`/verify/boundary-triage?filmId=${film.id}`}
-            className="text-[var(--color-text-accent)] underline-offset-2 hover:underline"
+            className="inline-flex items-center rounded-full border border-[var(--color-accent-base)] bg-[var(--color-surface-tertiary)] px-3 py-1 font-mono text-[11px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent-base)]"
           >
-            Open boundary triage grid
+            Cut verification →
           </Link>{" "}
-          for bulk before/after review.
+          <span className="text-[var(--color-text-tertiary)]">(before/after grid for flagged cuts)</span>
         </p>
         {weakClassificationCount > 0 ? (
           <div

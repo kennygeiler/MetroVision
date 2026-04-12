@@ -30,12 +30,13 @@ export default async function VerifyPage() {
             Review hub
           </h1>
           <p className="mt-4 text-base leading-8 text-[var(--color-text-secondary)]">
-            The primary workflow is <strong className="text-[var(--color-text-primary)]">film-first</strong>: open a
-            title from Browse, read the <strong className="text-[var(--color-text-primary)]">shot timeline</strong>{" "}
-            (cuts in order, framing colors, uncertain segments highlighted), and{" "}
-            <strong className="text-[var(--color-text-primary)]">re-run ingest</strong> when the model used a template
-            fallback or shots are flagged for another pass. Per-shot rating forms are optional — use batch review only
-            when you need spreadsheet-style QA.
+            <strong className="text-[var(--color-text-primary)]">Cut verification</strong> is the boundary triage grid:
+            before/after frames, confidence filter, and bulk actions for shots flagged{" "}
+            <code className="font-mono text-[10px]">needs_review</code>. Start from{" "}
+            <strong className="text-[var(--color-text-primary)]">Browse</strong> → film → triage, or open the grid
+            below. Use the shot timeline and <strong className="text-[var(--color-text-primary)]">re-run ingest</strong>{" "}
+            when segments need a fresh pipeline pass. Optional per-shot composition ratings still live on each shot’s
+            verify page.
           </p>
         </div>
 
@@ -54,15 +55,9 @@ export default async function VerifyPage() {
           </Link>
           <Link
             href="/verify/boundary-triage"
-            className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-accent-base)] bg-transparent px-4 text-[0.8rem] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-tertiary)]"
+            className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-accent-base)] bg-[var(--color-surface-tertiary)] px-4 text-[0.8rem] text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-accent-base)]"
           >
-            Boundary triage
-          </Link>
-          <Link
-            href="/verify/batch"
-            className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-transparent px-4 text-[0.8rem] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
-          >
-            Batch QA (optional)
+            Cut verification
           </Link>
         </div>
       </section>
@@ -96,16 +91,11 @@ export default async function VerifyPage() {
               href="/verify/boundary-triage"
               className="text-[var(--color-text-accent)] underline-offset-2 hover:underline"
             >
-              Boundary triage
+              Cut verification (boundary triage)
             </Link>{" "}
-            opens a virtualized before/after grid for cuts flagged <code className="font-mono text-[10px]">needs_review</code>{" "}
-            (confidence slider, cluster tabs, J/K shortcuts).
-          </li>
-          <li>
-            <Link href="/verify/batch" className="text-[var(--color-text-accent)] underline-offset-2 hover:underline">
-              Batch QA
-            </Link>{" "}
-            remains for composition metadata bulk approve — optional alongside per-shot forms.
+            — virtualized before/after grid for <code className="font-mono text-[10px]">needs_review</code> shots
+            (confidence slider, cluster tabs, J/K shortcuts, bulk approve/reject). The old batch grid URL{" "}
+            <code className="font-mono text-[10px]">/verify/batch</code> redirects here.
           </li>
         </ul>
       </section>

@@ -534,18 +534,19 @@ export function BoundaryTriageWorkspace() {
       <section className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-3xl">
           <p className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-            Boundary HITL
+            Cut verification
           </p>
           <h1
             className="mt-4 text-4xl font-bold tracking-[var(--letter-spacing-tight)] sm:text-5xl"
             style={{ fontFamily: "var(--font-heading)" }}
           >
-            Cut triage grid
+            Boundary triage
           </h1>
           <p className="mt-4 text-base leading-8 text-[var(--color-text-secondary)]">
-            Bulk review for AI-flagged shots: before/after frames at each cut, confidence filter, and keyboard shortcuts (
-            <kbd className="font-mono text-[var(--color-text-tertiary)]">J</kbd> reject motion,{" "}
-            <kbd className="font-mono text-[var(--color-text-tertiary)]">K</kbd> approve).
+            Primary queue for <code className="font-mono text-[10px]">needs_review</code> shots: before/after frames at
+            each cut, confidence filter, cluster tabs, lasso/shift-select, and{" "}
+            <kbd className="font-mono text-[var(--color-text-tertiary)]">J</kbd> /{" "}
+            <kbd className="font-mono text-[var(--color-text-tertiary)]">K</kbd> on hover.
           </p>
         </div>
         <Link
