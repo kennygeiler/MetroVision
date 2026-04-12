@@ -313,7 +313,7 @@ export default function BatchReviewPage() {
           href="/verify"
           className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-transparent px-4 text-[0.8rem] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
         >
-          Single review queue
+          Review hub
         </Link>
       </section>
 

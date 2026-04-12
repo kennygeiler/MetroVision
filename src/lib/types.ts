@@ -286,6 +286,8 @@ export type FilmCard = {
   sceneCount: number;
   shotCount: number;
   totalDuration: number;
+  /** Shots with template fallback classification or `needs_review` (see film timeline / re-ingest). */
+  pipelineAttentionShotCount: number;
 };
 
 export type FilmCoverageStats = {

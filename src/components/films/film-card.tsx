@@ -38,6 +38,21 @@ export function FilmCard({ film }: FilmCardProps) {
               : "radial-gradient(circle at 30% 30%, color-mix(in oklch, var(--color-overlay-arrow) 18%, transparent) 0%, transparent 40%), linear-gradient(135deg, color-mix(in oklch, var(--color-surface-tertiary) 80%, transparent), color-mix(in oklch, var(--color-surface-primary) 95%, transparent))",
           }}
         />
+        {film.pipelineAttentionShotCount > 0 ? (
+          <div className="absolute right-3 top-3">
+            <span
+              className="inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-[var(--letter-spacing-wide)]"
+              style={{
+                color: "var(--color-status-error)",
+                borderColor: "color-mix(in oklch, var(--color-status-error) 45%, transparent)",
+                backgroundColor: "color-mix(in oklch, var(--color-status-error) 12%, transparent)",
+              }}
+              title="Shots may need a fresh model pass — open film for timeline & re-ingest"
+            >
+              Re-run · {film.pipelineAttentionShotCount}
+            </span>
+          </div>
+        ) : null}
         <div className="absolute inset-x-4 bottom-4">
           <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
             {film.director}
@@ -56,7 +71,7 @@ export function FilmCard({ film }: FilmCardProps) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-4 py-4">
+      <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border-subtle)] px-4 py-4">
         <div className="flex gap-4">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">

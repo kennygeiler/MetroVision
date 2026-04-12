@@ -13,7 +13,7 @@ const navigation = [
   { href: "/ingest", label: "Ingest" },
   { href: "/tuning", label: "Boundary Tuning" },
   { href: "/visualize", label: "Visualize" },
-  { href: "/verify", label: "Verify" },
+  { href: "/verify", label: "Review" },
   { href: "/export", label: "Export" },
 ] as const;
 

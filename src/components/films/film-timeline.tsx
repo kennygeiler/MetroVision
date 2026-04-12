@@ -5,6 +5,9 @@ import Link from "next/link";
 
 import { getFramingDisplayName, getShotSizeDisplayName, formatShotDuration } from "@/lib/shot-display";
 import { getFramingColor } from "@/lib/timeline-colors";
+import { shotNeedsReliableClassification } from "@/lib/shot-pipeline-health";
+import { formatReviewStatusLabel } from "@/lib/archive-trust";
+import { getClassificationSourceLabel } from "@/lib/verification";
 import type { ShotWithDetails, SceneWithShots } from "@/lib/types";
 
 type FilmTimelineProps = {
@@ -48,19 +51,36 @@ export function FilmTimeline({ shots, scenes, compact = false }: FilmTimelinePro
         >
           {shots.map((shot) => {
             const widthPct = (shot.duration / totalDuration) * 100;
+            const weak = shotNeedsReliableClassification(shot);
             return (
               <Link
                 key={shot.id}
                 href={`/shot/${shot.id}`}
-                className="relative block transition-opacity hover:opacity-80"
+                className="relative block min-h-full overflow-hidden transition-opacity hover:opacity-90"
                 style={{
                   width: `${widthPct}%`,
                   minWidth: "2px",
-                  backgroundColor: getFramingColor(shot.metadata.framing),
                 }}
                 onMouseEnter={() => setHoveredShot(shot)}
                 onMouseLeave={() => setHoveredShot(null)}
-              />
+                title={weak ? "Model output uncertain — consider re-running ingest" : undefined}
+              >
+                <span
+                  className="absolute inset-0 block"
+                  style={{ backgroundColor: getFramingColor(shot.metadata.framing) }}
+                />
+                {weak ? (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 block"
+                    style={{
+                      backgroundImage:
+                        "repeating-linear-gradient(135deg, transparent, transparent 4px, color-mix(in oklch, var(--color-status-error) 35%, transparent) 4px, color-mix(in oklch, var(--color-status-error) 35%, transparent) 7px)",
+                      boxShadow: "inset 0 0 0 2px color-mix(in oklch, var(--color-status-error) 70%, transparent)",
+                    }}
+                  />
+                ) : null}
+              </Link>
             );
           })}
 
@@ -94,15 +114,24 @@ export function FilmTimeline({ shots, scenes, compact = false }: FilmTimelinePro
               <span>{getShotSizeDisplayName(hoveredShot.metadata.shotSize)}</span>
               <span>{formatShotDuration(hoveredShot.duration)}</span>
             </div>
+            <p className="mt-2 font-mono text-[10px] text-[var(--color-text-secondary)]">
+              Labels: {getClassificationSourceLabel(hoveredShot.metadata.classificationSource)} ·{" "}
+              {formatReviewStatusLabel(hoveredShot.metadata.reviewStatus)}
+            </p>
+            {shotNeedsReliableClassification(hoveredShot) ? (
+              <p className="mt-1 text-[10px] font-medium text-[var(--color-status-error)]">
+                Re-run ingest for this film if you want fresh model passes on these segments.
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>
 
       {/* Legend (non-compact only) */}
       {!compact ? (
-        <div className="mt-3 flex flex-wrap gap-3">
-          {Array.from(new Set(shots.map((s) => s.metadata.framing))).map(
-            (type) => (
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-3">
+            {Array.from(new Set(shots.map((s) => s.metadata.framing))).map((type) => (
               <div key={type} className="flex items-center gap-1.5">
                 <div
                   className="h-2.5 w-2.5 rounded-full"
@@ -112,8 +141,22 @@ export function FilmTimeline({ shots, scenes, compact = false }: FilmTimelinePro
                   {getFramingDisplayName(type)}
                 </span>
               </div>
-            ),
-          )}
+            ))}
+          </div>
+          {shots.some(shotNeedsReliableClassification) ? (
+            <div className="flex items-center gap-2">
+              <div
+                className="h-2.5 w-8 rounded-sm border border-[var(--color-status-error)]"
+                style={{
+                  backgroundImage:
+                    "repeating-linear-gradient(135deg, color-mix(in oklch, var(--color-surface-tertiary) 90%, transparent), color-mix(in oklch, var(--color-surface-tertiary) 90%, transparent) 3px, color-mix(in oklch, var(--color-status-error) 40%, transparent) 3px, color-mix(in oklch, var(--color-status-error) 40%, transparent) 5px)",
+                }}
+              />
+              <span className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+                Uncertain model / needs re-run ({shots.filter(shotNeedsReliableClassification).length} shots)
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

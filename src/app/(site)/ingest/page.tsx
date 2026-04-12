@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useRef, useEffect } from "react";
+import { Suspense, useState, useRef, useEffect, useLayoutEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PipelineViz } from "@/components/ingest/pipeline-viz";
@@ -241,6 +241,29 @@ function IngestPageContent() {
       if (stored && isUuid(stored)) setBoundaryPresetId(stored);
     } catch {
       /* */
+    }
+  }, [searchParams]);
+
+  useLayoutEffect(() => {
+    const t = searchParams.get("filmTitle")?.trim();
+    const d = searchParams.get("director")?.trim();
+    const y = searchParams.get("year")?.trim();
+    if (t) {
+      try {
+        setFilmTitle(decodeURIComponent(t));
+      } catch {
+        setFilmTitle(t);
+      }
+    }
+    if (d) {
+      try {
+        setDirector(decodeURIComponent(d));
+      } catch {
+        setDirector(d);
+      }
+    }
+    if (y && /^\d{1,4}$/.test(y)) {
+      setYear(y);
     }
   }, [searchParams]);
 

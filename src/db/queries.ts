@@ -1262,6 +1262,34 @@ export async function getAllFilms(): Promise<FilmCard[]> {
     ]),
   );
 
+  const attentionAgg =
+    filmIds.length === 0
+      ? []
+      : await db
+          .select({
+            filmId: schema.shots.filmId,
+            count: sql<number>`cast(count(*) as int)`.as("attention_count"),
+          })
+          .from(schema.shots)
+          .innerJoin(
+            schema.shotMetadata,
+            eq(schema.shotMetadata.shotId, schema.shots.id),
+          )
+          .where(
+            and(
+              inArray(schema.shots.filmId, filmIds),
+              or(
+                eq(schema.shotMetadata.classificationSource, "gemini_fallback"),
+                eq(schema.shotMetadata.reviewStatus, "needs_review"),
+              ),
+            ),
+          )
+          .groupBy(schema.shots.filmId);
+
+  const attentionMap = new Map(
+    attentionAgg.map((r) => [r.filmId, Number(r.count)]),
+  );
+
   return rows.map((film) => ({
     id: film.id,
     title: film.title,
@@ -1271,6 +1299,7 @@ export async function getAllFilms(): Promise<FilmCard[]> {
     sceneCount: sceneMap.get(film.id) ?? 0,
     shotCount: shotMap.get(film.id)?.count ?? 0,
     totalDuration: shotMap.get(film.id)?.duration ?? 0,
+    pipelineAttentionShotCount: attentionMap.get(film.id) ?? 0,
   }));
 }
 
