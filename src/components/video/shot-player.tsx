@@ -3,13 +3,22 @@
 import Image from "next/image";
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import { Clapperboard, Scissors } from "lucide-react";
 
 import { ShotCompositionPanel } from "@/components/video/metadata-overlay";
 import { ShotVideoJs } from "@/components/video/shot-video-js";
 import { ShotVideoTransport } from "@/components/video/shot-video-transport";
 import { getShotPlaybackSegment } from "@/lib/shot-playback-segment";
 import type { ShotWithDetails } from "@/lib/types";
+
+export type ShotPlaybackFeedback = {
+  spaceHeld: boolean;
+  hoverSplitArmed: boolean;
+  canKeyboardSplit: boolean;
+  splitFlash: { id: number; mode: "hover" | "playhead" } | null;
+  onSplitFlashDone?: () => void;
+};
 
 type ShotPlayerProps = {
   shot: ShotWithDetails;
@@ -19,6 +28,7 @@ type ShotPlayerProps = {
   splitAt?: string;
   onSplitAtChange?: (value: string) => void;
   onTimelineHoverIntoShotChange?: (intoSec: number | null) => void;
+  playbackFeedback?: ShotPlaybackFeedback;
 };
 
 export function ShotPlayer({
@@ -27,6 +37,7 @@ export function ShotPlayer({
   splitAt,
   onSplitAtChange,
   onTimelineHoverIntoShotChange,
+  playbackFeedback,
 }: ShotPlayerProps) {
   const [videoAttachTick, setVideoAttachTick] = useState(0);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -162,6 +173,10 @@ export function ShotPlayer({
           </div>
         ) : null}
 
+        {playbackFeedback ? (
+          <ShotPlaybackFeedbackOverlays feedback={playbackFeedback} />
+        ) : null}
+
         </div>
 
         {playbackSegment ? (
@@ -181,5 +196,113 @@ export function ShotPlayer({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ShotPlaybackFeedbackOverlays({ feedback }: { feedback: ShotPlaybackFeedback }) {
+  const { spaceHeld, hoverSplitArmed, canKeyboardSplit, splitFlash, onSplitFlashDone } = feedback;
+
+  return (
+    <>
+      {splitFlash ? (
+        <span key={splitFlash.id} className="sr-only" aria-live="polite" aria-atomic>
+          {`Clip split at ${splitFlash.mode === "hover" ? "timeline hover" : "playhead"}.`}
+        </span>
+      ) : null}
+
+      <AnimatePresence>
+        {spaceHeld ? (
+          <motion.div
+            key="space-held"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            className="pointer-events-none absolute left-1/2 top-3 z-[35] flex max-w-[calc(100%-1rem)] -translate-x-1/2 justify-center"
+          >
+            <div
+              className="animate-pulse rounded-full border-2 px-4 py-2 shadow-lg ring-2 ring-amber-400/35"
+              style={{
+                borderColor: "color-mix(in oklch, var(--color-accent-light) 72%, white)",
+                backgroundColor: "color-mix(in oklch, var(--color-surface-primary) 82%, black)",
+                boxShadow:
+                  "0 0 24px color-mix(in oklch, var(--color-accent-light) 25%, transparent), 0 8px 28px color-mix(in oklch, black 40%, transparent)",
+              }}
+            >
+              <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-accent-light)]">
+                Space held
+              </p>
+              <p className="mt-0.5 max-w-[16rem] text-center text-xs leading-snug text-[var(--color-text-primary)]">
+                {!canKeyboardSplit
+                  ? "Keyboard split is not available for this shot length."
+                  : hoverSplitArmed
+                    ? "Press S — new cut at timeline hover"
+                    : "Press S — new cut at playhead"}
+              </p>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {splitFlash ? (
+          <motion.div
+            key={splitFlash.id}
+            role="status"
+            className="pointer-events-none absolute inset-0 z-[40] flex items-center justify-center overflow-hidden rounded-[inherit]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.08 }}
+          >
+            <motion.div
+              aria-hidden
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(ellipse 80% 60% at 50% 42%, color-mix(in oklch, white 22%, transparent) 0%, transparent 62%)",
+                mixBlendMode: "screen",
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.88, 0] }}
+              transition={{ duration: 0.58, times: [0, 0.16, 1], ease: "easeOut" }}
+            />
+            <motion.div
+              className="relative flex items-center gap-2.5 rounded-xl border px-5 py-3 shadow-2xl"
+              style={{
+                borderColor: "color-mix(in oklch, var(--color-accent-light) 55%, transparent)",
+                backgroundColor: "color-mix(in oklch, black 78%, var(--color-surface-primary))",
+                boxShadow: "0 0 0 1px color-mix(in oklch, white 12%, transparent)",
+              }}
+              initial={{ scale: 0.88, opacity: 0 }}
+              animate={{
+                scale: [0.88, 1.04, 1],
+                opacity: [0, 1, 0],
+              }}
+              transition={{ duration: 0.58, times: [0, 0.14, 1], ease: [0.22, 1, 0.36, 1] }}
+              onAnimationComplete={() => onSplitFlashDone?.()}
+            >
+              <Scissors
+                className="size-6 shrink-0 text-amber-300"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              <div className="text-left">
+                <p
+                  className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-amber-200/90"
+                  style={{ fontFamily: "var(--font-heading)" }}
+                >
+                  Cut created
+                </p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-primary)]">
+                  <Clapperboard className="size-4 text-[var(--color-text-tertiary)]" aria-hidden />
+                  {splitFlash.mode === "hover" ? "At timeline hover" : "At playhead"}
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </>
   );
 }

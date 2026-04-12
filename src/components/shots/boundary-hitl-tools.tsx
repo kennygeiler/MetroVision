@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import { Loader2, Merge, Scissors } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  MIN_SHOT_SPLIT_MARGIN_SEC,
+  isTimelineHoverSplitFeasible,
+} from "@/lib/boundary-split-margin";
 import { spaceTargetKeepsNativeBehavior } from "@/lib/shot-detail-space-key";
-
-const MIN_SPLIT_MARGIN = 0.25;
 
 type BoundaryHitlToolsProps = {
   shotId: string;
@@ -27,6 +29,8 @@ type BoundaryHitlToolsProps = {
   playheadSyncedByTransport: boolean;
   /** From timeline rail hover (custom transport only); used with Space+S to split at the previewed frame. */
   timelineHoverIntoShotSec?: number | null;
+  /** After a successful split (API OK), for in-player flash UI. */
+  onSplitSucceeded?: (info: { mode: "hover" | "playhead" }) => void;
 };
 
 function isEditableTarget(target: EventTarget | null) {
@@ -53,6 +57,7 @@ export function BoundaryHitlTools({
   onSplitAtChange,
   playheadSyncedByTransport,
   timelineHoverIntoShotSec = null,
+  onSplitSucceeded,
 }: BoundaryHitlToolsProps) {
   const router = useRouter();
   const spaceDownRef = useRef(false);
@@ -60,7 +65,8 @@ export function BoundaryHitlTools({
   const [merging, setMerging] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const canEdit = startTc != null && endTc != null && endTc - startTc > MIN_SPLIT_MARGIN * 2;
+  const canEdit =
+    startTc != null && endTc != null && endTc - startTc > MIN_SHOT_SPLIT_MARGIN_SEC * 2;
   const shotDuration = startTc != null && endTc != null ? endTc - startTc : 0;
   const mediaAnchor = clipMediaAnchorStartTc ?? startTc;
   const usePlayhead = Boolean(hasVideoClip && videoRef && mediaAnchor != null);
@@ -119,7 +125,10 @@ export function BoundaryHitlTools({
   }, [usePlayhead, videoRef, mediaAnchor, startTc, splitAt]);
 
   const splitAtFilmSec = useCallback(
-    async (t: number | null) => {
+    async (
+      t: number | null,
+      opts?: { flashOnSuccess?: "hover" | "playhead" },
+    ) => {
       if (t == null || !Number.isFinite(t)) {
         setMessage(
           "Enter seconds into this shot (0 = shot start), or scrub the player when video is on the page.",
@@ -130,9 +139,12 @@ export function BoundaryHitlTools({
         setMessage("Shot is missing start or end timecodes.");
         return;
       }
-      if (t <= startTc + MIN_SPLIT_MARGIN || t >= endTc - MIN_SPLIT_MARGIN) {
+      if (
+        t <= startTc + MIN_SHOT_SPLIT_MARGIN_SEC ||
+        t >= endTc - MIN_SHOT_SPLIT_MARGIN_SEC
+      ) {
         setMessage(
-          `Split must fall between ${MIN_SPLIT_MARGIN.toFixed(2)}s and ${(shotDuration - MIN_SPLIT_MARGIN).toFixed(2)}s into this shot (player timeline).`,
+          `Split must fall between ${MIN_SHOT_SPLIT_MARGIN_SEC.toFixed(2)}s and ${(shotDuration - MIN_SHOT_SPLIT_MARGIN_SEC).toFixed(2)}s into this shot (player timeline).`,
         );
         return;
       }
@@ -149,6 +161,9 @@ export function BoundaryHitlTools({
           setMessage(data.error ?? "Split failed.");
           return;
         }
+        if (opts?.flashOnSuccess) {
+          onSplitSucceeded?.({ mode: opts.flashOnSuccess });
+        }
         setMessage(`Split OK — tail shot ${data.tailShotId?.slice(0, 8)}…`);
         router.refresh();
       } catch {
@@ -157,11 +172,11 @@ export function BoundaryHitlTools({
         setSplitting(false);
       }
     },
-    [startTc, endTc, shotDuration, shotId, router],
+    [startTc, endTc, shotDuration, shotId, router, onSplitSucceeded],
   );
 
   const doSplit = useCallback(() => {
-    void splitAtFilmSec(readSplitSec());
+    void splitAtFilmSec(readSplitSec(), { flashOnSuccess: "playhead" });
   }, [splitAtFilmSec, readSplitSec]);
 
   useEffect(() => {
@@ -206,12 +221,12 @@ export function BoundaryHitlTools({
       e.preventDefault();
       const useHoverSplit =
         spaceDownRef.current &&
-        timelineHoverIntoShotSec != null &&
         startTc != null &&
-        timelineHoverIntoShotSec > MIN_SPLIT_MARGIN &&
-        timelineHoverIntoShotSec < shotDuration - MIN_SPLIT_MARGIN;
-      const t = useHoverSplit ? startTc + timelineHoverIntoShotSec : readSplitSec();
-      void splitAtFilmSec(t);
+        isTimelineHoverSplitFeasible(shotDuration, timelineHoverIntoShotSec);
+      const t = useHoverSplit ? startTc + timelineHoverIntoShotSec! : readSplitSec();
+      void splitAtFilmSec(t, {
+        flashOnSuccess: useHoverSplit ? "hover" : "playhead",
+      });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -298,7 +313,7 @@ export function BoundaryHitlTools({
               }
               placeholder={
                 endTc != null && startTc != null
-                  ? `${MIN_SPLIT_MARGIN.toFixed(2)} – ${(shotDuration - MIN_SPLIT_MARGIN).toFixed(2)}`
+                  ? `${MIN_SHOT_SPLIT_MARGIN_SEC.toFixed(2)} – ${(shotDuration - MIN_SHOT_SPLIT_MARGIN_SEC).toFixed(2)}`
                   : "…"
               }
               value={splitAt}
