@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getNextShotAfterBoundary, getShotById } from "@/db/queries";
+import { ShotDetailSuppressSpaceScroll } from "@/components/shots/shot-detail-suppress-space-scroll";
 import { ShotDetailVideoBlock } from "@/components/shots/shot-detail-video-block";
 import {
   formatShotDuration,
@@ -91,6 +92,7 @@ export default async function ShotDetailPage({ params }: ShotDetailPageProps) {
 
   return (
     <div className="space-y-12">
+      <ShotDetailSuppressSpaceScroll />
       <section className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
           <p className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">

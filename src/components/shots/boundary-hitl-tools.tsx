@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Merge, Scissors } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { spaceTargetKeepsNativeBehavior } from "@/lib/shot-detail-space-key";
 
 const MIN_SPLIT_MARGIN = 0.25;
 
@@ -165,9 +166,13 @@ export function BoundaryHitlTools({
 
   useEffect(() => {
     const onSpaceDown = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
-        spaceDownRef.current = true;
+      if (e.code !== "Space") {
+        return;
       }
+      if (spaceTargetKeepsNativeBehavior(e.target)) {
+        return;
+      }
+      spaceDownRef.current = true;
     };
     const onSpaceUp = (e: KeyboardEvent) => {
       if (e.code === "Space") {
@@ -177,11 +182,11 @@ export function BoundaryHitlTools({
     const onBlur = () => {
       spaceDownRef.current = false;
     };
-    window.addEventListener("keydown", onSpaceDown);
+    window.addEventListener("keydown", onSpaceDown, true);
     window.addEventListener("keyup", onSpaceUp);
     window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener("keydown", onSpaceDown);
+      window.removeEventListener("keydown", onSpaceDown, true);
       window.removeEventListener("keyup", onSpaceUp);
       window.removeEventListener("blur", onBlur);
     };
