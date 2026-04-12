@@ -77,8 +77,11 @@ src/app/(site)/shot/[id]/page.tsx     -- Shot detail with metadata overlay
 src/app/(site)/verify/page.tsx        -- HITL verification queue
 src/app/(site)/visualize/page.tsx     -- D3 visualization dashboard
 src/app/(site)/ingest/page.tsx        -- Film ingest UI
-src/app/(site)/tuning/page.tsx        -- Boundary tuning hub (canonical env + eval links)
-src/app/(site)/tuning/workspace/page.tsx -- Interactive cut tuning (presets, human verified cuts history, eval)
+src/app/(site)/tuning/page.tsx        -- **Boundary Tuning** hub (journey + Ran reference + evidence links)
+src/app/(site)/tuning/prep/page.tsx   -- Guided prep (gold → worker detect → eval → insights → publish preset)
+src/app/(site)/tuning/annotate/page.tsx -- Redirect to `/eval/gold-annotate` (same annotator; URL under Boundary Tuning)
+src/app/(site)/community/prep/page.tsx -- Redirect to `/tuning/prep` (legacy URL)
+src/app/(site)/tuning/workspace/page.tsx -- Workspace (presets, gold revisions, worker detect, eval runs)
 src/lib/boundary-cut-preset.ts        -- Preset JSON ↔ `detectShotsForIngest` options (no env mutation)
 src/app/(site)/export/page.tsx        -- JSON/CSV export + citation block
 

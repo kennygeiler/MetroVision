@@ -5,9 +5,9 @@ import { GoldAnnotateWorkspace } from "@/components/eval/gold-annotate-workspace
 import { getAllFilms } from "@/db/queries";
 
 export const metadata: Metadata = {
-  title: "Human verified cuts",
+  title: "Boundary Tuning · Human verified cuts",
   description:
-    "Internal session for annotating human verified shot cuts; bookmark URL to resume. Not indexed.",
+    "Annotate interior hard-cut times for boundary evaluation; part of Boundary Tuning. Bookmark to resume. Not indexed.",
   robots: { index: false, follow: false },
 };
 

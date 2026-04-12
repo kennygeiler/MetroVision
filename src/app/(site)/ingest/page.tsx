@@ -490,17 +490,23 @@ function IngestPageContent() {
           }}
         >
           <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-            Community boundary model
+            Boundary Tuning
           </p>
           <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-            Tune against human verified cuts, run eval, and optionally publish a preset for{" "}
-            <strong>everyone</strong> on this deployment — then pick it here before you start.
+            Tune shot boundaries against human verified cuts, run eval, and optionally publish a preset for the shared
+            ingest library — then pick it here before you start.
           </p>
           <Link
-            href="/community/prep"
-            className="mt-3 inline-block text-sm font-medium text-[var(--color-text-accent)] underline-offset-2 hover:underline"
+            href="/tuning"
+            className="mt-3 mr-4 inline-block text-sm font-medium text-[var(--color-text-accent)] underline-offset-2 hover:underline"
           >
-            Open community prep →
+            Boundary Tuning hub →
+          </Link>
+          <Link
+            href="/tuning/prep"
+            className="mt-3 inline-block text-sm font-medium text-[var(--color-text-tertiary)] underline-offset-2 hover:underline"
+          >
+            Guided prep →
           </Link>
         </div>
       </div>

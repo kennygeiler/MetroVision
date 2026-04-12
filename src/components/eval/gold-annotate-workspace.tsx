@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Bookmark, CloudUpload, Copy, Download, Trash2, Upload } from "lucide-react";
 
@@ -821,7 +822,10 @@ export function GoldAnnotateWorkspace({ films }: GoldAnnotateWorkspaceProps) {
     <div className="space-y-8 pb-24">
       <section className="space-y-3">
         <p className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-          Internal · not linked from the homepage
+          <Link href="/tuning" className="text-[var(--color-text-accent)] hover:underline">
+            Boundary Tuning
+          </Link>
+          <span className="text-[var(--color-text-tertiary)]"> · human verified cuts</span>
         </p>
         <h1
           className="text-3xl font-bold tracking-[var(--letter-spacing-tight)] sm:text-4xl"

@@ -39,14 +39,14 @@ type InsightsPayload = {
 };
 
 const STEP_LABELS = [
-  "Scope & gold",
-  "Predict cuts",
-  "Score & save",
-  "Community insights",
-  "Publish & ingest",
+  "Gold & scope",
+  "Predict",
+  "Score",
+  "Insights",
+  "Publish",
 ] as const;
 
-export function CommunityPrepWizard({ films }: { films: FilmOption[] }) {
+export function BoundaryTuningPrepWizard({ films }: { films: FilmOption[] }) {
   const [step, setStep] = useState(0);
   const [presets, setPresets] = useState<PresetRow[]>([]);
   const [filmId, setFilmId] = useState(films[0]?.id ?? "");
@@ -311,8 +311,8 @@ export function CommunityPrepWizard({ films }: { films: FilmOption[] }) {
     return (
       <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] p-6 text-sm text-[var(--color-text-secondary)]">
         No films in the database yet. Ingest a film first, then add human verified cuts in{" "}
-        <Link href="/eval/gold-annotate" className="text-[var(--color-text-accent)] underline">
-          gold annotate
+        <Link href="/tuning/annotate" className="text-[var(--color-text-accent)] underline">
+          Human verified cuts
         </Link>
         .
       </div>
@@ -349,12 +349,12 @@ export function CommunityPrepWizard({ films }: { films: FilmOption[] }) {
         <section className="space-y-6 rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] p-6">
           <div>
             <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-              Community boundary prep
+              Guided prep
             </h2>
             <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-              Strong human verified cuts are the reference. When you publish a tuned boundary preset after a fair eval,
-              it is stored in the shared library so <strong>everyone</strong> can pick it at ingest time — like choosing
-              a model profile, not a private fork.
+              Strong human verified cuts are the reference. After you score a preset and publish, it can appear in the
+              shared ingest library so <strong>everyone</strong> can select the same boundary profile — or keep a
+              duplicate private.
             </p>
           </div>
           <label className="block text-sm text-[var(--color-text-secondary)]">
@@ -379,8 +379,8 @@ export function CommunityPrepWizard({ films }: { films: FilmOption[] }) {
             <p className="text-sm font-medium text-[var(--color-text-primary)]">Human verified cuts revision</p>
             <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
               Create or refine cuts in{" "}
-              <Link href="/eval/gold-annotate" className="text-[var(--color-text-accent)] underline">
-                /eval/gold-annotate
+              <Link href="/tuning/annotate" className="text-[var(--color-text-accent)] underline">
+                Human verified cuts
               </Link>
               . Use the <strong>same time window</strong> you will evaluate against on the worker.
             </p>

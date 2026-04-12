@@ -110,8 +110,8 @@ Use this when you care about **shot-boundary** quality before burning a full **G
                          └────────────────────┬─────────────────────┘
                                               │
                          ┌────────────────────▼─────────────────────┐
-                         │  2. Community prep (guided)               │
-                         │     /community/prep                       │
+                         │  2. Boundary Tuning · guided prep         │
+                         │     /tuning/prep                          │
                          │     pick film + gold revision + preset    │
                          └────────────────────┬─────────────────────┘
                                               │

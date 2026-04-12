@@ -267,13 +267,19 @@ export METROVISION_BOUNDARY_MERGE_GAP_SEC=${gap}`;
     <div className="space-y-12">
       <section className="max-w-3xl rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] p-6">
         <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-          Scope
+          Boundary Tuning · scope
         </h2>
         <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-          This workspace is for <strong>shot-boundary</strong> detection only.{" "}
-          Gemini classification and composition slots are unchanged and shared
-          globally — tune those elsewhere. Presets can be marked <strong>community</strong> so they appear in the
-          shared ingest picker; system rows are operator baselines.
+          This workspace is for <strong>shot-boundary</strong> detection only (part of{" "}
+          <Link href="/tuning" className="text-[var(--color-text-accent)] underline">
+            Boundary Tuning
+          </Link>
+          ). Gemini classification and composition slots are global. Presets can be listed on ingest when marked
+          community-shared; system rows are operator baselines. New here? Start at{" "}
+          <Link href="/tuning/prep" className="text-[var(--color-text-accent)] underline">
+            guided prep
+          </Link>
+          .
         </p>
         <label className="mt-4 flex cursor-pointer items-center gap-2 text-xs text-[var(--color-text-secondary)]">
           <input
