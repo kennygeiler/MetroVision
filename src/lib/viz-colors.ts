@@ -28,10 +28,15 @@ export function colorForFraming(slug: string): string {
   return `hsl(${h % 360} 48% 45%)`;
 }
 
-export function colorForCategorySlug(slug: string, saturation: number, lightness: number): string {
+export function colorForCategorySlug(
+  slug: string | null | undefined,
+  saturation: number,
+  lightness: number,
+): string {
+  const s = slug ?? "";
   let h = 216;
-  for (let i = 0; i < slug.length; i++) {
-    h = (h * 31 + slug.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0;
   }
   return `hsl(${h % 360} ${saturation}% ${lightness}%)`;
 }
