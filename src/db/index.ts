@@ -2,15 +2,12 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 
 import { loadLocalEnv } from "./load-env";
+import { resolveDatabaseUrlForNeon } from "./neon-connection-url";
 import * as schema from "./schema";
 
 loadLocalEnv();
 
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is not set.");
-}
+const databaseUrl = resolveDatabaseUrlForNeon();
 
 type DatabaseInstance = ReturnType<typeof drizzle<typeof schema>>;
 

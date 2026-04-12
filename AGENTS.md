@@ -5,7 +5,8 @@
 ```bash
 # Web app (Next.js 15 + React 19)
 pnpm dev              # Start Next.js dev server (Turbopack)
-pnpm build            # Production build (`DATABASE_URL` required at build for module init; `(site)` is `force-dynamic` so no DB queries during prerender)
+pnpm build            # Production build (`DATABASE_URL` must be a full Neon-style URL: `postgresql://user:password@host/db`; during `next build`, invalid/missing URL falls back to a local placeholder so compile succeeds)
+pnpm test:build       # Same env as CI: `next build` with `DATABASE_URL` + `NEXT_PUBLIC_SITE_URL` (run before pushing if you skip CI)
 pnpm lint             # ESLint
 pnpm start            # Start production server
 
@@ -22,7 +23,9 @@ pnpm check:worker        # `tsc --noEmit -p worker/tsconfig.json` (Express worke
 pnpm test                # Vitest (unit + ingest/worker HTTP contract tests; `vitest.setup.ts` sets a placeholder `DATABASE_URL` for route imports)
 pnpm test:ingest-contracts  # Only `ingest-film-stream-contract` + `worker-http.integration` (fast gate for ingest/uptime regressions)
 pnpm worker:reachability-smoke  # Cron/uptime: `INGEST_WORKER_URL` or `WORKER_HEALTH_URL` → GET `/health`, exit 0/1
-# CI (`.github/workflows/ci.yml`): `lint`, `check:taxonomy`, `check:schema-drift`, `test`, `eval:smoke`, `build` (with placeholder `DATABASE_URL` + `NEXT_PUBLIC_SITE_URL`), `check:worker`
+
+# CI & automation
+# Pushes and PRs to `main`/`master` run `.github/workflows/ci.yml` on GitHub Actions (not optional): install, `lint`, `check:taxonomy`, `check:schema-drift`, `test` (Vitest), `eval:smoke`, `test:build` (production Next build), `check:worker`, plus a small Python import smoke. No extra setup is required on your machine for that to run on the remote.
 
 # TS Ingest Worker (Express, runs separately)
 cd worker && pnpm dev   # Start worker dev server (`node --import tsx/esm --watch`)

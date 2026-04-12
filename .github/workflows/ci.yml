@@ -24,11 +24,8 @@ jobs:
       - run: pnpm check:schema-drift
       - run: pnpm test
       - run: pnpm eval:smoke
-      - name: Production build (no DB at build time)
-        run: pnpm build
-        env:
-          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
-          NEXT_PUBLIC_SITE_URL: https://metrovision.vercel.app
+      - name: Production build (same as pnpm test:build)
+        run: pnpm test:build
       - run: pnpm check:worker
       - uses: actions/setup-python@v5
         with:
