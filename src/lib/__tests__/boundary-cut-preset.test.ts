@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_BOUNDARY_MERGE_GAP_SEC } from "@/lib/boundary-ensemble";
 import {
   DEFAULT_BOUNDARY_CUT_PRESET_CONFIG,
   parseBoundaryCutPresetConfig,
@@ -23,7 +24,7 @@ describe("boundary-cut-preset", () => {
     expect(o.boundaryOverrides?.boundaryDetector).toBe(
       "pyscenedetect_ensemble_pyscene",
     );
-    expect(o.boundaryOverrides?.mergeGapSec).toBe(0.22);
+    expect(o.boundaryOverrides?.mergeGapSec).toBe(DEFAULT_BOUNDARY_MERGE_GAP_SEC);
     expect(o.boundaryFusionPolicy).toBe("merge_flat");
   });
 

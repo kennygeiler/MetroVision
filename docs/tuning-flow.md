@@ -8,7 +8,9 @@ This document **logs the intended tuning workflow** so operators (and future app
 
 ## Decision point (2026-04-10 — Ran `ranshort`, 71 human verified interior cuts, tol 0.5 s)
 
-**Recorded choice:** After **TransNet threshold × merge-gap sweeps** did **not** improve on **PyScene ensemble + merge gap 0.22** (registered numbers in **`eval/runs/STATUS.md`** — **F1 ~0.714**, **R ~0.63**), the next engineering investment is **false-negative–centric**: **enumerate missed human verified cut times**, then **local second-pass / alternate cues** and **fusion / HITL** — **not** further TransNet threshold tuning on this clip alone.
+**Recorded choice:** After **TransNet threshold × merge-gap sweeps** did **not** improve on **PyScene ensemble** at the evaluated gaps (registered numbers in **`eval/runs/STATUS.md`** — length-matched **F1 ~0.80**; short-clip artifact **~0.714**), the next engineering investment is **false-negative–centric**: **enumerate missed human verified cut times**, then **local second-pass / alternate cues** and **fusion / HITL** — **not** further TransNet threshold tuning on this clip alone.
+
+**Product default (2026-04-12):** **Recall-first** merge gap (**0.18** s) in code (`DEFAULT_BOUNDARY_MERGE_GAP_SEC`), **DB preset** (`drizzle/0012_…`), and Python pipeline — **prefer extra cuts over over-merging**. Ran1243 **ensemble** metrics sat on a **plateau 0.12–0.45**; tighter default still helps other detectors / extras.
 
 **Roadmap:** GSD **Phases 7–11** in **`.planning/ROADMAP.md`** structure that path (FN list → local refinement → fusion → in-app HITL → multi-film corpus).
 

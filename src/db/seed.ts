@@ -16,10 +16,10 @@ async function main() {
 
   if (!presetRow) {
     await db.insert(boundaryCutPresets).values({
-      name: "Cemented (Ran baseline)",
+      name: "Recall-first default (ensemble)",
       slug: DEFAULT_BOUNDARY_CUT_PRESET_SLUG,
       description:
-        "Matches eval/runs/STATUS.md CEMENTED row — ensemble + merge gap 0.22.",
+        "PyScene ensemble + merge_flat; recall-first merge gap (see DEFAULT_BOUNDARY_MERGE_GAP_SEC). eval/runs/STATUS.md.",
       config: DEFAULT_BOUNDARY_CUT_PRESET_CONFIG,
       isSystem: true,
       shareWithCommunity: true,

@@ -42,6 +42,7 @@ import type {
   VisualizationData,
   VizShot,
 } from "@/lib/types";
+import { DEFAULT_BOUNDARY_MERGE_GAP_SEC } from "@/lib/boundary-ensemble";
 import { mapRawVisualizationRowToVizShot } from "@/lib/viz-shot-map";
 import type {
   BlockingTypeSlug,
@@ -519,7 +520,8 @@ export async function getAllShots(filters?: ShotQueryFilters) {
 export async function getNextShotAfterBoundary(
   filmId: string,
   afterEndTc: number,
-  epsilonSec = 0.35,
+  /** Align with boundary merge ε for split-clip adjacency. */
+  epsilonSec = DEFAULT_BOUNDARY_MERGE_GAP_SEC,
 ): Promise<{ id: string; startTc: number; endTc: number | null } | null> {
   const rows = await db
     .select({

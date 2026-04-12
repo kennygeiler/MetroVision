@@ -6,8 +6,9 @@ import { NextResponse } from "next/server";
 
 import { db, schema } from "@/db";
 import type { HitlAuditEntry } from "@/db/schema";
+import { DEFAULT_BOUNDARY_MERGE_GAP_SEC } from "@/lib/boundary-ensemble";
 
-const BOUNDARY_EPS_SEC = 0.35;
+const BOUNDARY_EPS_SEC = DEFAULT_BOUNDARY_MERGE_GAP_SEC;
 
 function appendHitlAudit(
   existing: HitlAuditEntry[] | null | undefined,

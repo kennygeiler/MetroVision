@@ -34,15 +34,19 @@ def _boundary_ensemble_enabled() -> bool:
     return raw in ("pyscenedetect_ensemble", "pyscenedetect_ensemble_pyscene")
 
 
+# Default when env unset — match TS `DEFAULT_BOUNDARY_MERGE_GAP_SEC` (recall-first).
+_DEFAULT_MERGE_GAP_SEC = 0.18
+
+
 def _merge_eps() -> float:
     raw = os.environ.get("METROVISION_BOUNDARY_MERGE_GAP_SEC", "").strip()
     if not raw:
-        return 0.35
+        return _DEFAULT_MERGE_GAP_SEC
     try:
         v = float(raw)
-        return v if v > 0 else 0.35
+        return v if v > 0 else _DEFAULT_MERGE_GAP_SEC
     except ValueError:
-        return 0.35
+        return _DEFAULT_MERGE_GAP_SEC
 
 
 def _load_extra_boundary_cuts() -> list[float]:

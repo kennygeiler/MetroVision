@@ -3,6 +3,7 @@
  * Maps to `detectShotsForIngest` via `presetConfigToDetectOptions` — does not mutate `process.env`.
  */
 
+import { DEFAULT_BOUNDARY_MERGE_GAP_SEC } from "./boundary-ensemble";
 import type { BoundaryFusionPolicy } from "./boundary-fusion";
 import type { DetectShotsForIngestOptions } from "./ingest-pipeline";
 
@@ -25,10 +26,14 @@ const FUSION: BoundaryFusionPolicy[] = [
 
 export const DEFAULT_BOUNDARY_CUT_PRESET_SLUG = "cemented-ran-2026-04-11";
 
-/** Matches **CEMENTED** row in `eval/runs/STATUS.md` (ensemble + gap 0.22, no extras). */
+/**
+ * Product baseline: **recall-first** — ensemble + `merge_flat` + tight merge gap (see
+ * `DEFAULT_BOUNDARY_MERGE_GAP_SEC`). Ran1243 sweep: ensemble interior cuts were unchanged for
+ * gap 0.12–0.45; tighter default still helps single-detector + extras on dense peaks elsewhere.
+ */
 export const DEFAULT_BOUNDARY_CUT_PRESET_CONFIG: BoundaryCutPresetConfig = {
   boundaryDetector: "pyscenedetect_ensemble_pyscene",
-  mergeGapSec: 0.22,
+  mergeGapSec: DEFAULT_BOUNDARY_MERGE_GAP_SEC,
   fusionPolicy: "merge_flat",
   detector: "adaptive",
 };

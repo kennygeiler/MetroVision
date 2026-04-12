@@ -152,9 +152,9 @@ export default function BoundaryTuningHubPage() {
                 <td className="py-3 pr-4 font-mono text-xs text-[var(--color-text-accent)]">
                   METROVISION_BOUNDARY_MERGE_GAP_SEC
                 </td>
-                <td className="py-3 pr-4 font-mono text-xs">0.22</td>
+                <td className="py-3 pr-4 font-mono text-xs">0.18</td>
                 <td className="py-3 text-[var(--color-text-secondary)]">
-                  Dense hard-cut human verified default; wider gaps did not change ensemble cuts on Ran1243.
+                  Recall-first default (code + DB preset). Ran1243 ensemble plateau 0.12–0.45 — use 0.22 only to match older CLI logs.
                 </td>
               </tr>
               <tr className="border-b border-[var(--color-border-subtle)] align-top">
@@ -214,7 +214,7 @@ export default function BoundaryTuningHubPage() {
           </ul>
           <pre className="overflow-x-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-primary)] p-4 font-mono text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
             {`export METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene
-export METROVISION_BOUNDARY_MERGE_GAP_SEC=0.22
+export METROVISION_BOUNDARY_MERGE_GAP_SEC=0.18
 pnpm detect:export-cuts -- /path/to/Ran1243.mov --start 0 --end 780 \\
   --gold eval/gold/gold-ran-2026-04-10.json --tol 0.5 \\
   --fusion-policy merge_flat --out eval/predicted/run.json`}

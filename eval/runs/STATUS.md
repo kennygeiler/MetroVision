@@ -6,23 +6,25 @@
 
 ---
 
-## CEMENTED — canonical production boundary tuning (2026-04-11)
+## CEMENTED — canonical production boundary tuning (recall-first default, 2026-04-12)
 
-**Status:** **LOCKED** for Ran and for **worker / ingest parity** until a new sweep or title-specific profile supersedes this section.
+**Status:** **LOCKED** for **worker / ingest parity** and **DB default preset** (`boundary_cut_presets`, slug `cemented-ran-2026-04-11`) until a new sweep or title-specific profile supersedes this section.
 
-**Evidence:** merge-gap sweep ([`ran1243-merge-gap-sweep-2026-04-11.md`](ran1243-merge-gap-sweep-2026-04-11.md)); multi-knob sweep at gap **0.22** ([`ran1243-knob-sweep-gap022-2026-04-11.md`](ran1243-knob-sweep-gap022-2026-04-11.md) + [`.log`](ran1243-knob-sweep-gap022-2026-04-11.log)).
+**Product stance:** **Recall-first** — prefer **more** interior cuts (accept extra FPs) over **merging away** real cuts. Code: `DEFAULT_BOUNDARY_MERGE_GAP_SEC` / `DEFAULT_BOUNDARY_CUT_PRESET_CONFIG` in `src/lib/boundary-ensemble.ts` + `src/lib/boundary-cut-preset.ts` (currently **0.18** s). Python: `pipeline/shot_detect.py` `_DEFAULT_MERGE_GAP_SEC` matches.
+
+**Evidence:** merge-gap sweep ([`ran1243-merge-gap-sweep-2026-04-11.md`](ran1243-merge-gap-sweep-2026-04-11.md)); multi-knob sweep at gap **0.22** ([`ran1243-knob-sweep-gap022-2026-04-11.md`](ran1243-knob-sweep-gap022-2026-04-11.md) + [`.log`](ran1243-knob-sweep-gap022-2026-04-11.log)). On **Ran1243 + ensemble**, interior cut count and P/R/F1 were **identical** for merge gap **0.12–0.45**; the move to **0.18** tightens defaults for **single-detector + extras** and signals recall-first vs legacy **0.35**.
 
 | Knob | Production value | Notes |
 |------|------------------|--------|
 | `METROVISION_BOUNDARY_DETECTOR` | **`pyscenedetect_ensemble_pyscene`** | `pyscenedetect_ensemble` equivalent on Ran1243. **Not** `pyscenedetect_cli` alone (lower F1 vs human verified cuts). |
-| `METROVISION_BOUNDARY_MERGE_GAP_SEC` | **`0.22`** | Sweeps **0.12–0.45** did not change ensemble interior cuts on Ran1243; **0.22** kept as dense-cut default. |
+| `METROVISION_BOUNDARY_MERGE_GAP_SEC` | **`0.18`** (when unset, code default) | **Recall-first.** Override to **0.22** if you need to match historical CLI logs exactly. |
 | Extra cuts / TransNet | **None** for baseline | Add only with a real auxiliary detector; **`merge_flat`** when merging. |
 | `detect-export-cuts --fusion-policy` | **`merge_flat`** | **`pairwise_min_sources`** can drop **all** interior cuts if nothing pairs within ε/2; **`auxiliary_near_primary`** did not beat baseline on oracle tests. |
 | Eval tolerance (`eval:pipeline` / `--gold` path) | **`0.5` s** | Optional **0.55 s** for looser reporting only (does not improve detector). |
 | Canonical media | **`s3://metrovision-superai/films/ran-1985/source/Ran1243.mov`** | Duration **~763.4 s**; must cover human verified cuts through **~764 s**. |
-| Reference predicted JSON | **`eval/predicted/ran1243-ensemble-gap022-20260410.json`** | **P 0.784 / R 0.817 / F1 0.800** @ tol **0.5**. |
+| Reference predicted JSON | **`eval/predicted/ran1243-ensemble-gap022-20260410.json`** | **P 0.784 / R 0.817 / F1 0.800** @ tol **0.5** — generated with gap **0.18–0.22** (ensemble plateau on this clip; file name historical). |
 
-**Worker / Railway:** Set the two `METROVISION_*` env vars above to match this row before full-film Ran ingest.
+**Worker / Railway:** Set `METROVISION_BOUNDARY_DETECTOR` as above; **omit** merge-gap env to use recall-first **0.18**, or set **`METROVISION_BOUNDARY_MERGE_GAP_SEC=0.18`** explicitly. Prefer **DB preset** + `boundaryOverrides` for reproducibility (`pnpm db:migrate` applies **`0012_boundary_recall_first_default.sql`** to existing seeded presets).
 
 ---
 
@@ -58,7 +60,7 @@
 **Config (detect / ingest-aligned):**
 
 - `METROVISION_BOUNDARY_DETECTOR=pyscenedetect_ensemble_pyscene`
-- `METROVISION_BOUNDARY_MERGE_GAP_SEC=0.22`
+- `METROVISION_BOUNDARY_MERGE_GAP_SEC=0.18` (or omit env for same code default)
 - PyScene CLI on `PATH` (avoid `ffmpeg_scene+ensemble_fallback` for apples-to-apples)
 - **`detect-export-cuts`:** `--fusion-policy merge_flat` (default; no extra cut stream for this run)
 
@@ -115,7 +117,7 @@ These match a **~443 s** source; **gold still lists cuts up to ~763 s**, so **FN
 | Area | What we did |
 |------|-------------|
 | **Detector** | Dual PyScene (**ensemble**) vs single / FFmpeg fallback; label in `boundaryLabel`. |
-| **Merge** | **`METROVISION_BOUNDARY_MERGE_GAP_SEC=0.22`** tuned for dense hard-cut gold (vs default 0.35). |
+| **Merge** | **Recall-first `METROVISION_BOUNDARY_MERGE_GAP_SEC=0.18`** (code + DB preset default; legacy env was 0.35). |
 | **Extras + fusion (Phase 9)** | `fuseBoundaryCutStreams` + `detect-export-cuts --fusion-policy`; TransNet sweeps did **not** beat ensemble-only on Ran when merged flat — see [`2026-04-10-transnet-threshold-sweep.md`](2026-04-10-transnet-threshold-sweep.md). |
 | **FN tooling (Phase 7)** | `eval:boundary-misses`, `unmatchedGoldSec` / `unmatchedPredSec` in `evalBoundaryCuts`. |
 | **Local refine (Phase 8)** | `detect:refine-fn-windows` (second pass on FN windows); script fixed for **`probeVideoDurationSec`** import and **clip end capped to probed duration**. On short clip + first N FN windows, refine did **not** improve F1 (added FP). |

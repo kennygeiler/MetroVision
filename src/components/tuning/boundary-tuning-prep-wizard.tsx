@@ -352,9 +352,10 @@ export function BoundaryTuningPrepWizard({ films }: { films: FilmOption[] }) {
               Guided prep
             </h2>
             <p className="mt-2 text-sm leading-7 text-[var(--color-text-secondary)]">
-              Strong human verified cuts are the reference. After you score a preset and publish, it can appear in the
-              shared ingest library so <strong>everyone</strong> can select the same boundary profile — or keep a
-              duplicate private.
+              Strong human verified cuts are the reference. The seeded system preset is <strong>recall-first</strong>{" "}
+              (tighter merge gap — prefer extra cuts over merging away real boundaries). After you score a preset and
+              publish, it can appear in the shared ingest library so <strong>everyone</strong> can select the same
+              boundary profile — or keep a duplicate private.
             </p>
           </div>
           <label className="block text-sm text-[var(--color-text-secondary)]">

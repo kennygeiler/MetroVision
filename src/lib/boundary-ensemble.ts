@@ -72,11 +72,18 @@ export function parseInlineBoundaryCuts(raw: unknown): number[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+/**
+ * When `METROVISION_BOUNDARY_MERGE_GAP_SEC` is unset: tighter ε than legacy 0.35 — **recall-first**
+ * (preserve more interior cuts). Must match Python `pipeline/shot_detect.py` default and
+ * `DEFAULT_BOUNDARY_CUT_PRESET_CONFIG.mergeGapSec`.
+ */
+export const DEFAULT_BOUNDARY_MERGE_GAP_SEC = 0.18;
+
 export function boundaryMergeEpsilonSec(): number {
   const raw = process.env.METROVISION_BOUNDARY_MERGE_GAP_SEC?.trim();
-  if (!raw) return 0.35;
+  if (!raw) return DEFAULT_BOUNDARY_MERGE_GAP_SEC;
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : 0.35;
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_BOUNDARY_MERGE_GAP_SEC;
 }
 
 export function clusterCutTimes(times: number[], eps: number): number[] {

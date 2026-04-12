@@ -13,7 +13,7 @@ Set these on the **service that runs ingest** (typically the **Railway worker**)
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | **`METROVISION_BOUNDARY_DETECTOR`** | `pyscenedetect_cli` | **`pyscenedetect_cli`** — single PySceneDetect run; request body **`detector`** chooses `content` or `adaptive`. **`pyscenedetect_ensemble_pyscene`** or **`pyscenedetect_ensemble`** — run **adaptive + content** in parallel, merge cut endpoints with NMS-style clustering (see §2). |
-| **`METROVISION_BOUNDARY_MERGE_GAP_SEC`** | `0.35` | Seconds within which nearby cut times are **merged** into one boundary. **Lower** (e.g. `0.2`–`0.25`) preserves more hard cuts when human verified cuts mark **every** edit; **too low** increases duplicate/spurious cuts. |
+| **`METROVISION_BOUNDARY_MERGE_GAP_SEC`** | **`0.18`** (code default when unset) | Seconds within which nearby cut times are **merged** into one boundary. **Recall-first:** tighter than legacy `0.35` — preserves more hard cuts; **too low** increases duplicate/spurious cuts on noisy sources. |
 | **`METROVISION_EXTRA_BOUNDARY_CUTS_JSON`** | *(unset)* | Host path to a JSON **array of numbers** (cut times in **seconds**, film-absolute). Merged with detector output after the same clustering step. Optional if you use request **`extraBoundaryCuts`** instead. |
 | **`METROVISION_FFMPEG_SCENE_THRESHOLD`** | `0.32` | When ingest uses FFmpeg **`scene`** filter for cuts: sensitivity of scene-change score. **Lower** → more cuts (higher recall, more noise). |
 | **`METROVISION_FFMPEG_SCENE_SAMPLE_FPS`** | `4` (non-Vercel), `2` (Vercel) | Max **analysis** frame rate before `scene` detection. **`0`**, **`full`**, or **`off`** = no fps downsampling (slowest, often **highest recall**). |
