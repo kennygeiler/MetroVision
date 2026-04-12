@@ -125,7 +125,7 @@ export async function GET(request: Request) {
 type ReviewRequest = {
   shotId?: string;
   shotIds?: string[];
-  action: "approve" | "correct";
+  action: "approve" | "correct" | "reject_motion";
   corrections?: Record<string, string>;
 };
 
@@ -150,6 +150,20 @@ export async function POST(request: Request) {
         .where(inArray(schema.shotMetadata.shotId, shotIds));
 
       return NextResponse.json({ ok: true, status: "human_verified", count: shotIds.length });
+    }
+
+    /** Boundary HITL bulk triage: cut is motion/strobe artifact, not a true edit point. */
+    if (body.action === "reject_motion") {
+      await db
+        .update(schema.shotMetadata)
+        .set({ reviewStatus: "boundary_motion_rejected" })
+        .where(inArray(schema.shotMetadata.shotId, shotIds));
+
+      return NextResponse.json({
+        ok: true,
+        status: "boundary_motion_rejected",
+        count: shotIds.length,
+      });
     }
 
     if (body.action === "correct") {
@@ -210,7 +224,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: 'action must be "approve" or "correct".' },
+      { error: 'action must be "approve", "reject_motion", or "correct".' },
       { status: 400 },
     );
   } catch (error) {

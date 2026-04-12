@@ -88,7 +88,14 @@ export default async function FilmDetailPage({ params }: Props) {
           Cuts in story order; segment width matches shot duration and color follows framing. Striped / outlined
           segments used a template fallback or are flagged for another pipeline pass — the usual fix is to{" "}
           <strong className="text-[var(--color-text-primary)]">re-run ingest</strong> for this film (same title,
-          director, year replaces prior shots).
+          director, year replaces prior shots).{" "}
+          <Link
+            href={`/verify/boundary-triage?filmId=${film.id}`}
+            className="text-[var(--color-text-accent)] underline-offset-2 hover:underline"
+          >
+            Open boundary triage grid
+          </Link>{" "}
+          for bulk before/after review.
         </p>
         {weakClassificationCount > 0 ? (
           <div

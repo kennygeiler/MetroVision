@@ -53,6 +53,12 @@ export default async function VerifyPage() {
             Ingest
           </Link>
           <Link
+            href="/verify/boundary-triage"
+            className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-accent-base)] bg-transparent px-4 text-[0.8rem] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-tertiary)]"
+          >
+            Boundary triage
+          </Link>
+          <Link
             href="/verify/batch"
             className="inline-flex h-7 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-transparent px-4 text-[0.8rem] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
           >
@@ -86,11 +92,20 @@ export default async function VerifyPage() {
             page to queue the same title again (replaces shots for that film when ingest completes).
           </li>
           <li>
+            <Link
+              href="/verify/boundary-triage"
+              className="text-[var(--color-text-accent)] underline-offset-2 hover:underline"
+            >
+              Boundary triage
+            </Link>{" "}
+            opens a virtualized before/after grid for cuts flagged <code className="font-mono text-[10px]">needs_review</code>{" "}
+            (confidence slider, cluster tabs, J/K shortcuts).
+          </li>
+          <li>
             <Link href="/verify/batch" className="text-[var(--color-text-accent)] underline-offset-2 hover:underline">
               Batch QA
             </Link>{" "}
-            remains for operators who still want per-shot ratings and bulk approve — not required for normal archive
-            use.
+            remains for composition metadata bulk approve — optional alongside per-shot forms.
           </li>
         </ul>
       </section>
