@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pause, Play, Volume2, VolumeX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { formatMediaClock } from "@/lib/shot-display";
 
 type SegmentWindow = { offset: number; end: number };
 
@@ -29,21 +30,6 @@ type ShotVideoTransportProps = {
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n));
-}
-
-/** Shot-relative or film seconds — sub-minute uses `12.4s`, longer uses `m:ss.s`. */
-function formatClock(sec: number): string {
-  if (!Number.isFinite(sec) || sec < 0) {
-    return "0.0s";
-  }
-  const m = Math.floor(sec / 60);
-  const s = sec - m * 60;
-  if (m === 0) {
-    return `${s.toFixed(1)}s`;
-  }
-  const whole = Math.floor(s);
-  const frac = (s - whole).toFixed(1).slice(1);
-  return `${m}:${String(whole).padStart(2, "0")}${frac}`;
 }
 
 export function ShotVideoTransport({
@@ -394,7 +380,7 @@ export function ShotVideoTransport({
           <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
             <span>Shot timeline · hover = seeked-frame preview</span>
             <span className="tabular-nums normal-case tracking-normal text-[var(--color-text-secondary)]">
-              Film {formatClock(filmAtPlayhead)} · in file {formatClock(fileTc)}
+              Film {formatMediaClock(filmAtPlayhead)} · in file {formatMediaClock(fileTc)}
             </span>
           </div>
 
@@ -457,7 +443,7 @@ export function ShotVideoTransport({
                   />
                 ) : null}
                 <span className="whitespace-nowrap">
-                  Shot +{hover.into.toFixed(2)}s · Film {formatClock(hoverFilm)}
+                  +{formatMediaClock(hover.into)} in shot · film {formatMediaClock(hoverFilm)}
                   {previewError ? " · preview off (CORS or decode)" : ""}
                 </span>
               </div>
@@ -465,8 +451,8 @@ export function ShotVideoTransport({
           </div>
 
           <div className="mt-1 flex justify-between font-mono text-[11px] tabular-nums text-[var(--color-text-secondary)]">
-            <span>{formatClock(intoShot)}</span>
-            <span>{formatClock(shotDuration)}</span>
+            <span>{formatMediaClock(intoShot)}</span>
+            <span>{formatMediaClock(shotDuration)}</span>
           </div>
         </div>
       </div>

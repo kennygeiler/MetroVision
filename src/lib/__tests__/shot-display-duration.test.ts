@@ -1,19 +1,35 @@
 import { describe, expect, it } from "vitest";
 
-import { formatShotDuration } from "@/lib/shot-display";
+import { formatMediaClock, formatShotDuration } from "@/lib/shot-display";
+
+describe("formatMediaClock", () => {
+  it("formats like a video player (no trailing s)", () => {
+    expect(formatMediaClock(0)).toBe("0:00");
+    expect(formatMediaClock(4.3)).toBe("0:04.3");
+    expect(formatMediaClock(17)).toBe("0:17");
+    expect(formatMediaClock(60)).toBe("1:00");
+    expect(formatMediaClock(90.5)).toBe("1:30.5");
+    expect(formatMediaClock(125)).toBe("2:05");
+    expect(formatMediaClock(120)).toBe("2:00");
+  });
+
+  it("adds hours when needed", () => {
+    expect(formatMediaClock(3601)).toBe("1:00:01");
+    expect(formatMediaClock(7325)).toBe("2:02:05");
+  });
+});
 
 describe("formatShotDuration", () => {
-  it("uses seconds at 60 and below", () => {
-    expect(formatShotDuration(0)).toBe("0.0s");
-    expect(formatShotDuration(60)).toBe("60.0s");
+  it("matches media clock for valid durations", () => {
+    expect(formatShotDuration(0)).toBe("0:00");
+    expect(formatShotDuration(60)).toBe("1:00");
+    expect(formatShotDuration(90.5)).toBe("1:30.5");
+    expect(formatShotDuration(125)).toBe("2:05");
+    expect(formatShotDuration(120)).toBe("2:00");
   });
 
-  it("uses minutes above 60 seconds", () => {
-    expect(formatShotDuration(90.5)).toBe("1m 30.5s");
-    expect(formatShotDuration(125)).toBe("2m 5.0s");
-  });
-
-  it("omits zero remainder seconds for whole minutes", () => {
-    expect(formatShotDuration(120)).toBe("2m");
+  it("returns em dash for invalid", () => {
+    expect(formatShotDuration(Number.NaN)).toBe("—");
+    expect(formatShotDuration(-1)).toBe("—");
   });
 });

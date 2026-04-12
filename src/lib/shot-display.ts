@@ -84,18 +84,32 @@ export function getDurationCategoryDisplayName(slug: DurationCategorySlug | null
   return getDisplayName(DURATION_CATEGORIES, slug);
 }
 
+/**
+ * Video-player style clock (no trailing `s`): `0:04`, `0:04.3`, `1:02`, `1:02:03`.
+ */
+export function formatMediaClock(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) {
+    return "0:00";
+  }
+  const t = Math.min(sec, 359999);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t - h * 3600 - m * 60;
+  const si = Math.floor(s + 1e-9);
+  const frac = s - si;
+  const ss =
+    frac > 0.001
+      ? `${String(si).padStart(2, "0")}${frac.toFixed(1).slice(1)}`
+      : String(si).padStart(2, "0");
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${ss}`;
+  }
+  return `${m}:${ss}`;
+}
+
 export function formatShotDuration(duration: number) {
   if (!Number.isFinite(duration) || duration < 0) {
     return "—";
   }
-  if (duration <= 60) {
-    return `${duration.toFixed(1)}s`;
-  }
-  const mins = Math.floor(duration / 60);
-  const secs = duration - mins * 60;
-  const roundedSecs = Number(secs.toFixed(3));
-  if (roundedSecs < 0.05) {
-    return `${mins}m`;
-  }
-  return `${mins}m ${roundedSecs.toFixed(1)}s`;
+  return formatMediaClock(duration);
 }
