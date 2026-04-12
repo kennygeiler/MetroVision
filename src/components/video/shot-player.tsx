@@ -8,6 +8,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { MetadataOverlay } from "@/components/video/metadata-overlay";
+import { ShotVideoJs } from "@/components/video/shot-video-js";
 import { ShotVideoTransport } from "@/components/video/shot-video-transport";
 import { getShotPlaybackSegment } from "@/lib/shot-playback-segment";
 import type { ShotWithDetails } from "@/lib/types";
@@ -23,6 +24,7 @@ type ShotPlayerProps = {
 
 export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPlayerProps) {
   const [showOverlay, setShowOverlay] = useState(true);
+  const [videoAttachTick, setVideoAttachTick] = useState(0);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const setVideoEl = useCallback(
@@ -30,6 +32,9 @@ export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPla
       localVideoRef.current = node;
       if (videoRef) {
         (videoRef as MutableRefObject<HTMLVideoElement | null>).current = node;
+      }
+      if (node) {
+        setVideoAttachTick((t) => t + 1);
       }
     },
     [videoRef],
@@ -80,7 +85,7 @@ export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPla
       v.removeEventListener("seeking", clamp);
       v.removeEventListener("loadedmetadata", snapToSegmentStart);
     };
-  }, [shot.id, segment]);
+  }, [shot.id, segment, videoAttachTick]);
 
   return (
     <div className="space-y-4">
@@ -112,15 +117,12 @@ export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPla
         />
 
         {shot.videoUrl ? (
-          <video
-            ref={setVideoEl}
-            className="absolute inset-0 h-full w-full object-cover"
-            src={shot.videoUrl}
-            poster={shot.thumbnailUrl ?? undefined}
+          <ShotVideoJs
+            videoUrl={shot.videoUrl}
+            posterUrl={shot.thumbnailUrl ?? undefined}
             controls={!useCustomTransport}
-            muted
-            playsInline
-            preload="metadata"
+            shotKey={`${shot.id}:${shot.videoUrl}`}
+            onVideoElement={setVideoEl}
           />
         ) : shot.thumbnailUrl ? (
           <Image
@@ -184,6 +186,8 @@ export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPla
             endTc={playbackSegment.endTc}
             segment={{ offset: playbackSegment.offset, end: playbackSegment.end }}
             shotKey={`${shot.id}:${shot.videoUrl ?? ""}`}
+            previewSrc={shot.videoUrl!}
+            previewPoster={shot.thumbnailUrl ?? null}
             splitAt={splitAt}
             onSplitAtChange={onSplitAtChange}
           />

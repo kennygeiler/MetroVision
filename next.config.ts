@@ -5,6 +5,7 @@ import type { NextConfig } from "next";
 const FFMPEG_TRACE_INCLUDES = ["./node_modules/ffmpeg-static/**"];
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["video.js"],
   async redirects() {
     return [
       {

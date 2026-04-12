@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 
 type SegmentWindow = { offset: number; end: number };
 
+const PREVIEW_CANVAS_W = 176;
+const PREVIEW_CANVAS_H = 99;
+
 type ShotVideoTransportProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
   /** Film time at `video.currentTime === 0`. */
@@ -17,6 +20,9 @@ type ShotVideoTransportProps = {
   segment: SegmentWindow;
   /** Bump when clip URL changes. */
   shotKey: string;
+  /** Same URL as main clip — dedicated element seeks for hover preview without moving playhead. */
+  previewSrc: string;
+  previewPoster?: string | null;
   splitAt?: string;
   onSplitAtChange?: (value: string) => void;
 };
@@ -47,17 +53,31 @@ export function ShotVideoTransport({
   endTc,
   segment,
   shotKey,
+  previewSrc,
+  previewPoster,
   splitAt,
   onSplitAtChange,
 }: ShotVideoTransportProps) {
   const railRef = useRef<HTMLDivElement | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const previewGenRef = useRef(0);
+  const hoverFileTRef = useRef<number | null>(null);
+  const hoverRafRef = useRef<number | null>(null);
+
   const [intoShot, setIntoShot] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [hover, setHover] = useState<{ x: number; into: number } | null>(null);
+  const [previewError, setPreviewError] = useState(false);
   const dragRef = useRef(false);
 
   const shotDuration = endTc - startTc;
+
+  useEffect(() => {
+    setPreviewError(false);
+    previewGenRef.current += 1;
+  }, [shotKey]);
 
   const fileTimeFromIntoShot = useCallback(
     (into: number) => startTc + into - mediaAnchor,
@@ -75,6 +95,86 @@ export function ShotVideoTransport({
       return t * shotDuration;
     },
     [shotDuration],
+  );
+
+  const drawPreviewFrame = useCallback((gen: number) => {
+    const v = previewVideoRef.current;
+    const c = canvasRef.current;
+    if (!v || !c || gen !== previewGenRef.current) {
+      return;
+    }
+    if (v.readyState < 2 || !v.videoWidth || !v.videoHeight) {
+      return;
+    }
+    const ctx = c.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+    const vw = v.videoWidth;
+    const vh = v.videoHeight;
+    const cw = c.width;
+    const ch = c.height;
+    const scale = Math.max(cw / vw, ch / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const dx = (cw - dw) / 2;
+    const dy = (ch - dh) / 2;
+    try {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.drawImage(v, 0, 0, vw, vh, dx, dy, dw, dh);
+    } catch {
+      setPreviewError(true);
+    }
+  }, []);
+
+  const requestPreviewForFileTime = useCallback(
+    (fileT: number) => {
+      const v = previewVideoRef.current;
+      if (!v || previewError || !previewSrc) {
+        return;
+      }
+      const t = clamp(fileT, segment.offset, segment.end);
+      const gen = ++previewGenRef.current;
+      const done = () => {
+        if (gen !== previewGenRef.current) {
+          return;
+        }
+        drawPreviewFrame(gen);
+      };
+      if (Math.abs(v.currentTime - t) < 1 / 120) {
+        done();
+        return;
+      }
+      const onSeeked = () => {
+        v.removeEventListener("seeked", onSeeked);
+        done();
+      };
+      v.addEventListener("seeked", onSeeked);
+      v.currentTime = t;
+    },
+    [segment.offset, segment.end, previewError, previewSrc, drawPreviewFrame],
+  );
+
+  const scheduleHoverPreview = useCallback(
+    (into: number) => {
+      if (previewError || !previewSrc) {
+        return;
+      }
+      const ft = fileTimeFromIntoShot(into);
+      hoverFileTRef.current = ft;
+      if (hoverRafRef.current != null) {
+        return;
+      }
+      hoverRafRef.current = window.requestAnimationFrame(() => {
+        hoverRafRef.current = null;
+        const target = hoverFileTRef.current;
+        if (target != null) {
+          requestPreviewForFileTime(target);
+        }
+      });
+    },
+    [fileTimeFromIntoShot, previewError, previewSrc, requestPreviewForFileTime],
   );
 
   const seekToIntoShot = useCallback(
@@ -200,6 +300,7 @@ export function ShotVideoTransport({
       if (into != null && railRef.current) {
         const rect = railRef.current.getBoundingClientRect();
         setHover({ x: e.clientX - rect.left, into });
+        scheduleHoverPreview(into);
       }
       return;
     }
@@ -221,7 +322,15 @@ export function ShotVideoTransport({
     }
   };
 
-  const onRailLeave = () => setHover(null);
+  const onRailLeave = () => {
+    setHover(null);
+    hoverFileTRef.current = null;
+    previewGenRef.current += 1;
+    if (hoverRafRef.current != null) {
+      window.cancelAnimationFrame(hoverRafRef.current);
+      hoverRafRef.current = null;
+    }
+  };
 
   const playPct = shotDuration > 0 ? clamp(intoShot / shotDuration, 0, 1) * 100 : 0;
   const splitParsed = splitAt != null && splitAt !== "" ? Number(splitAt) : NaN;
@@ -245,6 +354,18 @@ export function ShotVideoTransport({
         borderColor: "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
       }}
     >
+      <video
+        ref={previewVideoRef}
+        src={previewSrc || undefined}
+        poster={previewPoster ?? undefined}
+        muted
+        playsInline
+        preload="auto"
+        crossOrigin="anonymous"
+        className="pointer-events-none fixed left-0 top-0 -z-10 h-px w-px opacity-0"
+        aria-hidden
+        onError={() => setPreviewError(true)}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1">
           <Button
@@ -271,7 +392,7 @@ export function ShotVideoTransport({
 
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-            <span>Shot timeline (this segment)</span>
+            <span>Shot timeline · hover = seeked-frame preview</span>
             <span className="tabular-nums normal-case tracking-normal text-[var(--color-text-secondary)]">
               Film {formatClock(filmAtPlayhead)} · in file {formatClock(fileTc)}
             </span>
@@ -320,14 +441,25 @@ export function ShotVideoTransport({
             />
             {hover != null && hoverFilm != null ? (
               <div
-                className="pointer-events-none absolute bottom-full z-10 mb-1 whitespace-nowrap rounded-md border border-[var(--color-border-default)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-primary)] shadow-lg"
+                className="pointer-events-none absolute bottom-full z-10 mb-1 flex flex-col items-center gap-1 rounded-md border border-[var(--color-border-default)] px-2 py-1.5 font-mono text-[10px] text-[var(--color-text-primary)] shadow-lg"
                 style={{
-                  left: clamp(hover.x, 56, (railRef.current?.clientWidth ?? 200) - 56),
+                  left: clamp(hover.x, 72, (railRef.current?.clientWidth ?? 200) - 72),
                   transform: "translateX(-50%)",
                   backgroundColor: "color-mix(in oklch, var(--color-surface-primary) 94%, transparent)",
                 }}
               >
-                Shot +{hover.into.toFixed(2)}s · Film {formatClock(hoverFilm)}
+                {!previewError ? (
+                  <canvas
+                    ref={canvasRef}
+                    width={PREVIEW_CANVAS_W}
+                    height={PREVIEW_CANVAS_H}
+                    className="block rounded-sm border border-[var(--color-border-subtle)] bg-black"
+                  />
+                ) : null}
+                <span className="whitespace-nowrap">
+                  Shot +{hover.into.toFixed(2)}s · Film {formatClock(hoverFilm)}
+                  {previewError ? " · preview off (CORS or decode)" : ""}
+                </span>
               </div>
             ) : null}
           </div>
