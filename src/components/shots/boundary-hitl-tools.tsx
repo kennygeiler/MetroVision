@@ -20,6 +20,10 @@ type BoundaryHitlToolsProps = {
   hasVideoClip?: boolean;
   /** Bumps sync when the clip URL changes (remount). */
   videoUrlKey?: string | null;
+  splitAt: string;
+  onSplitAtChange: (value: string) => void;
+  /** When true, `ShotVideoTransport` keeps `splitAt` in sync; otherwise poll the video (native controls path). */
+  playheadSyncedByTransport: boolean;
 };
 
 function isEditableTarget(target: EventTarget | null) {
@@ -42,9 +46,11 @@ export function BoundaryHitlTools({
   videoRef,
   hasVideoClip = false,
   videoUrlKey = null,
+  splitAt,
+  onSplitAtChange,
+  playheadSyncedByTransport,
 }: BoundaryHitlToolsProps) {
   const router = useRouter();
-  const [splitAt, setSplitAt] = useState("");
   const [splitting, setSplitting] = useState(false);
   const [merging, setMerging] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -54,11 +60,15 @@ export function BoundaryHitlTools({
   const mediaAnchor = clipMediaAnchorStartTc ?? startTc;
   const usePlayhead = Boolean(hasVideoClip && videoRef && mediaAnchor != null);
 
-  // Poll `currentTime`: `timeupdate` is sparse while playing and `seeking` often fires before the
-  // element’s `currentTime` matches the scrub handle, so the split field goes stale without polling.
-  // UI shows seconds **into this shot** (matches native player 0…duration when the file is a per-shot clip).
+  // When there is no custom transport, native controls still need the split field to follow the playhead.
   useEffect(() => {
-    if (!usePlayhead || !videoRef || mediaAnchor == null || startTc == null) {
+    if (
+      playheadSyncedByTransport ||
+      !usePlayhead ||
+      !videoRef ||
+      mediaAnchor == null ||
+      startTc == null
+    ) {
       return;
     }
 
@@ -71,17 +81,26 @@ export function BoundaryHitlTools({
       const filmSec = mediaAnchor + video.currentTime;
       const intoShot = filmSec - startTc;
       const next = intoShot.toFixed(3);
-      setSplitAt((prev) => (prev === next ? prev : next));
+      onSplitAtChange(next);
     };
 
-    const intervalId = window.setInterval(syncFromVideo, 60);
+    const intervalId = window.setInterval(syncFromVideo, 80);
     syncFromVideo();
 
     return () => {
       alive = false;
       window.clearInterval(intervalId);
     };
-  }, [usePlayhead, videoRef, mediaAnchor, startTc, shotId, videoUrlKey]);
+  }, [
+    playheadSyncedByTransport,
+    usePlayhead,
+    videoRef,
+    mediaAnchor,
+    startTc,
+    shotId,
+    videoUrlKey,
+    onSplitAtChange,
+  ]);
 
   const readSplitSec = useCallback((): number | null => {
     if (usePlayhead && videoRef?.current && mediaAnchor != null && startTc != null) {
@@ -237,7 +256,7 @@ export function BoundaryHitlTools({
                   : "…"
               }
               value={splitAt}
-              onChange={(e) => setSplitAt(e.target.value)}
+              onChange={(e) => onSplitAtChange(e.target.value)}
               className="h-8 w-full max-w-[14rem] rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-2 font-mono text-sm text-[var(--color-text-primary)] read-only:cursor-default read-only:opacity-90"
             />
             {usePlayhead ? (

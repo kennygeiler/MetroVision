@@ -1,0 +1,343 @@
+"use client";
+
+import type { RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Pause, Play, Volume2, VolumeX } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+
+type SegmentWindow = { offset: number; end: number };
+
+type ShotVideoTransportProps = {
+  videoRef: RefObject<HTMLVideoElement | null>;
+  /** Film time at `video.currentTime === 0`. */
+  mediaAnchor: number;
+  startTc: number;
+  endTc: number;
+  segment: SegmentWindow;
+  /** Bump when clip URL changes. */
+  shotKey: string;
+  splitAt?: string;
+  onSplitAtChange?: (value: string) => void;
+};
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, n));
+}
+
+/** Shot-relative or film seconds — sub-minute uses `12.4s`, longer uses `m:ss.s`. */
+function formatClock(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) {
+    return "0.0s";
+  }
+  const m = Math.floor(sec / 60);
+  const s = sec - m * 60;
+  if (m === 0) {
+    return `${s.toFixed(1)}s`;
+  }
+  const whole = Math.floor(s);
+  const frac = (s - whole).toFixed(1).slice(1);
+  return `${m}:${String(whole).padStart(2, "0")}${frac}`;
+}
+
+export function ShotVideoTransport({
+  videoRef,
+  mediaAnchor,
+  startTc,
+  endTc,
+  segment,
+  shotKey,
+  splitAt,
+  onSplitAtChange,
+}: ShotVideoTransportProps) {
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const [intoShot, setIntoShot] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [hover, setHover] = useState<{ x: number; into: number } | null>(null);
+  const dragRef = useRef(false);
+
+  const shotDuration = endTc - startTc;
+
+  const fileTimeFromIntoShot = useCallback(
+    (into: number) => startTc + into - mediaAnchor,
+    [startTc, mediaAnchor],
+  );
+
+  const intoShotFromClientX = useCallback(
+    (clientX: number) => {
+      const el = railRef.current;
+      if (!el || shotDuration <= 0) {
+        return null;
+      }
+      const rect = el.getBoundingClientRect();
+      const t = clamp((clientX - rect.left) / rect.width, 0, 1);
+      return t * shotDuration;
+    },
+    [shotDuration],
+  );
+
+  const seekToIntoShot = useCallback(
+    (into: number) => {
+      const v = videoRef.current;
+      if (!v) {
+        return;
+      }
+      const ft = fileTimeFromIntoShot(into);
+      const next = clamp(ft, segment.offset, segment.end);
+      v.currentTime = next;
+    },
+    [videoRef, fileTimeFromIntoShot, segment],
+  );
+
+  const syncFromVideo = useCallback(() => {
+    if (dragRef.current) {
+      return;
+    }
+    const v = videoRef.current;
+    if (!v || shotDuration <= 0) {
+      return;
+    }
+    const film = mediaAnchor + v.currentTime;
+    const into = film - startTc;
+    const clampedInto = clamp(into, 0, shotDuration);
+    setIntoShot(clampedInto);
+    if (onSplitAtChange) {
+      onSplitAtChange(clampedInto.toFixed(3));
+    }
+  }, [videoRef, mediaAnchor, startTc, shotDuration, onSplitAtChange]);
+
+  const applyIntoShot = useCallback(
+    (into: number) => {
+      const clamped = clamp(into, 0, shotDuration);
+      setIntoShot(clamped);
+      onSplitAtChange?.(clamped.toFixed(3));
+      seekToIntoShot(clamped);
+    },
+    [shotDuration, onSplitAtChange, seekToIntoShot],
+  );
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) {
+      return;
+    }
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onVolume = () => setMuted(v.muted);
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("volumechange", onVolume);
+    setMuted(v.muted);
+    setPlaying(!v.paused);
+    return () => {
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+      v.removeEventListener("volumechange", onVolume);
+    };
+  }, [videoRef, shotKey]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) {
+      return;
+    }
+    const onMeta = () => syncFromVideo();
+    v.addEventListener("loadedmetadata", onMeta);
+    v.addEventListener("seeked", syncFromVideo);
+    syncFromVideo();
+    return () => {
+      v.removeEventListener("loadedmetadata", onMeta);
+      v.removeEventListener("seeked", syncFromVideo);
+    };
+  }, [videoRef, shotKey, syncFromVideo]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (!dragRef.current) {
+        syncFromVideo();
+      }
+    }, 80);
+    return () => window.clearInterval(id);
+  }, [syncFromVideo]);
+
+  const togglePlay = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) {
+      return;
+    }
+    if (v.paused) {
+      void v.play();
+    } else {
+      v.pause();
+    }
+  }, [videoRef]);
+
+  const toggleMute = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) {
+      return;
+    }
+    v.muted = !v.muted;
+    setMuted(v.muted);
+  }, [videoRef]);
+
+  const onRailPointerDown = (e: { clientX: number; pointerId: number; target: EventTarget | null }) => {
+    const into = intoShotFromClientX(e.clientX);
+    if (into == null) {
+      return;
+    }
+    dragRef.current = true;
+    if (e.target instanceof HTMLElement) {
+      e.target.setPointerCapture(e.pointerId);
+    }
+    applyIntoShot(into);
+  };
+
+  const onRailPointerMove = (e: { clientX: number }) => {
+    if (!dragRef.current) {
+      const into = intoShotFromClientX(e.clientX);
+      if (into != null && railRef.current) {
+        const rect = railRef.current.getBoundingClientRect();
+        setHover({ x: e.clientX - rect.left, into });
+      }
+      return;
+    }
+    const into = intoShotFromClientX(e.clientX);
+    if (into != null) {
+      applyIntoShot(into);
+    }
+  };
+
+  const onRailPointerUp = (e: { pointerId: number; target: EventTarget | null }) => {
+    if (dragRef.current) {
+      dragRef.current = false;
+      try {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      syncFromVideo();
+    }
+  };
+
+  const onRailLeave = () => setHover(null);
+
+  const playPct = shotDuration > 0 ? clamp(intoShot / shotDuration, 0, 1) * 100 : 0;
+  const splitParsed = splitAt != null && splitAt !== "" ? Number(splitAt) : NaN;
+  const showSplitGhost =
+    onSplitAtChange &&
+    Number.isFinite(splitParsed) &&
+    Math.abs(splitParsed - intoShot) > 0.08 &&
+    splitParsed > 0 &&
+    splitParsed < shotDuration;
+  const splitPct = showSplitGhost ? clamp(splitParsed / shotDuration, 0, 1) * 100 : null;
+
+  const filmAtPlayhead = startTc + intoShot;
+  const fileTc = fileTimeFromIntoShot(intoShot);
+  const hoverFilm = hover != null ? startTc + hover.into : null;
+
+  return (
+    <div
+      className="border-t px-3 py-3"
+      style={{
+        backgroundColor: "color-mix(in oklch, var(--color-surface-secondary) 88%, transparent)",
+        borderColor: "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-9 shrink-0 rounded-full text-[var(--color-text-primary)]"
+            aria-label={playing ? "Pause" : "Play"}
+            onClick={togglePlay}
+          >
+            {playing ? <Pause className="size-5" /> : <Play className="size-5" />}
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-9 shrink-0 rounded-full text-[var(--color-text-primary)]"
+            aria-label={muted ? "Unmute" : "Mute"}
+            onClick={toggleMute}
+          >
+            {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+          </Button>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+            <span>Shot timeline (this segment)</span>
+            <span className="tabular-nums normal-case tracking-normal text-[var(--color-text-secondary)]">
+              Film {formatClock(filmAtPlayhead)} · in file {formatClock(fileTc)}
+            </span>
+          </div>
+
+          <div
+            ref={railRef}
+            className="relative h-9 cursor-pointer rounded-md px-0 py-2"
+            role="slider"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(shotDuration * 1000) / 1000}
+            aria-valuenow={Math.round(intoShot * 1000) / 1000}
+            aria-label="Playhead in this shot"
+            onPointerDown={onRailPointerDown}
+            onPointerMove={onRailPointerMove}
+            onPointerUp={onRailPointerUp}
+            onPointerCancel={onRailPointerUp}
+            onPointerLeave={onRailLeave}
+          >
+            <div
+              className="pointer-events-none absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
+              style={{
+                backgroundColor: "color-mix(in oklch, var(--color-border-default) 55%, var(--color-surface-primary))",
+              }}
+            />
+            <div
+              className="pointer-events-none absolute left-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
+              style={{
+                width: `${playPct}%`,
+                backgroundColor: "color-mix(in oklch, var(--color-accent-light) 75%, var(--color-surface-primary))",
+              }}
+            />
+            {splitPct != null ? (
+              <div
+                className="pointer-events-none absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400/90"
+                style={{ left: `${splitPct}%` }}
+                title="Split-at (typed) differs from playhead"
+              />
+            ) : null}
+            <div
+              className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--color-surface-primary)] shadow-md"
+              style={{
+                left: `${playPct}%`,
+                backgroundColor: "var(--color-accent-light)",
+              }}
+            />
+            {hover != null && hoverFilm != null ? (
+              <div
+                className="pointer-events-none absolute bottom-full z-10 mb-1 whitespace-nowrap rounded-md border border-[var(--color-border-default)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-primary)] shadow-lg"
+                style={{
+                  left: clamp(hover.x, 56, (railRef.current?.clientWidth ?? 200) - 56),
+                  transform: "translateX(-50%)",
+                  backgroundColor: "color-mix(in oklch, var(--color-surface-primary) 94%, transparent)",
+                }}
+              >
+                Shot +{hover.into.toFixed(2)}s · Film {formatClock(hoverFilm)}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-1 flex justify-between font-mono text-[11px] tabular-nums text-[var(--color-text-secondary)]">
+            <span>{formatClock(intoShot)}</span>
+            <span>{formatClock(shotDuration)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

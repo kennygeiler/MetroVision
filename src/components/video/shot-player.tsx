@@ -8,15 +8,20 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { MetadataOverlay } from "@/components/video/metadata-overlay";
+import { ShotVideoTransport } from "@/components/video/shot-video-transport";
+import { getShotPlaybackSegment } from "@/lib/shot-playback-segment";
 import type { ShotWithDetails } from "@/lib/types";
 
 type ShotPlayerProps = {
   shot: ShotWithDetails;
   /** When set, attached to the underlying `<video>` for timeline sync (e.g. boundary HITL). */
   videoRef?: RefObject<HTMLVideoElement | null>;
+  /** Controlled: seconds into shot (synced from custom transport when present). */
+  splitAt?: string;
+  onSplitAtChange?: (value: string) => void;
 };
 
-export function ShotPlayer({ shot, videoRef }: ShotPlayerProps) {
+export function ShotPlayer({ shot, videoRef, splitAt, onSplitAtChange }: ShotPlayerProps) {
   const [showOverlay, setShowOverlay] = useState(true);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -30,19 +35,14 @@ export function ShotPlayer({ shot, videoRef }: ShotPlayerProps) {
     [videoRef],
   );
 
-  const anchorTc = shot.clipMediaAnchorStartTc ?? shot.startTc ?? null;
-
+  const playbackSegment = useMemo(() => getShotPlaybackSegment(shot), [shot]);
   const segment = useMemo(() => {
-    if (!shot.videoUrl || shot.startTc == null || shot.duration <= 0 || anchorTc == null) {
+    if (!playbackSegment) {
       return null;
     }
-    const offset = shot.startTc - anchorTc;
-    const end = offset + shot.duration;
-    if (!Number.isFinite(offset) || !Number.isFinite(end)) {
-      return null;
-    }
-    return { offset, end };
-  }, [shot.videoUrl, shot.startTc, shot.duration, anchorTc]);
+    return { offset: playbackSegment.offset, end: playbackSegment.end };
+  }, [playbackSegment]);
+  const useCustomTransport = Boolean(playbackSegment && shot.videoUrl);
 
   useEffect(() => {
     const v = localVideoRef.current;
@@ -85,14 +85,23 @@ export function ShotPlayer({ shot, videoRef }: ShotPlayerProps) {
   return (
     <div className="space-y-4">
       <div
-        className="relative aspect-video overflow-hidden rounded-[calc(var(--radius-xl)_+_6px)] border shadow-[var(--shadow-xl)]"
+        className="overflow-hidden rounded-[calc(var(--radius-xl)_+_6px)] border shadow-[var(--shadow-xl)]"
         style={{
-          background:
-            "linear-gradient(135deg, color-mix(in oklch, var(--color-surface-secondary) 88%, transparent), color-mix(in oklch, var(--color-surface-primary) 92%, transparent))",
           borderColor:
             "color-mix(in oklch, var(--color-border-default) 82%, transparent)",
         }}
       >
+        <div
+          className={
+            useCustomTransport
+              ? "relative aspect-video overflow-hidden rounded-t-[calc(var(--radius-xl)_+_6px)]"
+              : "relative aspect-video overflow-hidden rounded-[calc(var(--radius-xl)_+_6px)]"
+          }
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in oklch, var(--color-surface-secondary) 88%, transparent), color-mix(in oklch, var(--color-surface-primary) 92%, transparent))",
+          }}
+        >
         <div
           aria-hidden="true"
           className="absolute inset-0"
@@ -108,7 +117,7 @@ export function ShotPlayer({ shot, videoRef }: ShotPlayerProps) {
             className="absolute inset-0 h-full w-full object-cover"
             src={shot.videoUrl}
             poster={shot.thumbnailUrl ?? undefined}
-            controls
+            controls={!useCustomTransport}
             muted
             playsInline
             preload="metadata"
@@ -165,6 +174,20 @@ export function ShotPlayer({ shot, videoRef }: ShotPlayerProps) {
         </div>
 
         {showOverlay ? <MetadataOverlay shot={shot} /> : null}
+        </div>
+
+        {playbackSegment ? (
+          <ShotVideoTransport
+            videoRef={localVideoRef}
+            mediaAnchor={playbackSegment.mediaAnchor}
+            startTc={playbackSegment.startTc}
+            endTc={playbackSegment.endTc}
+            segment={{ offset: playbackSegment.offset, end: playbackSegment.end }}
+            shotKey={`${shot.id}:${shot.videoUrl ?? ""}`}
+            splitAt={splitAt}
+            onSplitAtChange={onSplitAtChange}
+          />
+        ) : null}
       </div>
     </div>
   );
