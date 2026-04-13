@@ -646,6 +646,20 @@ export async function getFilmReclassifyTargets(filmId: string): Promise<{
   };
 }
 
+/** Distinct non-null `shots.source_file` values for a film (hints for matching S3 source keys). */
+export async function getFilmDistinctShotSourceFiles(filmId: string): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ sourceFile: schema.shots.sourceFile })
+    .from(schema.shots)
+    .where(and(eq(schema.shots.filmId, filmId), isNotNull(schema.shots.sourceFile)));
+  const out: string[] = [];
+  for (const r of rows) {
+    const s = r.sourceFile?.trim();
+    if (s) out.push(s);
+  }
+  return [...new Set(out)];
+}
+
 export async function getObjectsForShot(shotId: string) {
   const rows = await db
     .select()

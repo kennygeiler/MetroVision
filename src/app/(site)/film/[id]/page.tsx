@@ -37,7 +37,12 @@ export default async function FilmDetailPage({ params }: Props) {
     yearStr !== ""
       ? `/ingest?filmTitle=${encodeURIComponent(film.title)}&director=${encodeURIComponent(film.director)}&year=${encodeURIComponent(yearStr)}`
       : `/ingest?filmTitle=${encodeURIComponent(film.title)}&director=${encodeURIComponent(film.director)}`;
-  const selectiveReclassifyHref = `/ingest?reclassifyFilmId=${encodeURIComponent(film.id)}`;
+  const selectiveParams = new URLSearchParams();
+  selectiveParams.set("reclassifyFilmId", film.id);
+  selectiveParams.set("filmTitle", film.title);
+  selectiveParams.set("director", film.director);
+  if (yearStr !== "") selectiveParams.set("year", yearStr);
+  const selectiveReclassifyHref = `/ingest?${selectiveParams.toString()}`;
 
   return (
     <div className="space-y-10 pb-16">

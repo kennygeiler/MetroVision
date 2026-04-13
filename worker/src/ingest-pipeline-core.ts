@@ -8,6 +8,7 @@ import { pipeline as streamPipeline } from "node:stream/promises";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "./db.js";
+import { downloadBucketObjectToFile } from "./s3.js";
 import * as ffmpegBinModule from "../../src/lib/ffmpeg-bin.js";
 import * as ingestPipelineModule from "../../src/lib/ingest-pipeline.js";
 import * as pipelineProvenance from "../../src/lib/pipeline-provenance.js";
@@ -74,6 +75,37 @@ export type WorkerIngestProgressSnapshot = {
   writeDone?: number;
 };
 
+/** Virtual-hosted–style URLs: `https://bucket.s3.region.amazonaws.com/key?...` */
+function tryParseS3VirtualHostedObjectUrl(
+  videoUrl: string,
+): { bucket: string; key: string } | null {
+  try {
+    const u = new URL(videoUrl);
+    const m = /^([^.]+)\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/i.exec(u.hostname);
+    if (!m) return null;
+    const bucket = m[1];
+    let key = u.pathname.replace(/^\/+/, "");
+    try {
+      key = decodeURIComponent(key);
+    } catch {
+      /* keep encoded path */
+    }
+    if (!key) return null;
+    return { bucket, key };
+  } catch {
+    return null;
+  }
+}
+
+function sourceDownloadTimeoutMs(): number {
+  const raw = process.env.METROVISION_SOURCE_DOWNLOAD_TIMEOUT_MS?.trim();
+  if (raw === undefined || raw === "") return 3_600_000;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 3_600_000;
+  if (n === 0) return 0;
+  return Math.min(Math.floor(n), 12 * 3_600_000);
+}
+
 async function resolveVideo(videoUrl: string): Promise<string> {
   if (!videoUrl.startsWith("http")) {
     await access(videoUrl, constants.R_OK);
@@ -85,12 +117,33 @@ async function resolveVideo(videoUrl: string): Promise<string> {
   const localPath = path.join(downloadDir, `${Date.now()}-film.mp4`);
 
   const t0 = Date.now();
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const envBucket = process.env.AWS_S3_BUCKET?.trim() ?? "";
+  const parsedS3 = tryParseS3VirtualHostedObjectUrl(videoUrl);
+  if (parsedS3 && envBucket && parsedS3.bucket === envBucket) {
     try {
-      console.log(`[worker] Downloading video via HTTP stream (attempt ${attempt + 1}/2)...`);
+      console.log(
+        `[worker] Downloading source via S3 GetObject (${parsedS3.key.slice(0, 80)}${parsedS3.key.length > 80 ? "…" : ""})…`,
+      );
+      await downloadBucketObjectToFile(parsedS3.key, localPath);
+      console.log(
+        `[worker] Download complete (S3 GetObject): ${((Date.now() - t0) / 1000).toFixed(1)}s`,
+      );
+      return localPath;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[worker] S3 GetObject download failed (${msg}); falling back to HTTP stream…`,
+      );
+    }
+  }
+
+  const timeoutMs = sourceDownloadTimeoutMs();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      console.log(`[worker] Downloading video via HTTP stream (attempt ${attempt + 1}/3)…`);
       const res = await fetch(videoUrl, {
         redirect: "follow",
-        signal: AbortSignal.timeout(180_000),
+        ...(timeoutMs > 0 ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
       });
       if (!res.ok) {
         const errBody = (await res.text().catch(() => "")).slice(0, 280);
@@ -111,10 +164,12 @@ async function resolveVideo(videoUrl: string): Promise<string> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const retryable =
-        /ECONNRESET|ETIMEDOUT|timed out|terminated|network|fetch failed|aborted/i.test(msg);
-      if (!retryable || attempt === 1) {
+        /ECONNRESET|ETIMEDOUT|timed out|terminated|network|fetch failed|aborted|operation was aborted/i.test(
+          msg,
+        );
+      if (!retryable || attempt === 2) {
         console.warn(
-          `[worker] HTTP stream download failed (${msg}). Falling back to FFmpeg remux...`,
+          `[worker] HTTP stream download failed (${msg}). Falling back to FFmpeg remux…`,
         );
         break;
       }

@@ -70,6 +70,12 @@ async function readFetchErrorMessage(res: Response): Promise<string> {
   return oneLine || `Request failed (HTTP ${res.status})`;
 }
 
+function formatS3KeyOptionLabel(key: string): string {
+  const parts = key.split("/").filter(Boolean);
+  if (parts.length <= 3) return key;
+  return `…/${parts.slice(-3).join("/")}`;
+}
+
 function uploadSizeHint(status: number, message: string): string {
   const tooBig =
     status === 413 ||
@@ -211,6 +217,10 @@ function IngestPageContent() {
   const [selectiveReclassifyFilmId, setSelectiveReclassifyFilmId] = useState<string | null>(null);
   const [selectiveReclassifyShotIds, setSelectiveReclassifyShotIds] = useState<string[]>([]);
   const [selectiveReclassifyNotice, setSelectiveReclassifyNotice] = useState<string | null>(null);
+  const [s3FilmSourceKeys, setS3FilmSourceKeys] = useState<string[]>([]);
+  const [s3FilmSourceListState, setS3FilmSourceListState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -221,6 +231,28 @@ function IngestPageContent() {
         if (!cancelled) setBoundaryPresets(d.presets ?? []);
       } catch {
         if (!cancelled) setBoundaryPresets([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setS3FilmSourceListState("loading");
+    (async () => {
+      try {
+        const r = await fetch("/api/s3/film-sources");
+        const d = (await r.json()) as { keys?: string[] };
+        if (cancelled) return;
+        setS3FilmSourceKeys(Array.isArray(d.keys) ? d.keys : []);
+        setS3FilmSourceListState("ready");
+      } catch {
+        if (!cancelled) {
+          setS3FilmSourceKeys([]);
+          setS3FilmSourceListState("error");
+        }
       }
     })();
     return () => {
@@ -252,6 +284,7 @@ function IngestPageContent() {
         const j = (await r.json()) as {
           shotIds?: string[];
           film?: { title: string; director: string; year: number | null };
+          suggestedSourceKey?: string | null;
         };
         if (cancelled) return;
         setSelectiveReclassifyFilmId(fid);
@@ -260,6 +293,10 @@ function IngestPageContent() {
         if (j.film?.director) setDirector(j.film.director);
         if (j.film?.year != null && Number.isFinite(j.film.year)) {
           setYear(String(Math.trunc(j.film.year)));
+        }
+        const sug = j.suggestedSourceKey?.trim();
+        if (sug) {
+          setReuseSourceKey((prev) => (prev.trim() ? prev : sug));
         }
         const n = j.shotIds?.length ?? 0;
         if (n === 0) {
@@ -641,7 +678,11 @@ function IngestPageContent() {
                 type="file"
                 accept="video/*"
                 className="hidden"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setSelectedFile(f);
+                  if (f) setReuseSourceKey("");
+                }}
                 disabled={phase !== "form"}
               />
               {selectedFile ? (
@@ -675,6 +716,43 @@ function IngestPageContent() {
             <label className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
               Skip upload — S3 source key
             </label>
+            <div className="mt-2 space-y-1">
+              <label className="sr-only" htmlFor="ingest-s3-source-select">
+                Choose existing source from bucket
+              </label>
+              <select
+                id="ingest-s3-source-select"
+                disabled={phase !== "form" || s3FilmSourceListState === "loading"}
+                value={
+                  s3FilmSourceKeys.includes(reuseSourceKey.trim()) ? reuseSourceKey.trim() : ""
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v) {
+                    setReuseSourceKey(v);
+                    setSelectedFile(null);
+                  } else {
+                    setReuseSourceKey("");
+                  }
+                }}
+                className="w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-surface-primary)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-text-accent)] disabled:opacity-50"
+              >
+                <option value="">
+                  {s3FilmSourceListState === "loading"
+                    ? "Loading bucket sources…"
+                    : s3FilmSourceListState === "error"
+                      ? "Could not list bucket — paste key below"
+                      : s3FilmSourceKeys.length === 0
+                        ? "No video sources found in bucket — paste key or upload"
+                        : "New upload / custom S3 key (below)"}
+                </option>
+                {s3FilmSourceKeys.map((k) => (
+                  <option key={k} value={k}>
+                    {formatS3KeyOptionLabel(k)}
+                  </option>
+                ))}
+              </select>
+            </div>
             <textarea
               value={reuseSourceKey}
               onChange={(e) => setReuseSourceKey(e.target.value)}

@@ -1,3 +1,6 @@
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
+
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -31,6 +34,18 @@ export async function uploadToS3(key: string, body: Buffer | Uint8Array, content
 
 export async function getPresignedUrl(key: string, expiresIn = 3600): Promise<string> {
   return getSignedUrl(getClient(), new GetObjectCommand({ Bucket: getBucket(), Key: key }), { expiresIn });
+}
+
+/** Stream a bucket object to disk (for large sources; avoids ffmpeg-over-HTTPS remux). */
+export async function downloadBucketObjectToFile(key: string, destPath: string): Promise<void> {
+  const out = await getClient().send(
+    new GetObjectCommand({ Bucket: getBucket(), Key: key }),
+  );
+  const body = out.Body;
+  if (!body) {
+    throw new Error("S3 GetObject returned an empty body.");
+  }
+  await pipeline(body as NodeJS.ReadableStream, createWriteStream(destPath));
 }
 
 export function buildS3Key(filmSlug: string, type: "source" | "clips" | "thumbnails", filename: string): string {

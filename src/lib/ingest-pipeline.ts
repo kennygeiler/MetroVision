@@ -296,7 +296,22 @@ export async function runCommand(
       }
       done(err, null);
     });
-    proc.on("close", (code) => done(null, code));
+    proc.on("close", (code, signal) => {
+      if (code === null && signal) {
+        const hint =
+          signal === "SIGKILL"
+            ? " (often OOM killer or host memory limit — try a larger worker or METROVISION_SOURCE_DOWNLOAD_TIMEOUT_MS / S3 SDK path)"
+            : "";
+        done(
+          new Error(
+            `${command} exited with signal ${signal}${hint}.\nCommand: ${`${command} ${args.join(" ")}`.trim()}`,
+          ),
+          null,
+        );
+        return;
+      }
+      done(null, code);
+    });
   });
 }
 

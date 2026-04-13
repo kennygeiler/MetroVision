@@ -2,6 +2,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -111,4 +112,76 @@ export function buildS3Key(
   filename: string,
 ): string {
   return `films/${filmSlug}/${type}/${filename}`;
+}
+
+/** Objects under `films/.../source/` with a common video extension. */
+const FILM_SOURCE_VIDEO_KEY_RE = /\/source\/[^/]+\.(mp4|m4v|mov|mkv|webm|avi)$/i;
+
+const SOURCE_VIDEO_EXT_RE = /\.(mp4|m4v|mov|mkv|webm|avi)$/i;
+
+/**
+ * List source video object keys across all film folders (paginated, capped).
+ * Returns [] when `AWS_S3_BUCKET` is unset or on listing failure (caller may catch).
+ */
+export async function listFilmSourceVideoKeys(maxTotal = 500): Promise<string[]> {
+  const bucket = BUCKET;
+  if (!bucket) return [];
+  const client = getClient();
+  const keys: string[] = [];
+  let token: string | undefined;
+  while (keys.length < maxTotal) {
+    const res = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: "films/",
+        MaxKeys: Math.min(1000, maxTotal - keys.length + 100),
+        ContinuationToken: token,
+      }),
+    );
+    for (const o of res.Contents ?? []) {
+      const k = o.Key;
+      if (k && FILM_SOURCE_VIDEO_KEY_RE.test(k)) keys.push(k);
+      if (keys.length >= maxTotal) break;
+    }
+    if (!res.IsTruncated || keys.length >= maxTotal) break;
+    token = res.NextContinuationToken;
+    if (!token) break;
+  }
+  return [...new Set(keys)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * List source videos for one film slug folder (`films/{slug}/source/`).
+ * `filmSlug` must be a single path segment (e.g. `ran-1985`).
+ */
+export async function listFilmFolderSourceVideoKeys(
+  filmSlug: string,
+  maxKeys = 80,
+): Promise<string[]> {
+  const bucket = BUCKET;
+  if (!bucket) return [];
+  if (!/^[a-z0-9-]+$/i.test(filmSlug)) return [];
+  const prefix = `films/${filmSlug}/source/`;
+  const client = getClient();
+  const keys: string[] = [];
+  let token: string | undefined;
+  while (keys.length < maxKeys) {
+    const res = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        MaxKeys: Math.min(1000, maxKeys - keys.length + 20),
+        ContinuationToken: token,
+      }),
+    );
+    for (const o of res.Contents ?? []) {
+      const k = o.Key;
+      if (k && SOURCE_VIDEO_EXT_RE.test(k)) keys.push(k);
+      if (keys.length >= maxKeys) break;
+    }
+    if (!res.IsTruncated || keys.length >= maxKeys) break;
+    token = res.NextContinuationToken;
+    if (!token) break;
+  }
+  return [...new Set(keys)].sort((a, b) => a.localeCompare(b));
 }
