@@ -12,6 +12,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:build": "DATABASE_URL='postgresql://ci:ci@127.0.0.1:5432/ci' NEXT_PUBLIC_SITE_URL='https://metrovision.vercel.app' NODE_OPTIONS=--max-old-space-size=4096 next build",
+    "test:worker:build": "pnpm -C worker build && pnpm -C worker typecheck",
     "test:ingest-contracts": "vitest run src/lib/__tests__/ingest-film-stream-contract.test.ts src/lib/__tests__/ingest-film-async-contract.test.ts src/lib/__tests__/worker-http.integration.test.ts",
     "worker:reachability-smoke": "tsx scripts/worker-reachability-smoke.ts",
     "check:schema-drift": "tsx scripts/check-schema-drift.ts",

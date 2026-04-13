@@ -27,6 +27,8 @@ jobs:
       - name: Production build (same as pnpm test:build)
         run: pnpm test:build
       - run: pnpm check:worker
+      - name: Worker deploy build smoke
+        run: pnpm test:worker:build
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
