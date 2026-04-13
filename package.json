@@ -86,6 +86,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "esbuild",
       "ffmpeg-static"
     ]
   }
