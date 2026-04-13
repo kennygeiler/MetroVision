@@ -531,7 +531,6 @@ export async function runWorkerIngestFilmPipeline(
         worker: w,
         status: "complete",
         framing: result.framing,
-        sceneTitle: result.scene_title,
       });
       classifyDone++;
       if (classifyDone % 10 === 0 || classifyDone === splits.length) {

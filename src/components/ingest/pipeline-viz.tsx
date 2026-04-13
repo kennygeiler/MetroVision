@@ -33,7 +33,6 @@ type FrameState = {
   classify: "pending" | "active" | "complete";
   write: "pending" | "active" | "complete";
   movementType?: string;
-  sceneTitle?: string;
   worker?: number;
   extractStartedAt?: number;
   extractDuration?: number;
@@ -571,7 +570,6 @@ export function PipelineViz({
                     ?? (typeof raw.movementType === "string" ? raw.movementType : null);
                   if (slug) u.movementType = slug;
                 }
-                if (e.sceneTitle) u.sceneTitle = e.sceneTitle as string;
               } else if (step === "write") u.write = status === "start" ? "active" : "complete";
               if (e.worker !== undefined) u.worker = e.worker as number;
               return u;
@@ -1002,7 +1000,6 @@ export function PipelineViz({
     ? (state.backgroundPoll?.writeDone ?? 0)
     : state.frames.filter((f) => f.write === "complete").length;
   const dedupedClassifierLabels = dedupeClassifierFramingLabels(state.frames);
-  const discoveredScenes = new Set(state.frames.map((f) => f.sceneTitle).filter(Boolean));
   const activeStep = rightmostActiveStep(state.steps);
   const isDetecting =
     activeStep?.id === "detect" ||
@@ -1060,23 +1057,6 @@ export function PipelineViz({
 
   const etas = useETAs(state, elapsed);
   const pacingInfo = PACING[etas.pacing];
-
-  // Classifier title streaks (Gemini `scene_title` — optional note per shot, not a screenplay scene)
-  const classifierTitleBrackets: { title: string; startIdx: number; endIdx: number }[] = [];
-  if (state.frames.length > 0) {
-    let currentTitle = "";
-    let startIdx = 0;
-    for (let i = 0; i < state.frames.length; i++) {
-      const t = state.frames[i].sceneTitle ?? "";
-      if (t && t !== currentTitle) {
-        if (currentTitle) classifierTitleBrackets.push({ title: currentTitle, startIdx, endIdx: i - 1 });
-        currentTitle = t;
-        startIdx = i;
-      }
-    }
-    if (currentTitle)
-      classifierTitleBrackets.push({ title: currentTitle, startIdx, endIdx: state.frames.length - 1 });
-  }
 
   // Step progress percentages
   function getStepProgress(stepId: StepId): number {
@@ -1280,23 +1260,6 @@ export function PipelineViz({
             className="relative overflow-hidden rounded-[var(--radius-xl)] border"
             style={{ backgroundColor: "#0d0d12", borderColor: "color-mix(in oklch, var(--color-border-default) 50%, transparent)" }}
           >
-            {/* Classifier title streaks */}
-            {classifierTitleBrackets.length > 0 ? (
-              <div className="relative flex h-8 items-end overflow-x-auto px-4">
-                {classifierTitleBrackets.map((b, i) => {
-                  const frameW = 44;
-                  const left = b.startIdx * frameW;
-                  const width = (b.endIdx - b.startIdx + 1) * frameW - 4;
-                  return (
-                    <div key={i} className="absolute bottom-0 flex flex-col items-center" style={{ left: `${left + 16}px`, width: `${width}px` }}>
-                      <span className="max-w-full truncate font-mono text-[8px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-signal-violet)]">{b.title}</span>
-                      <div className="mt-0.5 h-px w-full" style={{ backgroundColor: "var(--color-signal-violet)", opacity: 0.4 }} />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-
             {/* Strip */}
             <div ref={stripRef} className="flex gap-1 overflow-x-auto px-4 py-4" style={{ scrollbarWidth: "thin", scrollbarColor: "var(--color-surface-tertiary) transparent" }}>
               {state.frames.map((frame) => {
@@ -1370,7 +1333,6 @@ export function PipelineViz({
           <div className="flex gap-8">
             <StatCounter label="Extracted" value={extracted} total={state.totalShots} eta={etas.stepETAs.extract} color="#5cb8d6" />
             <StatCounter label="Classified" value={classified} total={state.totalShots} eta={etas.stepETAs.classify} color="#9b7cd6" />
-            <StatCounter label="Classifier labels" value={discoveredScenes.size} />
             <StatCounter label="Written" value={written} total={state.totalShots} color="#5cd69b" />
           </div>
           {dedupedClassifierLabels.length > 0 ? (

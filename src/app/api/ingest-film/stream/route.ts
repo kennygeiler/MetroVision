@@ -347,7 +347,7 @@ export async function POST(request: Request) {
           emit({ type: "shot", step: "classify", index: split.index, total: splits.length, worker, status: "start" });
           const result = await classifyShot(sourceVideoPath, split, filmTitleStr, directorStr, yearNum, castList);
           const c = result.classification;
-          emit({ type: "shot", step: "classify", index: split.index, total: splits.length, worker, status: "complete", framing: c.framing, sceneTitle: c.scene_title });
+          emit({ type: "shot", step: "classify", index: split.index, total: splits.length, worker, status: "complete", framing: c.framing });
           return result;
         });
         const classifications = classifyResults.map((r) => r.classification);
