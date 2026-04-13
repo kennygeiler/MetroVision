@@ -1,29 +1,21 @@
 "use strict";
 
 /**
- * Bundle the worker without `pnpm exec esbuild`: in some CI/Docker installs the
- * pnpm `.bin/esbuild` shim is invalid (shell sees JS / wrong file → "Syntax error: '(' unexpected").
- * Running esbuild's install.js first materializes `bin/esbuild`; the JS API then spawns it correctly.
+ * Bundle the worker without `pnpm exec esbuild`: some CI/Docker layers ship a broken
+ * pnpm `.bin/esbuild` shim (shell parses JS → "Syntax error: '(' unexpected").
+ *
+ * Do **not** run `esbuild/install.js` here: re-running it validates `esbuild --version`
+ * against package.json and throws if another hoisted binary (e.g. older esbuild) is on disk.
+ * `buildSync` resolves the correct package-local binary via the esbuild JS API.
  */
 
-const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
 const workerRoot = path.join(__dirname, "..");
-const esbuildDir = path.dirname(
-  require.resolve("esbuild/package.json", { paths: [workerRoot] }),
-);
-const installJs = path.join(esbuildDir, "install.js");
 
-const install = spawnSync(process.execPath, [installJs], {
-  stdio: "inherit",
-  cwd: esbuildDir,
-});
-if (install.status !== 0) {
-  process.exit(install.status === null ? 1 : install.status);
-}
+// Resolve from worker package root (not cwd) so monorepo hoisting cannot pick another esbuild.
+const esbuild = require(require.resolve("esbuild", { paths: [workerRoot] }));
 
-const esbuild = require("esbuild");
 esbuild.buildSync({
   absWorkingDir: workerRoot,
   entryPoints: ["src/server.ts"],

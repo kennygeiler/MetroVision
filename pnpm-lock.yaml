@@ -148,7 +148,7 @@ importers:
         specifier: ^0.45.1
         version: 0.45.1(@neondatabase/serverless@1.0.2)(@types/pg@8.18.0)
       esbuild:
-        specifier: ^0.25.9
+        specifier: 0.25.12
         version: 0.25.12
       express:
         specifier: ^5.1.0
