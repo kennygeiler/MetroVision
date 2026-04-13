@@ -15,7 +15,7 @@ export function ArchiveDemoSlice({ framingTypeCount, spotlightShotId }: ArchiveD
 
   return (
     <section
-      className="space-y-8 rounded-[calc(var(--radius-xl)_+_4px)] border p-8 sm:p-10"
+      className="space-y-6 rounded-[calc(var(--radius-xl)_+_4px)] border p-5 sm:space-y-8 sm:p-8 lg:p-10"
       style={{
         borderColor:
           "color-mix(in oklch, var(--color-border-default) 72%, transparent)",
@@ -24,25 +24,25 @@ export function ArchiveDemoSlice({ framingTypeCount, spotlightShotId }: ArchiveD
       }}
       aria-labelledby="demo-slice-heading"
     >
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
+      <div className="grid gap-6 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
+          <p className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)] sm:text-xs">
             Minimum impressive demo
           </p>
           <h2
             id="demo-slice-heading"
-            className="mt-3 text-3xl font-semibold tracking-[var(--letter-spacing-snug)] text-[var(--color-text-primary)] sm:text-4xl"
+            className="mt-2 text-2xl font-semibold tracking-[var(--letter-spacing-snug)] text-[var(--color-text-primary)] sm:mt-3 sm:text-3xl lg:text-4xl"
             style={{ fontFamily: "var(--font-heading)" }}
           >
             One path through real data
           </h2>
-          <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--color-text-secondary)]">
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--color-text-secondary)] sm:mt-4 sm:text-base sm:leading-8">
             Browse the archive, open a shot with provenance, inspect composition
             patterns in a single chart, export with a ready-made citation, and
             iterate shot-boundary presets when you are calibrating ingest.
           </p>
 
-          <ol className="mt-8 space-y-4 text-sm text-[var(--color-text-secondary)]">
+          <ol className="mt-6 space-y-3 text-sm leading-relaxed text-[var(--color-text-secondary)] sm:mt-8 sm:space-y-4 sm:leading-normal">
             <li className="flex gap-3">
               <span className="font-mono text-[var(--color-text-accent)]">01</span>
               <span>
@@ -70,10 +70,13 @@ export function ArchiveDemoSlice({ framingTypeCount, spotlightShotId }: ArchiveD
                   </>
                 ) : (
                   <>
-                    <span className="text-[var(--color-text-tertiary)]">
+                    <Link
+                      href="/browse?view=shots"
+                      className="font-medium text-[var(--color-text-primary)] underline-offset-4 hover:underline"
+                    >
                       Shot detail
-                    </span>{" "}
-                    — seed the archive to link a featured shot here.
+                    </Link>{" "}
+                    — open any row from Browse → Shots.
                   </>
                 )}
               </span>
@@ -127,7 +130,10 @@ export function ArchiveDemoSlice({ framingTypeCount, spotlightShotId }: ArchiveD
           <ArchiveDemoSliceActions spotlightShotId={spotlightShotId} />
         </div>
 
-        <MethodologyBlurb framingTypeCount={framingTypeCount} className="rounded-[var(--radius-xl)] border p-6" />
+        <MethodologyBlurb
+          framingTypeCount={framingTypeCount}
+          className="rounded-[var(--radius-xl)] border p-4 sm:p-6"
+        />
       </div>
     </section>
   );

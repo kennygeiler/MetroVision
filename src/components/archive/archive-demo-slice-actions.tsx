@@ -14,12 +14,12 @@ export function ArchiveDemoSliceActions({
   spotlightShotId,
 }: ArchiveDemoSliceActionsProps) {
   return (
-    <div className="mt-8 flex flex-wrap gap-3">
+    <div className="mt-6 flex w-full max-w-md flex-col gap-3 sm:mt-8 sm:max-w-none sm:flex-row sm:flex-wrap">
       <Link
         href="/browse"
         className={cn(
           buttonVariants({ size: "lg" }),
-          "rounded-full px-6 text-sm shadow-[var(--shadow-glow)] sm:text-base",
+          "w-full justify-center rounded-full px-6 text-sm shadow-[var(--shadow-glow)] sm:w-auto sm:text-base",
         )}
       >
         Start at browse
@@ -30,7 +30,7 @@ export function ArchiveDemoSliceActions({
           href={`/shot/${spotlightShotId}`}
           className={cn(
             buttonVariants({ variant: "outline", size: "lg" }),
-            "rounded-full border-[var(--color-border-default)] px-6 text-sm text-[var(--color-text-primary)] backdrop-blur-xl sm:text-base",
+            "w-full justify-center rounded-full border-[var(--color-border-default)] px-6 text-sm text-[var(--color-text-primary)] backdrop-blur-xl sm:w-auto sm:text-base",
           )}
           style={{
             backgroundColor:

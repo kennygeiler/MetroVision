@@ -46,7 +46,7 @@ const heroSignals = [
 
 export function HomeHero() {
   return (
-    <section className="relative grid min-h-[calc(100vh-10rem)] items-center gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)] lg:gap-12">
+    <section className="relative grid items-center gap-8 pt-2 sm:gap-10 sm:pt-0 lg:min-h-[calc(100vh-10rem)] lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)] lg:gap-12">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[32rem]"
@@ -80,53 +80,61 @@ export function HomeHero() {
         </div>
 
         <h1
-          className="mt-6 max-w-5xl text-5xl font-bold tracking-[var(--letter-spacing-tight)] sm:text-6xl lg:text-8xl"
+          className="mt-5 max-w-5xl text-4xl font-bold tracking-[var(--letter-spacing-tight)] sm:mt-6 sm:text-5xl md:text-6xl lg:text-8xl"
           style={{ fontFamily: "var(--font-heading)" }}
         >
           <span className="text-[var(--color-text-primary)]">Research-grade </span>
           <span className="laser-text">shot metadata</span>
           <span className="text-[var(--color-text-primary)]">.</span>
         </h1>
-        <p className="mt-4 max-w-3xl text-lg leading-8 text-[var(--color-text-secondary)] sm:text-xl">
+        <p className="mt-4 max-w-3xl text-base leading-7 text-[var(--color-text-secondary)] sm:text-lg sm:leading-8 lg:text-xl">
           MetroVision is a shot-level composition archive for cinematography
-          research and tooling—searchable records, human verification, and exports
-          you can cite.
+          research and tooling—searchable records, provenance-aware labels, and
+          exports you can cite.
         </p>
 
-        <div className="mt-8 flex flex-wrap items-center gap-3">
-          <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+        <div className="mt-6 flex w-full max-w-xl flex-col gap-3 sm:mt-8 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center">
+          <motion.div
+            className="w-full sm:w-auto"
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.98 }}
+          >
             <Link
               href="/browse"
               className={cn(
                 buttonVariants({ size: "lg" }),
-                "rounded-full px-6 text-sm shadow-[var(--shadow-glow)] sm:text-base",
+                "w-full justify-center rounded-full px-6 text-sm shadow-[var(--shadow-glow)] sm:w-auto sm:text-base",
               )}
             >
               Explore archive
               <ArrowRight aria-hidden="true" />
             </Link>
           </motion.div>
-          <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+          <motion.div
+            className="w-full sm:w-auto"
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.98 }}
+          >
             <Link
-              href="#featured"
+              href="/visualize#composition-scatter"
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
-                "rounded-full border-[var(--color-border-default)] px-6 text-sm text-[var(--color-text-primary)] backdrop-blur-xl sm:text-base",
+                "w-full justify-center rounded-full border-[var(--color-border-default)] px-6 text-sm text-[var(--color-text-primary)] backdrop-blur-xl sm:w-auto sm:text-base",
               )}
               style={{
                 backgroundColor:
                   "color-mix(in oklch, var(--color-surface-secondary) 52%, transparent)",
               }}
             >
-              View featured shots
+              Visualize patterns
             </Link>
           </motion.div>
-          <p className="font-mono text-xs uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-            Browse, visualize one chart, export with methodology.
+          <p className="font-mono text-[10px] uppercase leading-relaxed tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)] sm:text-xs sm:leading-normal">
+            Use the header to browse anytime. Charts, export, and tuning live one tap away.
           </p>
         </div>
 
-        <div className="mt-10 grid gap-3 sm:grid-cols-3">
+        <div className="mt-8 grid gap-3 sm:mt-10 sm:grid-cols-3">
           {heroSignals.map((signal, index) => {
             const Icon = signal.icon;
 
@@ -140,7 +148,7 @@ export function HomeHero() {
                   delay: 0.12 + index * 0.07,
                   ease: "easeOut",
                 }}
-                className="rounded-[var(--radius-xl)] border p-4"
+                className="rounded-[var(--radius-xl)] border p-3.5 sm:p-4"
                 style={{
                   background:
                     "linear-gradient(145deg, color-mix(in oklch, var(--color-surface-secondary) 80%, transparent), color-mix(in oklch, var(--color-surface-primary) 94%, transparent))",
@@ -194,7 +202,7 @@ export function HomeHero() {
           }}
         />
         <div
-          className="relative overflow-hidden rounded-[calc(var(--radius-xl)_+_4px)] border p-5 shadow-[var(--shadow-xl)] sm:p-6"
+          className="relative overflow-hidden rounded-[calc(var(--radius-xl)_+_4px)] border p-4 shadow-[var(--shadow-xl)] sm:p-6"
           style={{
             background:
               "linear-gradient(180deg, color-mix(in oklch, var(--color-surface-secondary) 90%, transparent), color-mix(in oklch, var(--color-surface-primary) 94%, transparent))",
