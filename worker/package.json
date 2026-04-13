@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node dist/server.mjs",
-    "build": "pnpm exec esbuild src/server.ts --bundle --platform=node --format=esm --packages=external --target=node20 --outfile=dist/server.mjs",
+    "build": "node scripts/bundle-server.cjs",
     "typecheck": "pnpm -C .. exec tsc --noEmit -p worker/tsconfig.json",
     "dev": "node --import tsx/esm --watch src/server.ts",
     "db:clear": "pnpm -C .. run db:clear"
