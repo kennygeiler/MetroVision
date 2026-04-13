@@ -135,29 +135,6 @@ function shortFramingLabel(slug: string): string {
   return full.length > 12 ? `${full.slice(0, 11)}\u2026` : full;
 }
 
-/**
- * Normalize classifier output so variants like "tracking_shot", "Tracking Shot", "TRACKING SHOT"
- * share one legend chip. (Values may still be legacy movement vocabulary; FramingSlug is only for lookup.)
- */
-function normalizeClassifierFramingKey(raw: string): string {
-  return raw.trim().toLowerCase().replace(/\s+/g, "_");
-}
-
-function dedupeClassifierFramingLabels(frames: FrameState[]): { key: string; display: string; colorSlug: string }[] {
-  const map = new Map<string, { display: string; colorSlug: string }>();
-  for (const f of frames) {
-    const raw = f.movementType;
-    if (!raw) continue;
-    const key = normalizeClassifierFramingKey(raw);
-    if (!key) continue;
-    const display = getFramingDisplayName(key as FramingSlug);
-    if (!map.has(key)) map.set(key, { display, colorSlug: key });
-  }
-  return Array.from(map.entries())
-    .map(([k, v]) => ({ key: k, display: v.display, colorSlug: v.colorSlug }))
-    .sort((a, b) => a.display.localeCompare(b.display));
-}
-
 // Distinct worker colors
 const WORKER_COLORS = [
   "#5cb8d6", "#d6a05c", "#9b7cd6", "#5cd69b", "#d65c8e",
@@ -1035,7 +1012,6 @@ export function PipelineViz({
   const written = backgroundIngest
     ? (state.backgroundPoll?.writeDone ?? 0)
     : state.frames.filter((f) => f.write === "complete").length;
-  const dedupedClassifierLabels = dedupeClassifierFramingLabels(state.frames);
   const activeStep = rightmostActiveStep(state.steps);
   const isDetecting =
     activeStep?.id === "detect" ||
@@ -1365,33 +1341,21 @@ export function PipelineViz({
         ) : null}
 
         {/* ─── Stats ─── */}
-        <div className="flex flex-wrap items-start justify-between gap-6">
+        <div className="flex flex-wrap items-start gap-6">
           <div className="flex gap-8">
             <StatCounter label="Extracted" value={extracted} total={state.totalShots} eta={etas.stepETAs.extract} color="#5cb8d6" />
             <StatCounter label="Classified" value={classified} total={state.totalShots} eta={etas.stepETAs.classify} color="#9b7cd6" />
             <StatCounter label="Written" value={written} total={state.totalShots} color="#5cd69b" />
           </div>
-          {dedupedClassifierLabels.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {dedupedClassifierLabels.map(({ key, display, colorSlug }) => (
-                <div key={key} className="flex items-center gap-1.5">
-                  <div className="h-2 w-2 rounded-full" style={{ backgroundColor: framingChipColor(colorSlug) }} />
-                  <span className="font-mono text-[8px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)]">
-                    {display}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
 
         {/* ─── Result ─── */}
         {state.result ? (
           <div className="rounded-[var(--radius-xl)] border p-6" style={{ backgroundColor: "rgba(92,214,155,0.06)", borderColor: "rgba(92,214,155,0.3)" }}>
             <h3 className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[#5cd69b]">Film Ingested — {formatTimeCompact(elapsed)}</h3>
-            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{state.result.shotCount}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Shots analyzed</p></div>
-              <div><p className="text-3xl font-bold text-[var(--color-text-primary)]">{dedupedClassifierLabels.length}</p><p className="mt-1 text-sm text-[var(--color-text-secondary)]">Distinct composition labels</p></div>
+            <div className="mt-4">
+              <p className="text-3xl font-bold text-[var(--color-text-primary)]">{state.result.shotCount}</p>
+              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">Shots analyzed</p>
             </div>
             <div className="mt-4 flex flex-wrap gap-4 font-mono text-[10px] text-[var(--color-text-tertiary)]">
               {state.steps.filter((s) => s.duration).map((s) => <span key={s.id}>{s.label}: {formatDuration(s.duration!)}</span>)}
