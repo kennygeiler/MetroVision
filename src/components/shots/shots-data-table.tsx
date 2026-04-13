@@ -3,6 +3,7 @@
 import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+import { formatReviewStatusLabel } from "@/lib/archive-trust";
 import {
   formatMediaClock,
   formatShotDuration,
@@ -167,10 +168,14 @@ export function ShotsDataTable({
                   {shot.startTc != null && Number.isFinite(shot.startTc) ? formatMediaClock(shot.startTc) : "—"}
                 </td>
                 <td
-                  className="max-w-[7rem] truncate px-3 py-2 align-middle font-mono text-[11px] text-[var(--color-text-tertiary)]"
-                  title={shot.metadata.reviewStatus ?? ""}
+                  className="max-w-[9rem] truncate px-3 py-2 align-middle text-sm text-[var(--color-text-secondary)]"
+                  title={
+                    shot.metadata.reviewStatus
+                      ? `${formatReviewStatusLabel(shot.metadata.reviewStatus)} (${shot.metadata.reviewStatus})`
+                      : formatReviewStatusLabel(null)
+                  }
                 >
-                  {shot.metadata.reviewStatus ?? "—"}
+                  {formatReviewStatusLabel(shot.metadata.reviewStatus)}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 align-middle font-mono tabular-nums text-[var(--color-text-secondary)]">
                   {shot.metadata.confidence != null && Number.isFinite(shot.metadata.confidence)

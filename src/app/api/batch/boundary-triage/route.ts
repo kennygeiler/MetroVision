@@ -5,10 +5,7 @@ import { and, count, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db, schema } from "@/db";
-import {
-  deriveBoundaryCluster,
-  type BoundaryTriageCluster,
-} from "@/lib/boundary-triage-cluster";
+import { deriveBoundaryCluster } from "@/lib/boundary-triage-cluster";
 
 type SqlBoundaryRow = {
   shotId: string;
@@ -105,12 +102,7 @@ export async function GET(request: Request) {
     `);
 
     const rows = (result.rows as SqlBoundaryRow[]).map((r) => {
-      const cluster = deriveBoundaryCluster({
-        techniqueNotes: r.techniqueNotes,
-        description: r.description,
-        mood: r.mood,
-        lighting: r.lighting,
-      }) as Exclude<BoundaryTriageCluster, "all">;
+      const cluster = deriveBoundaryCluster();
 
       return {
         shotId: r.shotId,

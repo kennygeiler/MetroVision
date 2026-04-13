@@ -1038,7 +1038,7 @@ export async function submitVerification(data: {
 }
 
 export async function getVerificationStats(): Promise<VerificationStats> {
-  const [shots, verificationRows, needsReviewAgg] = await Promise.all([
+  const [shots, verificationRows, needsReviewAgg, unreviewedAgg] = await Promise.all([
     db.select({ id: schema.shots.id }).from(schema.shots),
     db
       .select({
@@ -1051,6 +1051,10 @@ export async function getVerificationStats(): Promise<VerificationStats> {
       .select({ c: count() })
       .from(schema.shotMetadata)
       .where(eq(schema.shotMetadata.reviewStatus, "needs_review")),
+    db
+      .select({ c: count() })
+      .from(schema.shotMetadata)
+      .where(eq(schema.shotMetadata.reviewStatus, "unreviewed")),
   ]);
 
   const verificationSummary = buildVerificationSummary(verificationRows);
@@ -1059,6 +1063,7 @@ export async function getVerificationStats(): Promise<VerificationStats> {
     .filter((rating): rating is number => typeof rating === "number");
 
   const needsReviewCount = Number(needsReviewAgg[0]?.c ?? 0);
+  const unreviewedMetadataCount = Number(unreviewedAgg[0]?.c ?? 0);
 
   return {
     totalShots: shots.length,
@@ -1068,6 +1073,7 @@ export async function getVerificationStats(): Promise<VerificationStats> {
     averageOverallRating: toRoundedAverage(ratings),
     /** Shots flagged `needs_review` in metadata (cut boundary / pipeline triage queue). */
     reviewQueueCount: needsReviewCount,
+    unreviewedMetadataCount,
   };
 }
 

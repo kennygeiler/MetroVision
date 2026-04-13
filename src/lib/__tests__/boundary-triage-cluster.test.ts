@@ -1,28 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveBoundaryCluster } from "../boundary-triage-cluster";
+import { BOUNDARY_TRIAGE_KIND, deriveBoundaryCluster } from "../boundary-triage-cluster";
 
 describe("deriveBoundaryCluster", () => {
-  it("detects strobe from technique notes", () => {
-    expect(
-      deriveBoundaryCluster({ techniqueNotes: "Heavy strobe during club scene" }),
-    ).toBe("strobe_lights");
-  });
-
-  it("detects whip pan from description", () => {
-    expect(deriveBoundaryCluster({ description: "Whip pan to the subject" })).toBe("whip_pans");
-  });
-
-  it("defaults to uncategorized", () => {
-    expect(deriveBoundaryCluster({ description: "Static two-shot" })).toBe("uncategorized");
-  });
-
-  it("prioritizes strobe when both hints exist", () => {
-    expect(
-      deriveBoundaryCluster({
-        techniqueNotes: "strobing lights",
-        description: "whip pan exit",
-      }),
-    ).toBe("strobe_lights");
+  it("always returns the single cut-boundary kind", () => {
+    expect(deriveBoundaryCluster()).toBe(BOUNDARY_TRIAGE_KIND);
   });
 });

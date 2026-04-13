@@ -29,7 +29,7 @@ export default async function VerifyPage() {
           <p className="mt-4 text-base leading-8 text-[var(--color-text-secondary)]">
             This page is for <strong className="text-[var(--color-text-primary)]">open cut boundaries</strong> — shots
             flagged <code className="font-mono text-[10px]">needs_review</code> in metadata. Use the grid below
-            (before/after frames, confidence filter, clusters, bulk approve/reject). From{" "}
+            (before/after frames, confidence filter, bulk approve/reject). From{" "}
             <Link href="/browse" className="text-[var(--color-text-accent)] underline-offset-2 hover:underline">
               Browse
             </Link>{" "}
@@ -106,10 +106,19 @@ export default async function VerifyPage() {
             {stats.totalShots}{" "}
             <span className="text-lg font-normal text-[var(--color-text-tertiary)]">shots total</span>
           </p>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            <span className="font-mono tabular-nums text-[var(--color-text-primary)]">{stats.reviewQueueCount}</span>{" "}
-            flagged <code className="font-mono text-[10px]">needs_review</code> for cut triage (same filter as the grid
-            below).
+          <p className="mt-2 space-y-1 text-sm text-[var(--color-text-secondary)]">
+            <span className="block">
+              <span className="font-mono tabular-nums text-[var(--color-text-primary)]">{stats.reviewQueueCount}</span>{" "}
+              in cut triage queue (<code className="font-mono text-[10px]">needs_review</code>) — same filter as the grid
+              below.
+            </span>
+            <span className="block text-[var(--color-text-tertiary)]">
+              <span className="font-mono tabular-nums text-[var(--color-text-secondary)]">
+                {stats.unreviewedMetadataCount}
+              </span>{" "}
+              shots are <code className="font-mono text-[10px]">unreviewed</code> (automated labels only; shown as
+              “Not reviewed” on film pages — not queued unless long take or model fallback).
+            </span>
           </p>
         </div>
       </section>

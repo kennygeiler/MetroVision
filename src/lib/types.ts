@@ -203,6 +203,8 @@ export type VerificationStats = {
   averageOverallRating: number | null;
   /** Count of shots with `review_status` = needs_review (cut triage queue). */
   reviewQueueCount: number;
+  /** Shots with `review_status` = unreviewed (automated labels, not in cut triage queue). */
+  unreviewedMetadataCount: number;
 };
 
 export type AccuracyStats = {

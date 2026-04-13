@@ -13,12 +13,6 @@ import {
 import { Check, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  BOUNDARY_TRIAGE_CLUSTERS,
-  boundaryClusterLabel,
-  type BoundaryTriageCluster,
-} from "@/lib/boundary-triage-cluster";
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -36,7 +30,6 @@ type BoundaryRow = {
   classificationSource: string | null;
   techniqueNotes: string | null;
   description: string | null;
-  cluster: Exclude<BoundaryTriageCluster, "all">;
 };
 
 type FilmOption = { id: string; title: string };
@@ -131,7 +124,6 @@ export function BoundaryTriageWorkspace() {
 
   const [hydrated, setHydrated] = useState(false);
   const [filmId, setFilmId] = useState("");
-  const [clusterTab, setClusterTab] = useState<BoundaryTriageCluster>("all");
   const [confidenceMaxPct, setConfidenceMaxPct] = useState(100);
   const [sliderActive, setSliderActive] = useState(false);
 
@@ -243,22 +235,10 @@ export function BoundaryTriageWorkspace() {
 
   const filteredRows = useMemo(() => {
     return activeRows.filter((r) => {
-      if (clusterTab !== "all" && r.cluster !== clusterTab) return false;
       if (r.confidence === null) return true;
       return r.confidence * 100 <= confidenceMaxPct + 1e-6;
     });
-  }, [activeRows, clusterTab, confidenceMaxPct]);
-
-  const clusterCounts = useMemo(() => {
-    const c: Record<string, number> = { all: activeRows.length };
-    for (const k of BOUNDARY_TRIAGE_CLUSTERS) {
-      if (k !== "all") c[k] = 0;
-    }
-    for (const r of activeRows) {
-      c[r.cluster] = (c[r.cluster] ?? 0) + 1;
-    }
-    return c as Record<BoundaryTriageCluster | string, number>;
-  }, [activeRows]);
+  }, [activeRows, confidenceMaxPct]);
 
   const rowChunks = useMemo(() => {
     const chunks: BoundaryRow[][] = [];
@@ -542,7 +522,7 @@ export function BoundaryTriageWorkspace() {
       </p>
       <p className="max-w-3xl text-sm leading-relaxed text-[var(--color-text-secondary)]">
         Before/after frames at each <code className="font-mono text-[10px]">needs_review</code> cut, confidence filter,
-        cluster tabs, lasso/shift-select, and{" "}
+        lasso/shift-select, and{" "}
         <kbd className="font-mono text-[var(--color-text-tertiary)]">J</kbd> /{" "}
         <kbd className="font-mono text-[var(--color-text-tertiary)]">K</kbd> on hover.
       </p>
@@ -603,34 +583,7 @@ export function BoundaryTriageWorkspace() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1 border-t border-[var(--color-border-subtle)] pt-2">
-          {BOUNDARY_TRIAGE_CLUSTERS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setClusterTab(tab)}
-              className="rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors"
-              style={{
-                borderColor:
-                  clusterTab === tab
-                    ? "var(--color-accent-base)"
-                    : "var(--color-border-default)",
-                backgroundColor:
-                  clusterTab === tab
-                    ? "color-mix(in oklch, var(--color-accent-base) 22%, transparent)"
-                    : "transparent",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              {boundaryClusterLabel(tab)}{" "}
-              <span className="tabular-nums text-[var(--color-text-tertiary)]">
-                ({clusterCounts[tab] ?? 0})
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border-subtle)] pt-2">
           <Button variant="ghost" size="xs" type="button" onClick={selectAllVisible}>
             Select all visible
           </Button>
@@ -696,7 +649,7 @@ export function BoundaryTriageWorkspace() {
         </div>
       ) : filteredRows.length === 0 ? (
         <p className="text-sm text-[var(--color-text-secondary)]">
-          No cuts match filters. Try another cluster tab or raise the confidence slider.
+          No cuts match filters. Try raising the confidence slider.
         </p>
       ) : (
         <div
@@ -783,10 +736,7 @@ export function BoundaryTriageWorkspace() {
                             }
                           }}
                         >
-                          <div className="mb-1 flex items-center justify-between gap-1">
-                            <span className="font-mono text-[9px] uppercase text-[var(--color-text-tertiary)]">
-                              {boundaryClusterLabel(row.cluster)}
-                            </span>
+                          <div className="mb-1 flex items-center justify-end">
                             <span
                               className="font-mono text-[10px] tabular-nums"
                               style={{
