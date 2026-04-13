@@ -1,43 +1,119 @@
 # MetroVision
 
-**MetroVision is a shot-level composition archive for cinematography research and tooling**—structured framing/depth/blocking (and related fields), human verification, exports you can cite, and optional vector search. **MetroVision** is the product name; **SceneDeck** is a common repo/codename.
+**A shot-level composition archive for cinematography research and tooling** — structured framing, depth, blocking, and related fields; human verification; exports you can cite; and optional **pgvector** search. **MetroVision** is the product name; **SceneDeck** is a common repo / codename.
 
 [![CI](https://github.com/kennygeiler/MetroVision/actions/workflows/ci.yml/badge.svg)](https://github.com/kennygeiler/MetroVision/actions/workflows/ci.yml)
-
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 ![React](https://img.shields.io/badge/React-19-1d9bf0)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38bdf8)
-![Drizzle](https://img.shields.io/badge/Drizzle-ORM-c5f74f)
+![pnpm](https://img.shields.io/badge/pnpm-workspace-f69220?logo=pnpm&logoColor=white)
 ![Neon](https://img.shields.io/badge/Neon-Postgres-00e699)
-![Vercel](https://img.shields.io/badge/Vercel-Deploy-black)
 
-## Screenshot
-
-`[Screenshot placeholder: landing page / browse archive / shot detail overlay]`
-
-## Live Demo
-
-Placeholder: `https://scenedeck-demo.vercel.app`
-
-## What the product does (wedge vs full repo)
-
-| Area | What it’s for |
-|------|----------------|
-| **Browse** | Filter films and shots by composition taxonomy and text. |
-| **Shot detail** | Clip playback, **SVG overlay**, model **confidence**, **review status**, **last human verification**. |
-| **Film detail** | Timeline + **share of shots with human verification** + last verification time. |
-| **Visualize** | Pattern views across the archive (landing demo deep-links the **composition scatter**). |
-| **Export** | JSON/CSV plus an on-page **citation / methodology** blurb (live verification stats). |
-
-
-**Search** uses **pgvector** embeddings when `shot_embeddings` is populated; otherwise it falls back to **ILIKE** text search (see server logs for `[searchShots]` messages). Run `pnpm db:embeddings` after ingest to enable semantic similarity.
-
-**Heavy processing** (long ffmpeg/GPU-style jobs) is meant for the **worker** or **Python pipeline**, not for `process-scene` on Vercel (that route is disabled there by design).
+**[AGENTS.md](AGENTS.md)** &nbsp;·&nbsp; **[Quick Start](#quick-start)** &nbsp;·&nbsp; **[Production ingest](docs/production-ingest.md)** &nbsp;·&nbsp; **[CI workflow](https://github.com/kennygeiler/MetroVision/actions/workflows/ci.yml)**
 
 ---
 
-## Architecture (ASCII flow)
+## What is MetroVision?
+
+**MetroVision** is a full-stack system for **ingesting films**, **detecting shot boundaries**, **classifying composition** with a shared taxonomy (TS + Python), and **serving** browse, shot detail, visualization, export, and optional RAG. Heavy work runs on a **TypeScript worker** (Express + SSE) or the **Python pipeline** — not on short-lived serverless alone.
+
+**If you can describe a shot, you can store it, verify it, and search it** — with provenance from model confidence through human verification.
+
+### At a glance
+
+| | |
+| --- | --- |
+| **Browse & search** | Filter by composition taxonomy and text; **semantic search** when `shot_embeddings` exists, else **ILIKE** (watch logs for `[searchShots]`). |
+| **Shot & film detail** | Clip playback, **SVG overlay**, confidence, review status, verification history. |
+| **Visualize** | D3 dashboards; landing demo links **composition scatter** (`/visualize#composition-scatter`). |
+| **Export** | JSON / CSV plus on-page **citation / methodology** copy. |
+| **Boundary tuning** | Gold cuts, presets, worker detect, eval runs, optional LLM insights — see `/tuning` and `eval/gold/README.md`. |
+| **Quality gates** | CI: lint, taxonomy parity, schema drift, Vitest, eval smoke, production build, worker build smoke. |
+
+> **Search tip:** run `pnpm db:embeddings` after ingest so pgvector-backed similarity is available.
+
+---
+
+## Installation
+
+From the repository root (installs the app **and** the `worker` workspace package):
+
+```bash
+pnpm install
+```
+
+**Python pipeline** (separate venv):
+
+```bash
+cd pipeline
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+---
+
+## Quick Start
+
+### Web application
+
+```bash
+cp .env.example .env.local
+pnpm db:push          # Neon schema (requires DATABASE_URL)
+pnpm db:seed          # optional dev seed
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+### TypeScript ingest worker
+
+Long-running ingest and SSE are intended for the worker, not Vercel timeouts alone:
+
+```bash
+cd worker && pnpm dev
+```
+
+Point the app at the worker with **`NEXT_PUBLIC_WORKER_URL`** (and server-side **`INGEST_WORKER_URL`** where applicable). See **[docs/production-ingest.md](docs/production-ingest.md)** for Railway / Docker / monorepo layout.
+
+### Boundary eval (CLI parity)
+
+```bash
+pnpm eval:pipeline -- ...
+pnpm detect:export-cuts -- ...
+pnpm eval:export-film -- <filmId>
+```
+
+Details: **`AGENTS.md`**, **`eval/gold/README.md`**.
+
+---
+
+## How it works
+
+1. **Source** — Video in **S3** (presigned URLs); metadata from **TMDB** when configured.
+2. **Boundaries** — **PySceneDetect** / ensemble options (TS + Python parity via env and presets); optional **human gold** and **boundary presets** in Postgres.
+3. **Classification** — **Gemini** (rate-limited) writes **`shot_metadata`** / **`shot_semantic`** under a shared taxonomy (**`src/lib/taxonomy.ts`** ↔ **`pipeline/taxonomy.py`**).
+4. **Serve** — **Next.js 15 App Router** UI + API routes; optional **worker** for interactive ingest; **Python** for batch scale.
+5. **Trust** — **Verifications**, exports with citation text, and checks like **`pnpm check:taxonomy`** / **`pnpm check:schema-drift`** to keep lanes aligned.
+
+---
+
+## Repository layout
+
+| Path | Role |
+| --- | --- |
+| [`src/`](src/) | Next.js app: UI, API routes, shared lib, Drizzle schema entrypoints used by the app. |
+| [`worker/`](worker/) | Express worker: SSE ingest, boundary detect; imports shared TS under `src/lib` / `src/db`. |
+| [`pipeline/`](pipeline/) | Python CLI: PySceneDetect, Gemini, S3, DB writes. |
+| [`eval/`](eval/) | Gold templates, fixtures, run notes — boundary quality workflows. |
+| [`scripts/`](scripts/) | Tooling: taxonomy/schema checks, eval CLIs, migrations helpers. |
+| [`docs/`](docs/) | Operational guides (e.g. production ingest). |
+| [`AGENTS.md`](AGENTS.md) | Commands, constraints, and file map for contributors and automation. |
+
+**Structural note (GEPA-inspired):** clear package boundaries, **explicit payloads** between Next / worker / pipeline, and **eval + docs** as first-class tree content — adapted for film ingest rather than prompt optimization. Mixed **TypeScript** (product + worker) and **Python** (batch media) share one **Postgres** contract.
+
+---
+
+## Architecture (high level)
 
 ```
                                     ┌─────────────────────────────────────┐
@@ -49,216 +125,116 @@ Placeholder: `https://scenedeck-demo.vercel.app`
                         v                               v                               v
               ┌─────────────────┐             ┌─────────────────┐             ┌─────────────────┐
               │  Next.js 15 App │             │  TS Worker      │             │  Python         │
-              │  (Vercel / Node)  │           │  (Express SSE)  │             │  pipeline/      │
-              │  App Router, UI,  │           │  Ingest film:   │             │  Batch:         │
-              │  API routes, RAG  │           │  detect, extract│             │  PySceneDetect, │
-              │                   │           │  Gemini classify│             │  Gemini, S3, DB │
-              └────────┬────────┘             │  TMDB, S3, DB   │             └────────┬────────┘
-                       │                      └────────┬────────┘                      │
+              │  (Vercel / Node)│             │  (Express SSE)  │             │  pipeline/      │
+              │  App Router, UI │             │  Ingest, detect │             │  Batch ingest   │
+              │  API routes, RAG│             │  Gemini, S3, DB │             │  PySceneDetect  │
+              └────────┬────────┘             └────────┬────────┘             └────────┬────────┘
                        │                               │                               │
-                       │         presigned URLs        │                               │
-                       └──────────────┬─────────────-──┴────────────────────────────-──┘
-                                      v
-                            ┌──────────────────┐
-                            │   AWS S3         │
-                            │   clips / thumbs │
-                            └────────┬─────────┘
-                                      │
-                       ┌──────────────┴──────────────┐
-                       v                             v
+                       └───────────────┬───────────────┴───────────────────────────────┘
+                                       v
+                             ┌──────────────────┐
+                             │   AWS S3         │
+                             └────────┬─────────┘
+                                       │
+                       ┌───────────────┴───────────────┐
+                       v                               v
              ┌─────────────────────┐       ┌─────────────────────┐
-             │  Neon PostgreSQL     │       │  External APIs      │
-             │  Drizzle ORM         │       │  Gemini, OpenAI,    │
-             │  pgvector, films,    │       │  TMDB, Replicate    │
-             │  shots, embeddings   │       │  (as configured)    │
+             │  Neon + Drizzle     │       │  Gemini, OpenAI,    │
+             │  pgvector, shots    │       │  TMDB, Replicate    │
              └─────────────────────┘       └─────────────────────┘
 ```
 
-**Two ingest lanes**
-
-- **Interactive:** Browser → Next **or** worker → SSE stream → same DB + S3.  
-- **Batch:** `pipeline/` CLI / workers → DB + S3 (good for many titles or repeatability).
+**Two ingest lanes:** interactive (browser → Next or worker, SSE) vs batch (`pipeline/`).
 
 ---
 
-## User flows (how people move through the product)
+## Stack & integrations
 
-### Researcher or curator (read-heavy)
+- **[Next.js](https://nextjs.org/)** — App Router, server components by default; client components for interactivity.
+- **[Drizzle ORM](https://orm.drizzle.team/)** + **[Neon](https://neon.tech/)** — Postgres + pgvector.
+- **[Tailwind CSS](https://tailwindcss.com/)** + **[shadcn/ui](https://ui.shadcn.com/)** — UI.
+- **[AWS S3](https://aws.amazon.com/s3/)** — Media via presigned URLs.
+- **[Gemini](https://ai.google.dev/)** / **[OpenAI](https://openai.com/)** — Classification and embeddings (as configured).
+- **[PySceneDetect](https://www.scenedetect.com/)** — Shot boundaries in Python (and TS parity paths).
+- **[D3](https://d3js.org/)** — Visualize dashboards.
 
-1. **Browse** → filter by composition fields.  
-2. **Shot** → overlay + provenance (confidence, label origin, verification).  
-3. **Visualize** → e.g. composition scatter (`/visualize#composition-scatter`).  
-4. **Export** → download data + copy citation text.
+---
 
-### Operator (ingest + quality)
+## Environment variables
 
-1. Configure env (Neon, S3, Gemini, OpenAI for embeddings, TMDB).  
-2. **Ingest:** run the **worker** (`cd worker && pnpm dev`) for reliable long jobs, or use the **Ingest** page against a configured worker URL.  
-3. Backfill vectors: `pnpm db:embeddings` so search uses semantics.  
-4. Use **Verify** / **batch verify** to fix bad rows.  
-5. Re-run checks locally: `pnpm check:schema-drift`, `pnpm check:taxonomy`, `pnpm test`.
+Use **`.env.local`** for the Next app and pipeline env for Python:
 
-### Boundary evaluation, community presets, and ingest (operator path)
-
-Use this when you care about **shot-boundary** quality before burning a full **Gemini** classification pass. Human verified cuts live in Postgres (`eval_gold_revisions`); boundary presets live in `boundary_cut_presets` (system baselines + **community-shared** contributions).
-
-**ASCII — end-to-end**
-
-```
-                         ┌──────────────────────────────────────────┐
-                         │  1. Human verified cuts (gold)           │
-                         │     /eval/gold-annotate or API           │
-                         │     same time window as worker video     │
-                         └────────────────────┬─────────────────────┘
-                                              │
-                         ┌────────────────────▼─────────────────────┐
-                         │  2. Boundary Tuning · guided prep         │
-                         │     /tuning/prep                          │
-                         │     pick film + gold revision + preset    │
-                         └────────────────────┬─────────────────────┘
-                                              │
-              ┌───────────────────────────────▼───────────────────────────────┐
-              │  3. TS worker: POST /api/boundary-detect (local videoPath)      │
-              │     → predicted interior cutsSec                               │
-              └───────────────────────────────┬───────────────────────────────┘
-                                              │
-              ┌───────────────────────────────▼───────────────────────────────┐
-              │  4. Next: POST /api/boundary-eval-runs                         │
-              │     → F1 / unmatched FN·FP saved on boundary_eval_runs         │
-              └───────────────────────────────┬───────────────────────────────┘
-                                              │
-              ┌───────────────────────────────▼───────────────────────────────┐
-         │  5. Optional: POST /api/boundary-eval-insights (Gemini)        │
-         │     plain-language summary + suggested knob automations          │
-         │     (gated with METROVISION_LLM_GATE_SECRET when set — AGENTS.md) │
-              └───────────────────────────────┬───────────────────────────────┘
-                                              │
-         ┌────────────────────────────────────▼────────────────────────────────┐
-         │  6. Publish duplicate preset (default: share_with_community=true)    │
-         │     POST /api/boundary-presets { duplicateFromId, sourceEvalRunId } │
-         │     Everyone sees it in GET …?forIngest=1                          │
-         └────────────────────────────────────┬────────────────────────────────┘
-                                              │
-         ┌────────────────────────────────────▼────────────────────────────────┐
-         │  7. Ingest                                                         │
-         │     /ingest → Boundary model dropdown OR ?boundaryPreset=<uuid>     │
-         │     Body includes boundaryCutPresetId → worker OR inline Next path  │
-         └────────────────────────────────────┬────────────────────────────────┘
-                                              │
-                                              ▼
-                                    Shots + S3 + classify…
+```bash
+DATABASE_URL=                # Neon PostgreSQL
+GOOGLE_API_KEY=              # Gemini
+OPENAI_API_KEY=              # Embeddings / chat
+TMDB_API_KEY=                # Film metadata
+AWS_ACCESS_KEY_ID=           # S3
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_BUCKET=
+AWS_REGION=
+NEXT_PUBLIC_WORKER_URL=      # Browser → worker origin (optional)
+SCENEDETECT_PATH=            # Pipeline: scenedetect binary
 ```
 
-**After publish,** operators can flip **community visibility** without re-duplicating: `PATCH /api/boundary-presets/<id>` with `{ "shareWithCommunity": false }` (also in **tuning workspace** when you expand a non-system preset). **System** presets cannot be PATCHed.
+Production hardening and optional secrets: **`AGENTS.md`** (e.g. `METROVISION_LLM_GATE_SECRET`, worker ingest secret).
 
-**CLI parity (no UI):** `pnpm eval:pipeline`, `pnpm detect:export-cuts`, `pnpm eval:export-film` — see `AGENTS.md` and `eval/gold/README.md`.
+---
 
-**Schema:** apply community columns with `pnpm db:push` (migration `drizzle/0010_boundary_presets_community.sql`).
+## Quality gates
 
-## Quality gates (CI & tests)
+| Check | Command / location |
+| --- | --- |
+| Lint | `pnpm lint` |
+| Taxonomy parity (TS ↔ Python) | `pnpm check:taxonomy` |
+| Ingest schema drift | `pnpm check:schema-drift` |
+| Tests | `pnpm test` |
+| Production Next build | `pnpm test:build` (needs real `DATABASE_URL` for prerender) |
+| Worker types | `pnpm check:worker` |
+| Worker bundle smoke | `pnpm test:worker:build` |
 
-For **labs and toolmakers evaluating the stack**, automated checks are part of the product story—not “cleanup only.”
+CI runs **`.github/workflows/ci.yml`** on pushes and PRs to `main` / `master`.
 
-- **GitHub Actions** (`.github/workflows/ci.yml`): `pnpm lint`, `pnpm check:taxonomy`, `pnpm check:schema-drift`, `pnpm test`.  
-- **`pnpm build`** is intentionally **not** required in CI without a real `DATABASE_URL` (Next pages hit the DB at build time); run it locally or in deploy previews with secrets configured.
+---
+
+## Screenshot & demo
+
+`[Screenshot placeholder: landing / browse / shot overlay]`
+
+**Live demo (placeholder):** `https://scenedeck-demo.vercel.app`
+
+---
+
+## User flows
+
+### Researcher or curator
+
+1. **Browse** → composition filters.  
+2. **Shot** → overlay + provenance.  
+3. **Visualize** → e.g. composition scatter.  
+4. **Export** → data + citation blurb.
+
+### Operator
+
+1. Configure Neon, S3, keys, TMDB.  
+2. Run **worker** for long ingest; use **Ingest** UI against worker URL.  
+3. `pnpm db:embeddings` for semantic search.  
+4. **Verify** / batch verify for quality.  
+5. `pnpm check:schema-drift`, `pnpm check:taxonomy`, `pnpm test`.
 
 ### Integrator (API)
 
-1. Issue or store an API key (hashed in DB).  
-2. Call v1 routes with `Authorization: Bearer <key>` (avoid query-string keys in production).  
-3. Use taxonomy + search endpoints to drive external tools or labeling UIs.
+Use v1 routes with **`Authorization: Bearer <key>`**; see **`AGENTS.md`** for the API surface.
 
 ---
 
-## Quick Start
+## Boundary tuning flow (operator)
 
-```bash
-git clone <your-repo-url>
-cd <repo-root>
-pnpm install
-cp .env.example .env.local
-pnpm db:push    # apply schema to Neon (requires DATABASE_URL; includes community preset columns from 0010)
-pnpm db:seed    # optional dev seed row
-pnpm dev
-```
+Human verified cuts → **`/tuning/prep`** → worker **`POST /api/boundary-detect`** → **`POST /api/boundary-eval-runs`** → optional insights → publish preset → ingest with **`boundaryCutPresetId`**. CLI: **`pnpm eval:pipeline`**, **`pnpm detect:export-cuts`**, **`pnpm eval:export-film`**. Schema: **`pnpm db:push`** (incl. community preset columns, e.g. `drizzle/0010_boundary_presets_community.sql`).
 
-Open `http://localhost:3000`.
-
-### Environment Variables
-
-Set the following values in `.env.local` for the Next.js app and `.env` for the Python pipeline:
-
-```bash
-DATABASE_URL=                # Neon PostgreSQL connection string
-GOOGLE_API_KEY=              # Gemini API key for classification
-OPENAI_API_KEY=              # OpenAI API key for embeddings / chat
-TMDB_API_KEY=                # TMDB API key for film metadata + posters
-AWS_ACCESS_KEY_ID=           # AWS credentials for S3 media storage
-AWS_SECRET_ACCESS_KEY=
-AWS_S3_BUCKET=               # S3 bucket name
-AWS_REGION=                  # S3 region (e.g. us-east-1)
-NEXT_PUBLIC_WORKER_URL=      # optional: browser ingest targets TS worker
-SCENEDETECT_PATH=            # Path to scenedetect binary (pipeline)
-```
-
-See `AGENTS.md` for optional production gates (`METROVISION_LLM_GATE_SECRET`, etc.).
-
-**Production ingest (Vercel + worker URL, health checks):** [docs/production-ingest.md](docs/production-ingest.md).
-
-## Pipeline Usage
-
-```bash
-cd pipeline
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-From there, run the ingestion / classification / upload steps against your source footage and database configuration. The pipeline is responsible for:
-
-- Scene / shot detection via PySceneDetect  
-- Shot classification via Gemini (taxonomy mirrored in `pipeline/taxonomy.py` and `src/lib/taxonomy.ts`)  
-- Database writes to Neon PostgreSQL  
-- Clip and thumbnail upload to AWS S3  
-
-## Architecture Overview (short)
-
-MetroVision is a **Next.js 15 App Router** app (UI + API routes) backed by **Neon**, **Drizzle**, and **S3**. A separate **Express worker** can run the same style of ingest with **SSE** for progress. The **Python** tree is ideal for **batch** and automation. Shared **taxonomy** and **schema drift** checks help keep TS, worker, and Python from silently diverging.
-
-## Structural influence (GEPA-style, adapted)
-
-MetroVision borrows a few **repository-structure ideas** from the GEPA project style, adapted to a film-ingest product rather than a prompt-optimization framework:
-
-- **Clear top-level separation by responsibility** (`src/`, `worker/`, `pipeline/`, `docs/`, `eval/`) so UI, online ingest, offline ingest, docs, and evaluation assets evolve independently.
-- **Adapter-like boundaries between systems** where Next routes, worker endpoints, and pipeline scripts exchange explicit payloads (e.g., cut lists, ingest options, eval artifacts) instead of sharing hidden runtime state.
-- **Evaluation as a first-class directory**, not scattered scripts: reproducible boundary-quality workflows live under `eval/` and `scripts/`, similar to GEPA’s “measure + iterate” organization pattern.
-- **Docs near execution paths** (`AGENTS.md`, tuning docs, production ingest docs) so operational commands and architecture constraints stay close to code.
-
-## Language influence (GEPA-style, adapted)
-
-GEPA is Python-first; MetroVision applies a **mixed-language pattern** for practical runtime boundaries:
-
-- **TypeScript-first product surface** (`src/` and `worker/`) for UI, APIs, and long-running ingest orchestration with shared types and taxonomy contracts.
-- **Python for media-heavy batch workflows** (`pipeline/`) where PySceneDetect and offline processing ergonomics are stronger.
-- **Contract parity across languages** enforced by mirrored taxonomy definitions (`src/lib/taxonomy.ts` and `pipeline/taxonomy.py`) plus `pnpm check:taxonomy` and schema-drift checks.
-- **Single datastore contract** (Neon Postgres via shared schema concepts) keeps both language lanes convergent even when execution environments differ.
-
-## Built With
-
-- Next.js 15 App Router  
-- React 19  
-- TypeScript  
-- Tailwind CSS 4  
-- Framer Motion  
-- shadcn/ui + Radix primitives  
-- Drizzle ORM  
-- Neon PostgreSQL + pgvector  
-- AWS S3  
-- Gemini & OpenAI APIs  
-- PySceneDetect  
-- D3  
+---
 
 ## Notes
 
-- Built entirely through AI-assisted development  
-- Designed as a portfolio-ready demo surface, not a generic CRUD app  
+- AI-assisted development; designed as a **portfolio-grade** archive surface, not generic CRUD.  
+- **`process-scene`** on Vercel is intentionally limited — use the **worker** or **pipeline** for film-scale jobs.
