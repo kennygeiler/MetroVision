@@ -217,7 +217,6 @@ export function VizDashboard({ data }: VizDashboardProps) {
               setSelectedDirector(null);
               setSelectedFilm(null);
               setMinConfidencePct(0);
-              setVerifiedOnly(false);
             }}
             className="font-mono text-[10px] uppercase tracking-[var(--letter-spacing-wide)] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-accent)]"
           >
