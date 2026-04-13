@@ -179,3 +179,4 @@ Optional env vars (see `.planning/codebase/INTEGRATIONS.md`):
 ## Known Issues
 
 - **Worker / pnpm / Docker:** `pnpm.onlyBuiltDependencies` is **`esbuild` only**, so **`ffmpeg-static`’s install script does not run** during `pnpm install` (avoids flaky GitHub binary downloads). Use **system `ffmpeg`** in the image or set **`FFMPEG_BIN`** / **`FFMPEG_PATH`**. Optional **`METROVISION_SKIP_FFMPEG_STATIC_DOWNLOAD=1`** skips the root `postinstall` download retry. See **`docs/production-ingest.md`**.
+- **esbuild dedupe:** Root **`pnpm.overrides.esbuild`** pins **`0.25.12`** workspace-wide so the worker bundle does not mix JS (`lib/main.js`) from one version with a **`@esbuild/*`** binary from another (Docker “Host version … does not match binary version …”).
